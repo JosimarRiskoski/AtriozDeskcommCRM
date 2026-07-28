@@ -12,6 +12,8 @@ export interface ChannelSession {
   status_reason: string | null;
   last_health_check_at: string | null;
   last_status_change_at: string | null;
+  last_inbound_at: string | null;
+  last_outbound_at: string | null;
   daily_message_limit: number;
   is_warmup_complete: boolean | null;
   created_at: string;

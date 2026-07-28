@@ -37,7 +37,40 @@ export async function GET(): Promise<Response> {
     .order("created_at", { ascending: true });
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
-  return ok(data ?? [], { requestId });
+  const { data: conversations } = await supabase
+    .from("conversations")
+    .select("channel_session_id,last_inbound_at,last_outbound_at")
+    .eq("organization_id", activeOrg.orgId);
+
+  const activity = new Map<string, { last_inbound_at: string | null; last_outbound_at: string | null }>();
+  for (const conversation of conversations ?? []) {
+    const current = activity.get(conversation.channel_session_id) ?? {
+      last_inbound_at: null,
+      last_outbound_at: null,
+    };
+    if (
+      conversation.last_inbound_at &&
+      (!current.last_inbound_at || conversation.last_inbound_at > current.last_inbound_at)
+    ) {
+      current.last_inbound_at = conversation.last_inbound_at;
+    }
+    if (
+      conversation.last_outbound_at &&
+      (!current.last_outbound_at || conversation.last_outbound_at > current.last_outbound_at)
+    ) {
+      current.last_outbound_at = conversation.last_outbound_at;
+    }
+    activity.set(conversation.channel_session_id, current);
+  }
+
+  return ok(
+    (data ?? []).map((session) => ({
+      ...session,
+      last_inbound_at: activity.get(session.id)?.last_inbound_at ?? null,
+      last_outbound_at: activity.get(session.id)?.last_outbound_at ?? null,
+    })),
+    { requestId },
+  );
 }
 
 export async function POST(req: NextRequest): Promise<Response> {

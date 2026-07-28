@@ -233,6 +233,20 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                     ? `Verificado ${new Date(c.last_health_check_at).toLocaleString("pt-BR")}`
                     : "Ainda não verificado"}
                 </p>
+                <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">Última recebida</span>
+                  <span className="text-right">
+                    {c.last_inbound_at
+                      ? new Date(c.last_inbound_at).toLocaleString("pt-BR")
+                      : "Nenhuma registrada"}
+                  </span>
+                  <span className="text-muted-foreground">Última enviada</span>
+                  <span className="text-right">
+                    {c.last_outbound_at
+                      ? new Date(c.last_outbound_at).toLocaleString("pt-BR")
+                      : "Nenhuma registrada"}
+                  </span>
+                </div>
                 {c.status_reason ? (
                   <p className="rounded-md bg-error-bg px-2.5 py-2 text-xs text-error-fg">
                     Motivo informado: {c.status_reason}
