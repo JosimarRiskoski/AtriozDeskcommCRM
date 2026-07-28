@@ -88,12 +88,15 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const undoStack = useRef<CanvasSnapshot[]>([]);
   const redoStack = useRef<CanvasSnapshot[]>([]);
-  const [historyVersion, setHistoryVersion] = useState(0);
+  const [historyAvailability, setHistoryAvailability] = useState({
+    canUndo: false,
+    canRedo: false,
+  });
 
   const remember = useCallback(() => {
     undoStack.current = [...undoStack.current.slice(-49), { nodes, edges }];
     redoStack.current = [];
-    setHistoryVersion((version) => version + 1);
+    setHistoryAvailability({ canUndo: true, canRedo: false });
   }, [nodes, edges]);
 
   const undo = useCallback(() => {
@@ -105,7 +108,10 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
     setEdges(previous.edges);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
-    setHistoryVersion((version) => version + 1);
+    setHistoryAvailability({
+      canUndo: undoStack.current.length > 0,
+      canRedo: true,
+    });
   }, [edges, nodes, setEdges, setNodes]);
 
   const redo = useCallback(() => {
@@ -117,7 +123,10 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
     setEdges(next.edges);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
-    setHistoryVersion((version) => version + 1);
+    setHistoryAvailability({
+      canUndo: true,
+      canRedo: redoStack.current.length > 0,
+    });
   }, [edges, nodes, setEdges, setNodes]);
 
   useEffect(() => {
@@ -159,12 +168,16 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
   const markNodeErrors = useCallback(
     (errorsByNode: Record<string, string[]>) => {
-      setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, errors: errorsByNode[n.id] } })));
+      setNodes((nds) =>
+        nds.map((n) => ({ ...n, data: { ...n.data, errors: errorsByNode[n.id] } })),
+      );
     },
     [setNodes],
   );
   const clearNodeErrors = useCallback(() => {
-    setNodes((nds) => nds.map((n) => (n.data.errors ? { ...n, data: { ...n.data, errors: undefined } } : n)));
+    setNodes((nds) =>
+      nds.map((n) => (n.data.errors ? { ...n, data: { ...n.data, errors: undefined } } : n)),
+    );
   }, [setNodes]);
 
   // Node and edge selection are mutually exclusive — opening one panel closes the other's.
@@ -184,7 +197,9 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
   const updateNodeData = useCallback(
     (id: string, patch: Partial<RFNodeData>) => {
       remember();
-      setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
+      setNodes((nds) =>
+        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
+      );
     },
     [remember, setNodes],
   );
@@ -192,7 +207,9 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
     (id: string, condition: FlowEdge["condition"]) => {
       remember();
       setEdges((eds) =>
-        eds.map((e) => (e.id === id ? { ...e, data: { priority: e.data?.priority ?? 0, condition } } : e)),
+        eds.map((e) =>
+          e.id === id ? { ...e, data: { priority: e.data?.priority ?? 0, condition } } : e,
+        ),
       );
     },
     [remember, setEdges],
@@ -200,8 +217,12 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId) ?? null;
-  const selectedEdgeSource = selectedEdge ? (nodes.find((n) => n.id === selectedEdge.source) ?? null) : null;
-  const selectedEdgeTarget = selectedEdge ? (nodes.find((n) => n.id === selectedEdge.target) ?? null) : null;
+  const selectedEdgeSource = selectedEdge
+    ? (nodes.find((n) => n.id === selectedEdge.source) ?? null)
+    : null;
+  const selectedEdgeTarget = selectedEdge
+    ? (nodes.find((n) => n.id === selectedEdge.target) ?? null)
+    : null;
 
   // Wire label: derived at render time from `data.condition`, never persisted on the edge
   // itself — `condition` alone stays the source of truth the mapper round-trips.
@@ -286,15 +307,20 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
       )}
       <div className="flex flex-1 overflow-hidden">
         <NodePalette onAdd={onPaletteAdd} />
-        <div className="relative h-full flex-1" data-testid="flow-canvas" onDragOver={onDragOver} onDrop={onDrop}>
-          <div className="absolute left-3 top-3 z-10 flex gap-1 rounded-md border bg-background/95 p-1 shadow-sm" data-history-version={historyVersion}>
+        <div
+          className="relative h-full flex-1"
+          data-testid="flow-canvas"
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+        >
+          <div className="bg-background/95 absolute left-3 top-3 z-10 flex gap-1 rounded-md border p-1 shadow-sm">
             <Button
               type="button"
               size="icon"
               variant="ghost"
               className="h-8 w-8"
               onClick={undo}
-              disabled={undoStack.current.length === 0}
+              disabled={!historyAvailability.canUndo}
               aria-label="Desfazer última alteração"
               title="Desfazer (Ctrl+Z)"
             >
@@ -306,7 +332,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
               variant="ghost"
               className="h-8 w-8"
               onClick={redo}
-              disabled={redoStack.current.length === 0}
+              disabled={!historyAvailability.canRedo}
               aria-label="Refazer última alteração"
               title="Refazer (Ctrl+Y)"
             >

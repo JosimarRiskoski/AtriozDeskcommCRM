@@ -34,6 +34,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export function ConversationHeader({ conversation }: Props) {
+  const [renderedAt] = useState(() => Date.now());
   const { user } = useAuth();
   const claim = useClaimConversation();
   const release = useReleaseConversation();
@@ -51,7 +52,7 @@ export function ConversationHeader({ conversation }: Props) {
     conversation.ai_control_mode === "force_paused" ||
       (conversation.bot_silenced_until &&
         (conversation.bot_silenced_until === "infinity" ||
-          new Date(conversation.bot_silenced_until).getTime() > Date.now())),
+          new Date(conversation.bot_silenced_until).getTime() > renderedAt)),
   );
   const aiForcedActive = conversation.ai_control_mode === "force_active";
 

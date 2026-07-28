@@ -11,6 +11,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { createFollowupFlowSchema } from "@/lib/followup/api-schemas";
+import { buildFollowupPresetGraph } from "@/lib/followup/presets";
 
 export const dynamic = "force-dynamic";
 
@@ -54,9 +55,16 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const supabase = await createClient();
+  const draftGraph = buildFollowupPresetGraph(parsed.data.preset_id);
   const { data: created, error: insErr } = await supabase
     .from("followup_flow_pointers")
-    .insert({ organization_id: activeOrg.orgId, name: parsed.data.name })
+    .insert({
+      organization_id: activeOrg.orgId,
+      name: parsed.data.name,
+      draft_graph: draftGraph,
+      trigger_config: { kind: "manual", cancel_on_reply: true },
+      handoff_policy: "pause",
+    })
     .select("*")
     .single();
 
@@ -76,7 +84,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     resourceType: "followup_flow_pointer",
     resourceId: created.id,
     requestId,
-    metadata: { name: parsed.data.name },
+    metadata: { name: parsed.data.name, preset_id: parsed.data.preset_id },
   });
 
   return ok(created, { requestId, status: 201 });

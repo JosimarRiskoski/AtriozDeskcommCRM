@@ -15,6 +15,7 @@ import { TimelineView } from "@/components/contacts/TimelineView";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { BackNavigation } from "@/components/shell/BackNavigation";
+import { StartFollowupCard } from "@/components/contacts/StartFollowupCard";
 
 interface Props {
   contactId: string;
@@ -46,6 +47,8 @@ export function ContactDetailClient({ contactId }: Props) {
   const contact = q.data.data;
   const isAdmin =
     user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin);
+  const canManageFollowups =
+    user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager);
 
   const displayName = contact.display_name?.trim() || contact.name?.trim() || "Sem nome";
 
@@ -110,76 +113,81 @@ export function ContactDetailClient({ contactId }: Props) {
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
-          <Card className="p-4">
-            <dl className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Nome</dt>
-                <dd className="mt-1">{contact.name ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Display name</dt>
-                <dd className="mt-1">{contact.display_name ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Email</dt>
-                <dd className="mt-1">{contact.email ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Telefone</dt>
-                <dd className="mt-1">{contact.phone_number ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Empresa</dt>
-                <dd className="mt-1">{contact.company ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Cidade / UF</dt>
-                <dd className="mt-1">
-                  {[contact.city, contact.state].filter(Boolean).join(" / ") || "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Origem</dt>
-                <dd className="mt-1">{contact.source}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Última atividade</dt>
-                <dd className="mt-1">
-                  {contact.last_activity_at
-                    ? format(new Date(contact.last_activity_at), "dd/MM/yyyy HH:mm", {
-                        locale: ptBR,
-                      })
-                    : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Criado em</dt>
-                <dd className="mt-1">
-                  {format(new Date(contact.created_at), "dd/MM/yyyy", { locale: ptBR })}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Tags</dt>
-                <dd className="mt-1 flex flex-wrap gap-1">
-                  {contact.tags.length === 0
-                    ? "—"
-                    : contact.tags.map((t) => (
-                        <Badge key={t} variant="neutral">
-                          {t}
-                        </Badge>
-                      ))}
-                </dd>
-              </div>
-              {Object.entries(contact.custom_fields ?? {}).map(([key, value]) => (
-                <div key={key}>
-                  <dt className="text-xs uppercase text-muted-foreground">
-                    {key.replaceAll("_", " ")}
-                  </dt>
-                  <dd className="mt-1">{value == null ? "—" : String(value)}</dd>
+          <div className="space-y-4">
+            <Card className="p-4">
+              <dl className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Nome</dt>
+                  <dd className="mt-1">{contact.name ?? "—"}</dd>
                 </div>
-              ))}
-            </dl>
-          </Card>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Display name</dt>
+                  <dd className="mt-1">{contact.display_name ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Email</dt>
+                  <dd className="mt-1">{contact.email ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Telefone</dt>
+                  <dd className="mt-1">{contact.phone_number ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Empresa</dt>
+                  <dd className="mt-1">{contact.company ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Cidade / UF</dt>
+                  <dd className="mt-1">
+                    {[contact.city, contact.state].filter(Boolean).join(" / ") || "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Origem</dt>
+                  <dd className="mt-1">{contact.source}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Última atividade</dt>
+                  <dd className="mt-1">
+                    {contact.last_activity_at
+                      ? format(new Date(contact.last_activity_at), "dd/MM/yyyy HH:mm", {
+                          locale: ptBR,
+                        })
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Criado em</dt>
+                  <dd className="mt-1">
+                    {format(new Date(contact.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Tags</dt>
+                  <dd className="mt-1 flex flex-wrap gap-1">
+                    {contact.tags.length === 0
+                      ? "—"
+                      : contact.tags.map((t) => (
+                          <Badge key={t} variant="neutral">
+                            {t}
+                          </Badge>
+                        ))}
+                  </dd>
+                </div>
+                {Object.entries(contact.custom_fields ?? {}).map(([key, value]) => (
+                  <div key={key}>
+                    <dt className="text-xs uppercase text-muted-foreground">
+                      {key.replaceAll("_", " ")}
+                    </dt>
+                    <dd className="mt-1">{value == null ? "—" : String(value)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Card>
+            {canManageFollowups && !contact.is_anonymized && (
+              <StartFollowupCard contactId={contactId} />
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="timeline" className="mt-4">

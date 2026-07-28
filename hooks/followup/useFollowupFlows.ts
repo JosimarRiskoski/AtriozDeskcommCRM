@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+import type { FollowupPresetId } from "@/lib/followup/presets";
 
 export type FollowupFlowStatus = "draft" | "active" | "disabled";
 
@@ -45,8 +46,11 @@ export function useCreateFollowupFlow() {
   const qc = useQueryClient();
   return useMutation({
     mutationKey: ["followup", "flows", "create"],
-    mutationFn: async (name: string) => {
-      const res = await apiClient.post<SingleResponse>("/api/v1/ai/followup-flows", { name });
+    mutationFn: async ({ name, presetId }: { name: string; presetId: FollowupPresetId }) => {
+      const res = await apiClient.post<SingleResponse>("/api/v1/ai/followup-flows", {
+        name,
+        preset_id: presetId,
+      });
       return res.data;
     },
     onSuccess: (created) => {

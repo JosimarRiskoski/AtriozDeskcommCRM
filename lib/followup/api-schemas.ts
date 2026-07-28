@@ -6,9 +6,11 @@
  */
 import { z } from "zod";
 import { flowGraphSchema } from "./graph-schema";
+import { FOLLOWUP_PRESET_IDS } from "./presets";
 
 export const createFollowupFlowSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
+  preset_id: z.enum(FOLLOWUP_PRESET_IDS).default("no_response"),
 });
 
 // `cancel_on_reply` (Task 5.2 — reatividade): se true, um enrollment `waiting_reply`

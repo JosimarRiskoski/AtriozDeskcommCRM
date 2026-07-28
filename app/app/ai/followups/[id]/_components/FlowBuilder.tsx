@@ -1,9 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { FollowupFlowDetailRow } from "@/hooks/followup/useFollowupFlow";
+import { isSimpleFollowupGraph, SimpleFlowEditor } from "./SimpleFlowEditor";
 
 /**
  * @xyflow/react is a large dependency — this is the ONLY route that loads it.
@@ -25,9 +28,33 @@ interface Props {
 }
 
 export function FlowBuilder({ flowId, initialData }: Props) {
+  const simpleCompatible = isSimpleFollowupGraph(initialData.draft_graph);
+  const [advanced, setAdvanced] = useState(!simpleCompatible);
+
   return (
     <div className="flex h-full min-h-[600px] flex-1 flex-col" data-testid="flow-builder-shell">
-      <FlowCanvas flowId={flowId} initialData={initialData} />
+      <div className="flex items-center justify-between border-b border-border bg-background px-4 py-2">
+        <div>
+          <p className="text-sm font-medium">
+            {advanced ? "Editor avançado" : "Configuração simples"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {advanced
+              ? "Use o grafo somente quando precisar de regras e ramificações especiais."
+              : "Edite intervalos e mensagens sem lidar com nós técnicos."}
+          </p>
+        </div>
+        {simpleCompatible && (
+          <Button type="button" variant="outline" onClick={() => setAdvanced((value) => !value)}>
+            {advanced ? "Voltar ao modo simples" : "Personalizar fluxo"}
+          </Button>
+        )}
+      </div>
+      {advanced ? (
+        <FlowCanvas flowId={flowId} initialData={initialData} />
+      ) : (
+        <SimpleFlowEditor flowId={flowId} initialData={initialData} />
+      )}
     </div>
   );
 }

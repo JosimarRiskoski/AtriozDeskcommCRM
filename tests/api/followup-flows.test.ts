@@ -256,7 +256,7 @@ describe("POST /api/v1/ai/followup-flows — create draft", () => {
     expect(db.from("followup_flow_pointers")).toBeDefined();
   });
 
-  it("manager → 201, draft com status='draft' e draft_graph null", async () => {
+  it("manager → 201, draft nasce com modelo simples seguro", async () => {
     const db = makeDb([], []);
     session("manager", db);
     const { POST } = await import("@/app/api/v1/ai/followup-flows/route");
@@ -264,7 +264,15 @@ describe("POST /api/v1/ai/followup-flows — create draft", () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as { data: Row };
     expect(body.data.status).toBe("draft");
-    expect(body.data.draft_graph).toBeNull();
+    expect(body.data.draft_graph).toMatchObject({
+      nodes: expect.arrayContaining([
+        expect.objectContaining({ type: "trigger" }),
+        expect.objectContaining({ type: "action" }),
+        expect.objectContaining({ type: "end" }),
+      ]),
+    });
+    expect(body.data.trigger_config).toEqual({ kind: "manual", cancel_on_reply: true });
+    expect(body.data.handoff_policy).toBe("pause");
     expect(vi.mocked(audit)).toHaveBeenCalledWith(
       expect.objectContaining({ action: "followup_flow.created" }),
     );
@@ -296,8 +304,24 @@ describe("GET /api/v1/ai/followup-flows — list", () => {
   it("viewer (any member) → 200, só pointers da própria org", async () => {
     const db = makeDb(
       [
-        { id: "33333333-3333-4333-8333-333333333333", organization_id: ORG_ID, name: "A", status: "draft", active_version_id: null, handoff_policy: "pause", updated_at: "2026-01-01" },
-        { id: "44444444-4444-4444-8444-444444444444", organization_id: OTHER_ORG_ID, name: "B", status: "draft", active_version_id: null, handoff_policy: "pause", updated_at: "2026-01-01" },
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          organization_id: ORG_ID,
+          name: "A",
+          status: "draft",
+          active_version_id: null,
+          handoff_policy: "pause",
+          updated_at: "2026-01-01",
+        },
+        {
+          id: "44444444-4444-4444-8444-444444444444",
+          organization_id: OTHER_ORG_ID,
+          name: "B",
+          status: "draft",
+          active_version_id: null,
+          handoff_policy: "pause",
+          updated_at: "2026-01-01",
+        },
       ],
       [],
     );
@@ -367,7 +391,10 @@ describe("PATCH /api/v1/ai/followup-flows/:id", () => {
     const db = makeDb([pointerRow()], []);
     session("agent", db);
     const { PATCH } = await import("@/app/api/v1/ai/followup-flows/[id]/route");
-    const res = await PATCH(req("PATCH", { name: "B" }), ctx("33333333-3333-4333-8333-333333333333"));
+    const res = await PATCH(
+      req("PATCH", { name: "B" }),
+      ctx("33333333-3333-4333-8333-333333333333"),
+    );
     expect(res.status).toBe(403);
   });
 
@@ -407,7 +434,10 @@ describe("PATCH /api/v1/ai/followup-flows/:id", () => {
     const db = makeDb([], []);
     session("manager", db);
     const { PATCH } = await import("@/app/api/v1/ai/followup-flows/[id]/route");
-    const res = await PATCH(req("PATCH", { name: "B" }), ctx("55555555-5555-4555-8555-555555555555"));
+    const res = await PATCH(
+      req("PATCH", { name: "B" }),
+      ctx("55555555-5555-4555-8555-555555555555"),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -430,7 +460,14 @@ describe("PATCH /api/v1/ai/followup-flows/:id", () => {
 describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
   it("draft_graph null → 422 validation_failed com details.errors", async () => {
     const db = makeDb(
-      [{ id: "33333333-3333-4333-8333-333333333333", organization_id: ORG_ID, status: "draft", draft_graph: null }],
+      [
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          organization_id: ORG_ID,
+          status: "draft",
+          draft_graph: null,
+        },
+      ],
       [],
     );
     session("manager", db);
@@ -444,7 +481,14 @@ describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
 
   it("draft_graph inválido (nó órfão) → 422 com erro por node", async () => {
     const db = makeDb(
-      [{ id: "33333333-3333-4333-8333-333333333333", organization_id: ORG_ID, status: "draft", draft_graph: INVALID_GRAPH }],
+      [
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          organization_id: ORG_ID,
+          status: "draft",
+          draft_graph: INVALID_GRAPH,
+        },
+      ],
       [],
     );
     session("manager", db);
@@ -461,7 +505,14 @@ describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
 
   it("draft_graph válido → cria version, pointer vira active com active_version_id", async () => {
     const db = makeDb(
-      [{ id: "33333333-3333-4333-8333-333333333333", organization_id: ORG_ID, status: "draft", draft_graph: VALID_GRAPH }],
+      [
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          organization_id: ORG_ID,
+          status: "draft",
+          draft_graph: VALID_GRAPH,
+        },
+      ],
       [],
     );
     session("manager", db);
@@ -486,7 +537,14 @@ describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
 
   it("pointer de outra org → 404", async () => {
     const db = makeDb(
-      [{ id: "33333333-3333-4333-8333-333333333333", organization_id: OTHER_ORG_ID, status: "draft", draft_graph: VALID_GRAPH }],
+      [
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          organization_id: OTHER_ORG_ID,
+          status: "draft",
+          draft_graph: VALID_GRAPH,
+        },
+      ],
       [],
     );
     session("manager", db);
@@ -503,7 +561,10 @@ describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
           organization_id: ORG_ID,
           status: "draft",
           draft_graph: VALID_GRAPH,
-          trigger_config: { kind: "stage_change", params: { stage_id: "44444444-4444-4444-8444-444444444444" } },
+          trigger_config: {
+            kind: "stage_change",
+            params: { stage_id: "44444444-4444-4444-8444-444444444444" },
+          },
         },
       ],
       [],
@@ -592,48 +653,119 @@ describe("POST /api/v1/ai/followup-flows/:id/rollback", () => {
 
   it("version_id de outra org → 404 not_found", async () => {
     const db = makeDb(
-      [{ id: P1, organization_id: ORG_ID, status: "active", active_version_id: "66666666-6666-4666-8666-666666666666" }],
-      [{ id: "88888888-8888-4888-8888-888888888888", organization_id: OTHER_ORG_ID, pointer_id: P1, graph: VALID_GRAPH }],
+      [
+        {
+          id: P1,
+          organization_id: ORG_ID,
+          status: "active",
+          active_version_id: "66666666-6666-4666-8666-666666666666",
+        },
+      ],
+      [
+        {
+          id: "88888888-8888-4888-8888-888888888888",
+          organization_id: OTHER_ORG_ID,
+          pointer_id: P1,
+          graph: VALID_GRAPH,
+        },
+      ],
     );
     session("manager", db);
     const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/rollback/route");
-    const res = await POST(req("POST", { version_id: "88888888-8888-4888-8888-888888888888" }), ctx(P1));
+    const res = await POST(
+      req("POST", { version_id: "88888888-8888-4888-8888-888888888888" }),
+      ctx(P1),
+    );
     expect(res.status).toBe(404);
   });
 
   it("version da mesma org mas de OUTRO pointer (linhagem errada) → 404 not_found", async () => {
     const db = makeDb(
-      [{ id: P1, organization_id: ORG_ID, status: "active", active_version_id: "66666666-6666-4666-8666-666666666666" }],
-      [{ id: "77777777-7777-4777-8777-777777777777", organization_id: ORG_ID, pointer_id: OTHER_POINTER, graph: VALID_GRAPH }],
+      [
+        {
+          id: P1,
+          organization_id: ORG_ID,
+          status: "active",
+          active_version_id: "66666666-6666-4666-8666-666666666666",
+        },
+      ],
+      [
+        {
+          id: "77777777-7777-4777-8777-777777777777",
+          organization_id: ORG_ID,
+          pointer_id: OTHER_POINTER,
+          graph: VALID_GRAPH,
+        },
+      ],
     );
     session("manager", db);
     const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/rollback/route");
-    const res = await POST(req("POST", { version_id: "77777777-7777-4777-8777-777777777777" }), ctx(P1));
+    const res = await POST(
+      req("POST", { version_id: "77777777-7777-4777-8777-777777777777" }),
+      ctx(P1),
+    );
     expect(res.status).toBe(404);
   });
 
   it("version órfã (pointer_id null) → 404 not_found, nunca é alvo de rollback", async () => {
     const db = makeDb(
-      [{ id: P1, organization_id: ORG_ID, status: "active", active_version_id: "66666666-6666-4666-8666-666666666666" }],
-      [{ id: "77777777-7777-4777-8777-777777777777", organization_id: ORG_ID, pointer_id: null, graph: VALID_GRAPH }],
+      [
+        {
+          id: P1,
+          organization_id: ORG_ID,
+          status: "active",
+          active_version_id: "66666666-6666-4666-8666-666666666666",
+        },
+      ],
+      [
+        {
+          id: "77777777-7777-4777-8777-777777777777",
+          organization_id: ORG_ID,
+          pointer_id: null,
+          graph: VALID_GRAPH,
+        },
+      ],
     );
     session("manager", db);
     const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/rollback/route");
-    const res = await POST(req("POST", { version_id: "77777777-7777-4777-8777-777777777777" }), ctx(P1));
+    const res = await POST(
+      req("POST", { version_id: "77777777-7777-4777-8777-777777777777" }),
+      ctx(P1),
+    );
     expect(res.status).toBe(404);
   });
 
   it("version_id válido e da linhagem do pointer → 200, pointer aponta pra ela", async () => {
     const db = makeDb(
-      [{ id: P1, organization_id: ORG_ID, status: "active", active_version_id: "66666666-6666-4666-8666-666666666666" }],
       [
-        { id: "66666666-6666-4666-8666-666666666666", organization_id: ORG_ID, pointer_id: P1, graph: VALID_GRAPH },
-        { id: "77777777-7777-4777-8777-777777777777", organization_id: ORG_ID, pointer_id: P1, graph: VALID_GRAPH },
+        {
+          id: P1,
+          organization_id: ORG_ID,
+          status: "active",
+          active_version_id: "66666666-6666-4666-8666-666666666666",
+        },
+      ],
+      [
+        {
+          id: "66666666-6666-4666-8666-666666666666",
+          organization_id: ORG_ID,
+          pointer_id: P1,
+          graph: VALID_GRAPH,
+        },
+        {
+          id: "77777777-7777-4777-8777-777777777777",
+          organization_id: ORG_ID,
+          pointer_id: P1,
+          graph: VALID_GRAPH,
+        },
       ],
     );
     session("manager", db);
     const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/rollback/route");
-    const res = await POST(req("POST", { version_id: "77777777-7777-4777-8777-777777777777" }), ctx(P1));
+    const res = await POST(
+      req("POST", { version_id: "77777777-7777-4777-8777-777777777777" }),
+      ctx(P1),
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { active_version_id: string; status: string } };
     expect(body.data.active_version_id).toBe("77777777-7777-4777-8777-777777777777");
@@ -645,15 +777,35 @@ describe("POST /api/v1/ai/followup-flows/:id/rollback", () => {
 
   it("pointer 'disabled' → rollback só troca active_version_id, NÃO reativa (status continua disabled)", async () => {
     const db = makeDb(
-      [{ id: P1, organization_id: ORG_ID, status: "disabled", active_version_id: "66666666-6666-4666-8666-666666666666" }],
       [
-        { id: "66666666-6666-4666-8666-666666666666", organization_id: ORG_ID, pointer_id: P1, graph: VALID_GRAPH },
-        { id: "77777777-7777-4777-8777-777777777777", organization_id: ORG_ID, pointer_id: P1, graph: VALID_GRAPH },
+        {
+          id: P1,
+          organization_id: ORG_ID,
+          status: "disabled",
+          active_version_id: "66666666-6666-4666-8666-666666666666",
+        },
+      ],
+      [
+        {
+          id: "66666666-6666-4666-8666-666666666666",
+          organization_id: ORG_ID,
+          pointer_id: P1,
+          graph: VALID_GRAPH,
+        },
+        {
+          id: "77777777-7777-4777-8777-777777777777",
+          organization_id: ORG_ID,
+          pointer_id: P1,
+          graph: VALID_GRAPH,
+        },
       ],
     );
     session("manager", db);
     const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/rollback/route");
-    const res = await POST(req("POST", { version_id: "77777777-7777-4777-8777-777777777777" }), ctx(P1));
+    const res = await POST(
+      req("POST", { version_id: "77777777-7777-4777-8777-777777777777" }),
+      ctx(P1),
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { active_version_id: string; status: string } };
     expect(body.data.active_version_id).toBe("77777777-7777-4777-8777-777777777777");
@@ -667,7 +819,10 @@ describe("POST /api/v1/ai/followup-flows/:id/rollback", () => {
 
 describe("POST /api/v1/ai/followup-flows/:id/disable", () => {
   it("pointer ativo → 200, status='disabled', audit emitido", async () => {
-    const db = makeDb([{ id: "33333333-3333-4333-8333-333333333333", organization_id: ORG_ID, status: "active" }], []);
+    const db = makeDb(
+      [{ id: "33333333-3333-4333-8333-333333333333", organization_id: ORG_ID, status: "active" }],
+      [],
+    );
     session("manager", db);
     const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/disable/route");
     const res = await POST(req("POST"), ctx("33333333-3333-4333-8333-333333333333"));
@@ -680,7 +835,10 @@ describe("POST /api/v1/ai/followup-flows/:id/disable", () => {
   });
 
   it("pointer já disabled → 200 no-op, sem novo audit", async () => {
-    const db = makeDb([{ id: "33333333-3333-4333-8333-333333333333", organization_id: ORG_ID, status: "disabled" }], []);
+    const db = makeDb(
+      [{ id: "33333333-3333-4333-8333-333333333333", organization_id: ORG_ID, status: "disabled" }],
+      [],
+    );
     session("manager", db);
     const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/disable/route");
     const res = await POST(req("POST"), ctx("33333333-3333-4333-8333-333333333333"));
