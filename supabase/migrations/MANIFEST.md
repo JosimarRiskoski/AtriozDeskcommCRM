@@ -88,6 +88,7 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 | `20260727222000` | `0087_webhook_source_contracts` | Fontes de entrada ganham origem explícita e opção de exigir `external_id`; permite credencial exclusiva da 3C, escopo fixo por organização/funil, deduplicação e auditoria sem entregar acesso ao Supabase. Fonte com segredo passa a falhar fechado se a decifragem estiver indisponível. |
 | `20260727223000` | `0088_meta_capi_queue` | Ao ganhar um negócio, trigger transacional cria exatamente um evento local por lead; worker assíncrono envia à Meta com `event_id` estável, hashes SHA-256, consentimento, tentativas limitadas, resposta auditável e sem reverter o fechamento se a Meta falhar. Token fica cifrado. |
 | `20260727224000` | `0089_notification_center` | Central real multi-organização: eventos acionáveis, preferências por usuário para CRM/e-mail, lido/não lido, fan-out, fila Resend com claim/lease/retry e gatilhos para cliente novo, handoff, arquivos, falha de envio/IA/WhatsApp, campanha e resultado/atribuição de negócio. Push permanece oculto até existir entrega real. |
+| `20260727225000` | `0090_pipeline_stage_reorder` | Reordenação atômica de funis e etapas, com autorização administrativa e bloqueio de linhas; troca posições sem colisão de unicidade e sem depender de atualizações parciais do navegador. |
 
 ## Reproducibility
 
