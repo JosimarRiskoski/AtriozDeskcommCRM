@@ -20,6 +20,7 @@ import { ensureRole, ensureScope } from "@/lib/mcp/auth";
 import type { McpAuthResult } from "@/lib/mcp/auth";
 import { allTools, getToolByName } from "@/lib/mcp/tools";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
+import { isAuthorizedAgentToolCall } from "./tool-authorization";
 
 export interface RuntimeHandoffSignal {
   triggered: boolean;
@@ -44,10 +45,7 @@ function shapeToZodObject(shape: Record<string, z.ZodTypeAny>): z.ZodTypeAny {
   return z.object(shape);
 }
 
-function wrapMcpTool(
-  def: McpToolDefinition,
-  input: PickToolsInput,
-): Tool {
+function wrapMcpTool(def: McpToolDefinition, input: PickToolsInput): Tool {
   const inputSchema = shapeToZodObject(def.inputSchema as Record<string, z.ZodTypeAny>);
 
   return tool({
@@ -58,7 +56,9 @@ function wrapMcpTool(
       const argsRecord = (args ?? {}) as Record<string, unknown>;
       try {
         ensureScope(input.auth.scopes, def.requiresScope);
-        ensureRole(input.auth.role, def.requiresRole);
+        if (!isAuthorizedAgentToolCall(input.auth)) {
+          ensureRole(input.auth.role, def.requiresRole);
+        }
 
         const result = await def.handler(argsRecord as never, input.ctx);
 
