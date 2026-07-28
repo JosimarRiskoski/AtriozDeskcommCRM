@@ -41,6 +41,7 @@ export interface AtRiskLead {
   contact_id: string | null;
   contact_name: string | null;
   owner_user_id: string | null;
+  owner_user_name: string | null;
   /** Dono do NEGÓCIO (0070) — humano, agente ou ninguém. */
   owner_kind: "user" | "ai" | null;
   owner_agent_id: string | null;
@@ -54,6 +55,8 @@ export interface AtRiskLead {
   in_flight: boolean;
   next_followup_at: string | null;
   conversation_id: string | null;
+  channel_session_id: string | null;
+  channel_name: string | null;
   pipeline_id: string;
 }
 
@@ -63,9 +66,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const { org } = authz;
 
-  const parsed = querySchema.safeParse(
-    Object.fromEntries(new URL(req.url).searchParams.entries()),
-  );
+  const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams.entries()));
   if (!parsed.success) {
     return fail("validation_failed", "Query inválida.", 422, {
       requestId,
@@ -113,6 +114,24 @@ export async function GET(req: NextRequest): Promise<Response> {
     }
   }
 
+  const ownerUserIds = [
+    ...new Set(rows.map((l) => l.owner_user_id).filter((id): id is string => id !== null)),
+  ];
+  const ownerNameById = new Map<string, string>();
+  await Promise.all(
+    ownerUserIds.map(async (id) => {
+      const { data } = await admin.auth.admin.getUserById(id);
+      const user = data?.user;
+      const fullName = user?.user_metadata?.full_name;
+      ownerNameById.set(
+        id,
+        typeof fullName === "string" && fullName.trim()
+          ? fullName.trim()
+          : (user?.email ?? "Atendente"),
+      );
+    }),
+  );
+
   // Janela de esfriamento POR ESTÁGIO (decisão §3.3): "sem resposta há 2 dias" é
   // normal numa negociação e é abandono num agendamento. Uma fonte só —
   // resolveStageWindow — para o radar e o card nunca discordarem do mesmo lead.
@@ -131,13 +150,23 @@ export async function GET(req: NextRequest): Promise<Response> {
       windowByStage.set(s.id, resolveStageWindow(s));
     }
   }
-  const contactIds = [...new Set(rows.map((l) => l.contact_id).filter((c): c is string => c !== null))];
+  const contactIds = [
+    ...new Set(rows.map((l) => l.contact_id).filter((c): c is string => c !== null)),
+  ];
 
   // Follow-ups agendados no futuro por contato (mais próximo primeiro) — "em voo".
   const followupByContact = new Map<string, string>();
   // Uma conversa por contato (qualquer serve para o deep-link do inbox) + assignee.
-  const convByContact = new Map<string, { id: string; assignee_kind: "user" | "ai" | null }>();
+  const convByContact = new Map<
+    string,
+    {
+      id: string;
+      assignee_kind: "user" | "ai" | null;
+      channel_session_id: string | null;
+    }
+  >();
   const nameByContact = new Map<string, string | null>();
+  const channelNameById = new Map<string, string>();
 
   if (contactIds.length > 0) {
     const [followups, convs, contacts] = await Promise.all([
@@ -151,9 +180,10 @@ export async function GET(req: NextRequest): Promise<Response> {
         .in("contact_id", contactIds),
       admin
         .from("conversations")
-        .select("id, contact_id, assignee_kind")
+        .select("id, contact_id, assignee_kind, channel_session_id, updated_at")
         .eq("organization_id", org.orgId)
-        .in("contact_id", contactIds),
+        .in("contact_id", contactIds)
+        .order("updated_at", { ascending: false }),
       admin
         .from("contacts")
         .select("id, name, display_name")
@@ -167,7 +197,32 @@ export async function GET(req: NextRequest): Promise<Response> {
     }
     for (const c of convs.data ?? []) {
       if (!convByContact.has(c.contact_id)) {
-        convByContact.set(c.contact_id, { id: c.id, assignee_kind: c.assignee_kind ?? null });
+        convByContact.set(c.contact_id, {
+          id: c.id,
+          assignee_kind: c.assignee_kind ?? null,
+          channel_session_id: c.channel_session_id ?? null,
+        });
+      }
+    }
+
+    const channelIds = [
+      ...new Set(
+        [...convByContact.values()]
+          .map((conversation) => conversation.channel_session_id)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    if (channelIds.length > 0) {
+      const { data: channels } = await admin
+        .from("channel_sessions")
+        .select("id, display_name, phone_number, waha_session_name")
+        .eq("organization_id", org.orgId)
+        .in("id", channelIds);
+      for (const channel of channels ?? []) {
+        channelNameById.set(
+          channel.id,
+          channel.display_name ?? channel.phone_number ?? channel.waha_session_name,
+        );
       }
     }
     for (const p of contacts.data ?? []) {
@@ -181,7 +236,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   for (const l of rows) {
     const lastActivity = l.last_activity_at ?? l.created_at;
     if (!lastActivity) continue;
-    const nextFollowupAt = l.contact_id ? followupByContact.get(l.contact_id) ?? null : null;
+    const nextFollowupAt = l.contact_id ? (followupByContact.get(l.contact_id) ?? null) : null;
     const { bucket, hoursSinceActivity, onRadar } = classifyRisk({
       lastActivityAt: new Date(lastActivity),
       now,
@@ -189,17 +244,18 @@ export async function GET(req: NextRequest): Promise<Response> {
       window: windowByStage.get(l.stage_id) ?? resolveStageWindow(null),
     });
     if (!onRadar || hoursSinceActivity < min_hours) continue;
-    const conv = l.contact_id ? convByContact.get(l.contact_id) ?? null : null;
+    const conv = l.contact_id ? (convByContact.get(l.contact_id) ?? null) : null;
     counts[bucket] += 1;
     radar.push({
       id: l.id,
       title: l.title,
       contact_id: l.contact_id,
-      contact_name: l.contact_id ? nameByContact.get(l.contact_id) ?? null : null,
+      contact_name: l.contact_id ? (nameByContact.get(l.contact_id) ?? null) : null,
       owner_user_id: l.owner_user_id,
+      owner_user_name: l.owner_user_id ? (ownerNameById.get(l.owner_user_id) ?? null) : null,
       owner_kind: l.owner_kind,
       owner_agent_id: l.owner_agent_id,
-      owner_agent_name: l.owner_agent_id ? agentNameById.get(l.owner_agent_id) ?? null : null,
+      owner_agent_name: l.owner_agent_id ? (agentNameById.get(l.owner_agent_id) ?? null) : null,
       assignee_kind: conv?.assignee_kind ?? null,
       last_activity_at: l.last_activity_at,
       hours_since_activity: Math.round(hoursSinceActivity),
@@ -207,6 +263,10 @@ export async function GET(req: NextRequest): Promise<Response> {
       in_flight: nextFollowupAt !== null,
       next_followup_at: nextFollowupAt,
       conversation_id: conv?.id ?? null,
+      channel_session_id: conv?.channel_session_id ?? null,
+      channel_name: conv?.channel_session_id
+        ? (channelNameById.get(conv.channel_session_id) ?? null)
+        : null,
       pipeline_id: l.pipeline_id,
     });
   }

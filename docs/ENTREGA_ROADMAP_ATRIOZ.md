@@ -25,7 +25,7 @@ Este documento é o ponto de retomada para publicar e homologar as melhorias fei
 - notificações funcionais;
 - administração visual de funis e etapas;
 - atualização de dados comerciais do contato pela IA, limitada a campos autorizados;
-- Radar explicado e filtrável;
+- Radar explicado e filtrável por risco, tempo parado, tipo de responsável, atendente e número de WhatsApp;
 - Conexões com diagnóstico de prontidão e explicação da proteção de envio;
 - busca do topo ampliada e Configurações agrupadas por finalidade.
 - busca global real por contatos, conversas, negócios, arquivos e atalhos autorizados;
@@ -111,6 +111,7 @@ Antes de iniciar, abrir **Configurações > Implantação do cliente**. Os itens
 - [ ] campanha envia texto, espera, envia áudio e aguarda o intervalo antes do próximo contato;
 - [ ] pausa e retomada da campanha não duplicam mensagens;
 - [ ] notificação crítica abre o item correto;
+- [ ] Radar filtra corretamente por atendente e número de WhatsApp sem misturar organizações;
 - [ ] lead da 3C entra uma única vez na organização correta;
 - [ ] negócio ganho gera uma única conversão auditada na Meta;
 - [ ] backup completo foi criado e uma restauração foi ensaiada;
