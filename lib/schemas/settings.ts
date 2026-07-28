@@ -83,11 +83,20 @@ export type TenantInput = z.infer<typeof tenantSchema>;
 
 export const NOTIFICATION_CATEGORIES = [
   "lead_assigned",
+  "human_handoff",
+  "client_new",
+  "file_received",
+  "file_rejected",
+  "whatsapp_disconnected",
+  "send_failed",
+  "ai_failure",
+  "campaign_interrupted",
+  "team_invite_failed",
   "lead_won",
   "lead_lost",
   "mention",
 ] as const;
-export const NOTIFICATION_CHANNELS = ["email", "in_app", "push"] as const;
+export const NOTIFICATION_CHANNELS = ["email", "in_app"] as const;
 
 export const notificationPrefsSchema = z.object({
   prefs: z.array(

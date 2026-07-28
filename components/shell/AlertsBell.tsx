@@ -1,30 +1,44 @@
 "use client";
-import Link from "next/link";
 
-import { useAgentInbox } from "@/hooks/ai/useAgentInbox";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+
 import { Bell } from "@/lib/ui/icons";
 
-/**
- * Sino da central de avisos (Operação Visível F1): contador de avisos abertos
- * do runtime do agente no header; clique leva a /app/ai/inbox.
- */
 export function AlertsBell() {
-  const { data } = useAgentInbox("open");
-  const count = data?.open_count ?? 0;
+  const [count, setCount] = useState(0);
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/notifications?status=unread&limit=100", { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      setCount(Array.isArray(json.data) ? json.data.length : 0);
+    } catch {
+      // O sino não pode interromper o restante da navegação.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("notifications:refresh", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("notifications:refresh", refresh);
+    };
+  }, [refresh]);
 
   return (
     <Link
-      href="/app/ai/inbox"
-      aria-label={count > 0 ? `Central de avisos — ${count} em aberto` : "Central de avisos"}
+      href="/app/notifications"
+      aria-label={count > 0 ? `Notificações — ${count} não lidas` : "Notificações"}
+      title="Notificações"
       data-testid="alerts-bell"
       className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
       <Bell size={18} aria-hidden />
       {count > 0 ? (
-        <span
-          data-testid="alerts-bell-count"
-          className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground"
-        >
+        <span data-testid="alerts-bell-count" className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground">
           {count > 99 ? "99+" : count}
         </span>
       ) : null}

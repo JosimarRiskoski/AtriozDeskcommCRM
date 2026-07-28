@@ -123,6 +123,22 @@ export async function POST(req: NextRequest): Promise<Response> {
       ],
     });
 
+    if (!result.ok && admin) {
+      await admin.rpc("fn_emit_notification", {
+        p_org: activeOrg.orgId,
+        p_category: "team_invite_failed",
+        p_severity: "warning",
+        p_title: "Convite de equipe não foi enviado",
+        p_body: `O convite para ${email} foi criado, mas o e-mail falhou. Copie o link de acesso e verifique o Resend.`,
+        p_action_url: "/app/team/invite",
+        p_resource_type: "membership_invite",
+        p_resource_id: inviteId,
+        p_dedupe_key: `team-invite-failed-${inviteId}`,
+        p_target_user: authUser.id,
+        p_metadata: { error: result.error ?? "send_failed" },
+      });
+    }
+
     sent.push({
       email,
       invite_id: inviteId,
