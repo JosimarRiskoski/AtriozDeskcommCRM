@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -41,6 +42,7 @@ function followupWhen(iso: string): string {
 
 export function RiskRadarList() {
   const { data, isLoading } = useAtRiskLeads();
+  const [filter, setFilter] = useState<"todos" | Exclude<RiskBucket, "em_dia">>("todos");
 
   if (isLoading) {
     return (
@@ -67,19 +69,61 @@ export function RiskRadarList() {
     );
   }
 
+  const visibleItems =
+    filter === "todos" ? data.items : data.items.filter((lead) => lead.risk === filter);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap gap-2" data-testid="radar-counts">
-        <Badge variant="error">{data.counts.critico} crítico</Badge>
-        <Badge variant="warning">{data.counts.em_risco} em risco</Badge>
-        <Badge variant="info">{data.counts.em_voo} em voo</Badge>
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-lg border border-error/30 bg-error-bg p-3">
+          <p className="text-sm font-semibold text-error-fg">Crítico</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Parado além do limite da etapa. Abra e defina o próximo passo agora.
+          </p>
+        </div>
+        <div className="rounded-lg border border-warning/30 bg-warning-bg p-3">
+          <p className="text-sm font-semibold text-warning-fg">Em risco</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Está esfriando e ainda não possui retorno programado.
+          </p>
+        </div>
+        <div className="rounded-lg border border-info/30 bg-info-bg p-3">
+          <p className="text-sm font-semibold text-info-fg">Em voo</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Há retorno automático agendado. Acompanhe sem abordar em duplicidade.
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="flex flex-wrap gap-2"
+        data-testid="radar-counts"
+        aria-label="Filtrar radar por prioridade"
+      >
+        <Button size="sm" variant={filter === "todos" ? "default" : "outline"} onClick={() => setFilter("todos")}>
+          Todos ({data.total})
+        </Button>
+        <Button size="sm" variant={filter === "critico" ? "default" : "outline"} onClick={() => setFilter("critico")}>
+          Críticos ({data.counts.critico})
+        </Button>
+        <Button size="sm" variant={filter === "em_risco" ? "default" : "outline"} onClick={() => setFilter("em_risco")}>
+          Em risco ({data.counts.em_risco})
+        </Button>
+        <Button size="sm" variant={filter === "em_voo" ? "default" : "outline"} onClick={() => setFilter("em_voo")}>
+          Em voo ({data.counts.em_voo})
+        </Button>
       </div>
 
       <ul className="divide-y divide-border rounded-lg border border-border">
-        {data.items.map((lead) => (
+        {visibleItems.map((lead) => (
           <RadarRow key={lead.id} lead={lead} />
         ))}
       </ul>
+      {visibleItems.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+          Nenhuma demanda nesta prioridade.
+        </p>
+      ) : null}
     </div>
   );
 }

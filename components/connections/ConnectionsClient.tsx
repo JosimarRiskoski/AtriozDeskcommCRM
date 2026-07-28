@@ -135,6 +135,26 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
 
   return (
     <div className="flex flex-col gap-4">
+      <Card className="grid gap-3 p-4 md:grid-cols-3">
+        <div>
+          <p className="text-sm font-semibold">1. Conexão</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Confirma se o número está realmente conectado ao WhatsApp.
+          </p>
+        </div>
+        <div>
+          <p className="text-sm font-semibold">2. Atendimento</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Com a conexão ativa, Inbox, atendimento humano e IA podem receber e enviar mensagens.
+          </p>
+        </div>
+        <div>
+          <p className="text-sm font-semibold">3. Proteção de envio</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Define horário, intervalo e limite diário para reduzir bloqueios. Não pausa o WhatsApp.
+          </p>
+        </div>
+      </Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           {list.length === 0
@@ -190,6 +210,8 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
           {list.map((c) => {
             const info = statusInfo(c.status);
+            const ready = c.status === "WORKING";
+            const pacing = pacingItems.find((item) => item.channel_session.id === c.id);
             return (
               <Card key={c.id} className="flex flex-col gap-3 p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -211,6 +233,23 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                     ? `Verificado ${new Date(c.last_health_check_at).toLocaleString("pt-BR")}`
                     : "Ainda não verificado"}
                 </p>
+                {c.status_reason ? (
+                  <p className="rounded-md bg-error-bg px-2.5 py-2 text-xs text-error-fg">
+                    Motivo informado: {c.status_reason}
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-2.5 text-xs">
+                  <span className="text-muted-foreground">Inbox e humano</span>
+                  <span className={ready ? "text-success-fg" : "text-warning-fg"}>
+                    {ready ? "Pronto" : "Aguardando conexão"}
+                  </span>
+                  <span className="text-muted-foreground">IA e follow-ups</span>
+                  <span className={ready ? "text-success-fg" : "text-warning-fg"}>
+                    {ready ? "Canal disponível" : "Indisponível"}
+                  </span>
+                  <span className="text-muted-foreground">Limite diário</span>
+                  <span>{pacing?.channel_session.daily_message_limit ?? c.daily_message_limit} mensagens</span>
+                </div>
                 <div className="mt-auto flex gap-2">
                   <Button
                     variant="outline"

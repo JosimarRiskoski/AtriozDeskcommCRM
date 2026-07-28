@@ -10,48 +10,55 @@ interface SettingsLink {
   href: string;
   title: string;
   description: string;
+  group: "Conta" | "Operação comercial" | "Integrações" | "Segurança avançada";
   adminOnly?: boolean;
   managerOnly?: boolean;
 }
 
 const LINKS: SettingsLink[] = [
-  { href: "/app/settings/profile", title: "Perfil", description: "Nome, idioma, fuso, avatar." },
+  { href: "/app/settings/profile", title: "Perfil", description: "Nome, idioma, fuso e avatar.", group: "Conta" },
   {
     href: "/app/settings/security",
     title: "Segurança",
     description: "MFA, códigos de recuperação, sessões.",
+    group: "Conta",
   },
   {
     href: "/app/settings/notifications",
     title: "Notificações",
-    description: "Canais e categorias (em breve).",
+    description: "Escolha quais alertas deseja receber no CRM e por e-mail.",
+    group: "Conta",
   },
   {
     href: "/app/settings/api-tokens",
     title: "API Tokens",
-    description: "Tokens server-to-server.",
+    description: "Acesso técnico entre sistemas. Use apenas com orientação especializada.",
+    group: "Segurança avançada",
     adminOnly: true,
   },
   {
     href: "/app/settings/tenant",
     title: "Organização",
     description: "Dados da empresa, retenção, DPO.",
+    group: "Conta",
     adminOnly: true,
   },
   {
     href: "/app/settings/tenant/pipelines",
     title: "Pipelines",
-    description: "Vocabulário, custom fields, motivos de perda.",
+    description: "Funis, etapas, campos e motivos de perda.",
+    group: "Operação comercial",
     adminOnly: true,
   },
   {
     href: "/app/connections",
     title: "Conexões WhatsApp",
     description: "Saúde, reconexão e novos números.",
+    group: "Integrações",
     adminOnly: true,
   },
-  { href: "/app/settings/meta-capi", title: "Conversões da Meta", description: "Enviar negócios ganhos ao Dataset/Pixel com segurança.", adminOnly: true },
-  { href: "/app/audit", title: "Audit Log", description: "Histórico de ações.", managerOnly: true },
+  { href: "/app/settings/meta-capi", title: "Conversões da Meta", description: "Enviar negócios ganhos ao Dataset/Pixel com segurança.", group: "Integrações", adminOnly: true },
+  { href: "/app/audit", title: "Histórico de segurança", description: "Quem alterou o quê e quando.", group: "Segurança avançada", managerOnly: true },
 ];
 
 export default async function SettingsHubPage() {
@@ -66,6 +73,9 @@ export default async function SettingsHubPage() {
     if (l.managerOnly && !isManager) return false;
     return true;
   });
+  const groups = (["Conta", "Operação comercial", "Integrações", "Segurança avançada"] as const)
+    .map((title) => ({ title, items: visible.filter((item) => item.group === title) }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
@@ -75,14 +85,23 @@ export default async function SettingsHubPage() {
           Gerencie sua conta, organização e integrações.
         </p>
       </header>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {visible.map((l) => (
-          <Link key={l.href} href={l.href} className="block">
-            <Card className="h-full p-4 transition-colors hover:border-border-strong">
-              <h2 className="text-sm font-semibold">{l.title}</h2>
-              <p className="mt-1 text-xs text-muted-foreground">{l.description}</p>
-            </Card>
-          </Link>
+      <div className="space-y-7">
+        {groups.map((group) => (
+          <section key={group.title} aria-labelledby={`settings-${group.title}`}>
+            <h2 id={`settings-${group.title}`} className="mb-3 text-sm font-semibold">
+              {group.title}
+            </h2>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {group.items.map((item) => (
+                <Link key={item.href} href={item.href} className="block">
+                  <Card className="h-full p-4 transition-colors hover:border-border-strong">
+                    <h3 className="text-sm font-semibold">{item.title}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </section>
         ))}
       </div>
     </div>

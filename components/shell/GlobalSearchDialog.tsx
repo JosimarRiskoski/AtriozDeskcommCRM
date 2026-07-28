@@ -19,6 +19,10 @@ const SHORTCUTS = [
   { label: "Kanban", description: "Funis e negócios", href: "/app/kanban", Icon: Kanban },
   { label: "Contatos", description: "Todos os contatos", href: "/app/contacts", Icon: Users },
   { label: "Configurações", description: "Conta e integrações", href: "/app/settings", Icon: Gear },
+  { label: "Conexões", description: "WhatsApp, saúde e proteção de envio", href: "/app/connections", Icon: Gear },
+  { label: "Radar", description: "Clientes que precisam de atenção", href: "/app/radar", Icon: Kanban },
+  { label: "Agentes IA", description: "Configuração, teste e execução dos agentes", href: "/app/ai/agents", Icon: Gear },
+  { label: "Follow-ups", description: "Retornos automáticos e modelos prontos", href: "/app/ai/followups", Icon: Inbox },
 ];
 
 function contactName(contact: Contact) {

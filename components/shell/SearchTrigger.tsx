@@ -17,7 +17,7 @@ export function SearchTrigger() {
     <Button
       variant="outline"
       size="sm"
-      className="w-10 justify-start gap-2 px-2 text-muted-foreground sm:w-64 sm:px-3 md:w-[min(30rem,38vw)]"
+      className="w-10 justify-start gap-2 px-2 text-muted-foreground sm:w-80 sm:px-3 md:w-[min(42rem,48vw)]"
       aria-label="Abrir busca global"
       onClick={openSearch}
     >
