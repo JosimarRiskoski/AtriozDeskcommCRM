@@ -60,6 +60,8 @@ export type AuditAction =
   | "contact.blocked"
   | "ai.handoff_triggered"
   | "ai.reactivated_by_agent"
+  | "ai.paused_by_agent"
+  | "ai.contact_control_changed"
   | "conversation.usable_for_rag_toggled"
   | "rag.conversations_batch_run"
   | "lgpd.redact_received"

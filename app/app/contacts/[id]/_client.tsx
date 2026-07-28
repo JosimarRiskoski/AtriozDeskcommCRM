@@ -14,6 +14,7 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { TimelineView } from "@/components/contacts/TimelineView";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
+import { BackNavigation } from "@/components/shell/BackNavigation";
 
 interface Props {
   contactId: string;
@@ -54,6 +55,13 @@ export function ContactDetailClient({ contactId }: Props) {
 
   return (
     <div className="space-y-4 p-6">
+      <nav aria-label="Navegação estrutural" className="flex items-center gap-2 text-sm text-muted-foreground">
+        <BackNavigation fallbackHref="/app/contacts" />
+        <span aria-hidden>/</span>
+        <span>Contatos</span>
+        <span aria-hidden>/</span>
+        <span className="truncate text-foreground">{displayName}</span>
+      </nav>
       {contact.is_anonymized && (
         <div
           role="alert"

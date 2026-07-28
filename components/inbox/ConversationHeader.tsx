@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Phone, ArrowRight } from "@/lib/ui/icons";
+import { Phone, ArrowRight, Pause, Play } from "@/lib/ui/icons";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
@@ -11,6 +11,15 @@ import { useCloseConversation } from "@/hooks/inbox/useCloseConversation";
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
+import { useConversationAiControl } from "@/hooks/inbox/useConversationAiControl";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Props {
   conversation: ConversationWithContact;
@@ -29,6 +38,7 @@ export function ConversationHeader({ conversation }: Props) {
   const claim = useClaimConversation();
   const release = useReleaseConversation();
   const close = useCloseConversation();
+  const aiControl = useConversationAiControl(conversation.id);
   const [reassignOpen, setReassignOpen] = useState(false);
 
   const c = conversation.contacts ?? null;
@@ -37,6 +47,13 @@ export function ConversationHeader({ conversation }: Props) {
   const status = conversation.status;
   const isMineAssigned = conversation.assigned_to_user_id === user.id;
   const isOpen = status === "open" || conversation.assigned_to_user_id == null;
+  const aiPaused = Boolean(
+    conversation.ai_control_mode === "force_paused" ||
+      (conversation.bot_silenced_until &&
+        (conversation.bot_silenced_until === "infinity" ||
+          new Date(conversation.bot_silenced_until).getTime() > Date.now())),
+  );
+  const aiForcedActive = conversation.ai_control_mode === "force_active";
 
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-4 py-3">
@@ -55,6 +72,48 @@ export function ConversationHeader({ conversation }: Props) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              variant={aiForcedActive ? "default" : "outline"}
+              disabled={aiControl.setMode.isPending}
+              title="Definir como a IA deve agir somente nesta conversa"
+            >
+              {aiPaused ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}
+              {aiForcedActive ? "IA ativa aqui" : aiPaused ? "IA pausada" : "Controle da IA"}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-72">
+            <DropdownMenuLabel>
+              <span className="block">IA neste contato</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                Esta escolha vale somente para esta conversa.
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => aiControl.setMode.mutate("inherit")}>
+              <span>
+                <span className="block">Seguir configuração geral</span>
+                <span className="text-xs text-muted-foreground">Usa o estado normal do agente.</span>
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => aiControl.setMode.mutate("force_active")}>
+              <Play size={14} aria-hidden />
+              <span>
+                <span className="block">Ativar IA somente neste contato</span>
+                <span className="text-xs text-muted-foreground">Útil para testes controlados.</span>
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => aiControl.setMode.mutate("force_paused")}>
+              <Pause size={14} aria-hidden />
+              <span>
+                <span className="block">Pausar IA neste contato</span>
+                <span className="text-xs text-muted-foreground">O atendimento fica com a equipe.</span>
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {isOpen && (
           <Button
             size="sm"

@@ -3,6 +3,7 @@ import { AlertsBell } from "./AlertsBell";
 import { TenantSwitcher } from "./TenantSwitcher";
 import { UserMenu } from "./UserMenu";
 import { SearchTrigger } from "./SearchTrigger";
+import { GlobalSearchDialog } from "./GlobalSearchDialog";
 
 export function TopBar() {
   return (
@@ -10,13 +11,14 @@ export function TopBar() {
       <div className="flex items-center gap-2">
         <TenantSwitcher />
       </div>
-      <div className="flex flex-1 justify-center md:max-w-md">
+      <div className="flex flex-1 justify-center">
         <SearchTrigger />
       </div>
       <div className="flex items-center gap-2">
         <AlertsBell />
         <UserMenu />
       </div>
+      <GlobalSearchDialog />
     </header>
   );
 }

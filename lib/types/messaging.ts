@@ -24,6 +24,8 @@ export interface Conversation {
   tags: string[];
   metadata: Record<string, unknown>;
   snooze_until: string | null;
+  bot_silenced_until: string | null;
+  ai_control_mode: "inherit" | "force_active" | "force_paused";
   created_at: string;
   updated_at: string;
 }

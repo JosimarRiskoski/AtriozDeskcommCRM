@@ -143,7 +143,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       : null;
 
   return (
-    <div className="grid h-[calc(100vh-3.5rem)] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_320px]">
+    <div className="grid h-full min-h-0 w-full grid-cols-1 overflow-hidden md:grid-cols-[300px_1fr] xl:grid-cols-[300px_minmax(0,1fr)_minmax(320px,24vw)]">
       <div className="flex h-full min-h-0 flex-col border-r border-border">
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         <div className="min-h-0 flex-1 overflow-hidden">

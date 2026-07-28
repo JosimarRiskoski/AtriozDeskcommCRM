@@ -35,8 +35,10 @@ A rota é pública (sem auth) e tem `robots: noindex`.
 > 1 accent forte mas não saturado, motion fluido, whitespace generoso, hierarquia
 > tipográfica > decoração.
 
-### Paletas (5)
-`Sage` · `Clay` · `Mist` · `Plum` · `Olive` — cada uma com 11 stops do accent,
+### Paletas prioritárias
+`Graphite + Electric Blue` e `Graphite + Electric Indigo` são as opções prioritárias
+para aprovação da Atrioz. As paletas históricas (`Sage`, `Clay`, `Mist`, `Plum` e
+`Olive`) permanecem disponíveis apenas como comparação até a decisão final. Cada uma tem 11 stops do accent,
 11 stops de neutro greige, 4 estados (success/warning/error/info), versões
 **light e dark definidas separadamente** (não invertidas).
 

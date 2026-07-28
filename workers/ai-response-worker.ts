@@ -252,7 +252,7 @@ async function buildContext(input: BuildContextInput): Promise<GuardDecision> {
   const { data: conv, error: convErr } = await admin
     .from("conversations")
     .select(
-      "id, organization_id, contact_id, channel_session_id, last_inbound_at, bot_silenced_until, last_handoff_at, assignee_kind, contacts:contact_id(id, display_name, locale, is_blocked, force_human)",
+      "id, organization_id, contact_id, channel_session_id, last_inbound_at, bot_silenced_until, ai_control_mode, last_handoff_at, assignee_kind, contacts:contact_id(id, display_name, locale, is_blocked, force_human)",
     )
     .eq("id", input.conversationId)
     .eq("organization_id", input.organizationId)
@@ -268,6 +268,7 @@ async function buildContext(input: BuildContextInput): Promise<GuardDecision> {
     channel_session_id: string;
     last_inbound_at: string | null;
     bot_silenced_until: string | null;
+    ai_control_mode: "inherit" | "force_active" | "force_paused";
     last_handoff_at: string | null;
     assignee_kind: string | null;
     contacts: {
@@ -281,6 +282,7 @@ async function buildContext(input: BuildContextInput): Promise<GuardDecision> {
   const c = conv as unknown as ConvRow;
   if (!c.contacts) return skip("conversation_not_found", "contact join missing");
   if (c.contacts.is_blocked) return skip("contact_blocked");
+  if (c.ai_control_mode === "force_paused") return skip("silenced_post_handoff", "manual contact pause");
   if (c.contacts.force_human) return skip("force_human");
   // G3-02 — assignee de 1ª classe: humano atendendo (kind='user') veta o bot
   // deterministicamente, mesma família de guard de force_human/bot_silenced_until.
@@ -315,13 +317,14 @@ async function buildContext(input: BuildContextInput): Promise<GuardDecision> {
   if (!inbound_body) return skip("empty_inbound_body");
 
   // Default agent for this tenant.
-  const { data: agent } = await admin
+  let agentQuery = admin
     .from("ai_agents")
     .select(
       "id, organization_id, model, system_prompt, config, guardrails, active_kb_version_id, is_active, is_default",
     )
-    .eq("organization_id", input.organizationId)
-    .eq("is_active", true)
+    .eq("organization_id", input.organizationId);
+  if (c.ai_control_mode !== "force_active") agentQuery = agentQuery.eq("is_active", true);
+  const { data: agent } = await agentQuery
     .order("is_default", { ascending: false })
     .order("created_at", { ascending: true })
     .limit(1)

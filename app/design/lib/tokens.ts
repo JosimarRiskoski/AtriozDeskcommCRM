@@ -2,7 +2,7 @@
 // "Soft-tech / calmo" — neutros desaturados (greige/warm-gray), accent não-saturado.
 // 5-Constraint Rule applied: Shape, Color (exact hex), Typography, Motion, Layout.
 
-export type PaletteId = "sage" | "clay" | "mist" | "plum" | "olive";
+export type PaletteId = "graphite-blue" | "graphite-indigo" | "sage" | "clay" | "mist" | "plum" | "olive";
 export type TypoId = "bricolage-jakarta" | "fraunces-manrope" | "atkinson" | "source-plex";
 export type DensityId = "aerada" | "equilibrada" | "compacta";
 export type ThemeId = "light" | "dark";
@@ -38,6 +38,62 @@ export type PaletteDef = {
 // ─── Palettes ──────────────────────────────────────────────────────────────
 
 export const PALETTES: Record<PaletteId, PaletteDef> = {
+  "graphite-blue": {
+    id: "graphite-blue",
+    name: "Graphite + Electric Blue",
+    description: "Grafite neutro com azul elétrico. Tecnológico, claro e operacional.",
+    accent: {
+      50: "#eff6ff", 100: "#dbeafe", 200: "#bfdbfe", 300: "#93c5fd",
+      400: "#60a5fa", 500: "#3b82f6", 600: "#2563eb", 700: "#1d4ed8",
+      800: "#1e40af", 900: "#1e3a8a", 950: "#172554",
+    },
+    neutralLight: {
+      50: "#f8fafc", 100: "#f1f5f9", 200: "#e2e8f0", 300: "#cbd5e1",
+      400: "#94a3b8", 500: "#64748b", 600: "#475569", 700: "#334155",
+      800: "#1e293b", 900: "#0f172a", 950: "#020617",
+    },
+    neutralDark: {
+      50: "#f8fafc", 100: "#e2e8f0", 200: "#cbd5e1", 300: "#94a3b8",
+      400: "#64748b", 500: "#475569", 600: "#334155", 700: "#263244",
+      800: "#182233", 900: "#111827", 950: "#090d14",
+    },
+    states: {
+      light: { success: "#16a34a", warning: "#d97706", error: "#dc2626", info: "#2563eb" },
+      dark: { success: "#22c55e", warning: "#fbbf24", error: "#f87171", info: "#60a5fa" },
+    },
+    surfaces: {
+      light: { bg: "#f7f8fa", surface: "#ffffff", surfaceElevated: "#f1f5f9", text: "#0f172a", textMuted: "#64748b", border: "#e2e8f0" },
+      dark: { bg: "#090d14", surface: "#111827", surfaceElevated: "#182233", text: "#f8fafc", textMuted: "#94a3b8", border: "#263244" },
+    },
+  },
+  "graphite-indigo": {
+    id: "graphite-indigo",
+    name: "Graphite + Electric Indigo",
+    description: "A mesma base grafite com índigo elétrico, mais sofisticado e distintivo.",
+    accent: {
+      50: "#eef2ff", 100: "#e0e7ff", 200: "#c7d2fe", 300: "#a5b4fc",
+      400: "#818cf8", 500: "#6366f1", 600: "#4f46e5", 700: "#4338ca",
+      800: "#3730a3", 900: "#312e81", 950: "#1e1b4b",
+    },
+    neutralLight: {
+      50: "#f8fafc", 100: "#f1f5f9", 200: "#e2e8f0", 300: "#cbd5e1",
+      400: "#94a3b8", 500: "#64748b", 600: "#475569", 700: "#334155",
+      800: "#1e293b", 900: "#0f172a", 950: "#020617",
+    },
+    neutralDark: {
+      50: "#f8fafc", 100: "#e2e8f0", 200: "#cbd5e1", 300: "#94a3b8",
+      400: "#64748b", 500: "#475569", 600: "#334155", 700: "#263244",
+      800: "#182233", 900: "#111827", 950: "#090d14",
+    },
+    states: {
+      light: { success: "#16a34a", warning: "#d97706", error: "#dc2626", info: "#4f46e5" },
+      dark: { success: "#22c55e", warning: "#fbbf24", error: "#f87171", info: "#818cf8" },
+    },
+    surfaces: {
+      light: { bg: "#f7f8fa", surface: "#ffffff", surfaceElevated: "#f1f5f9", text: "#0f172a", textMuted: "#64748b", border: "#e2e8f0" },
+      dark: { bg: "#090d14", surface: "#111827", surfaceElevated: "#182233", text: "#f8fafc", textMuted: "#94a3b8", border: "#263244" },
+    },
+  },
   sage: {
     id: "sage",
     name: "Sage",

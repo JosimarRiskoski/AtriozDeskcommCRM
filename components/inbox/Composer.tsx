@@ -1,6 +1,6 @@
 "use client";
 import { forwardRef, useImperativeHandle, useRef, useState, type KeyboardEvent } from "react";
-import { PaperPlaneTilt } from "@/lib/ui/icons";
+import { PaperPlaneTilt, Plus } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
@@ -14,6 +14,9 @@ import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia } from "@/hooks/inbox/useUploadMedia";
 import { interpolateTemplate } from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
+import { TemplateFormDialog } from "@/app/app/templates/_components/TemplateFormDialog";
+import { useAuth } from "@/hooks/auth/AuthProvider";
+import { ROLE_RANK } from "@/lib/auth/types";
 
 export interface ComposerHandle {
   focus: () => void;
@@ -36,11 +39,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const send = useSendMessage();
   const upload = useUploadMedia();
   const createNote = useCreateNote();
   const templates = useMessageTemplates();
+  const { activeOrg, user } = useAuth();
+  const canShareTemplate =
+    user.is_platform_admin ||
+    Boolean(activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager);
   const slash = resolveSlash(text);
   const menuOpen = mode === "reply" && slash.open && !menuDismissed;
 
@@ -172,6 +180,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         <div className="flex items-end gap-2">
           {mode === "reply" && <AttachMenu disabled={isDisabled} onPick={setPendingFile} />}
           {mode === "reply" && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 shrink-0"
+              onClick={() => setTemplateDialogOpen(true)}
+              disabled={isDisabled}
+              aria-label="Criar resposta rápida"
+              title="Criar resposta rápida"
+            >
+              <Plus size={17} aria-hidden />
+            </Button>
+          )}
+          {mode === "reply" && (
             <DraftReplyButton conversationId={conversationId} disabled={isDisabled} onDraft={applyDraft} />
           )}
           <EmojiButton
@@ -255,6 +277,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             return;
           }
         }}
+      />
+      <TemplateFormDialog
+        open={templateDialogOpen}
+        onOpenChange={setTemplateDialogOpen}
+        canShare={canShareTemplate}
       />
     </>
   );

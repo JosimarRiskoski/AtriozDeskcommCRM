@@ -5,6 +5,7 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import type { FollowupFlowDetailRow } from "@/hooks/followup/useFollowupFlow";
 import { FlowBuilder } from "./_components/FlowBuilder";
+import { BackNavigation } from "@/components/shell/BackNavigation";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,9 @@ export default async function FollowupFlowBuilderPage({
 
   return (
     <div className="flex h-full flex-col">
+      <div className="border-b px-4 py-2">
+        <BackNavigation fallbackHref="/app/ai/followups" label="Voltar aos follow-ups" />
+      </div>
       <FlowBuilder flowId={id} initialData={flow} />
     </div>
   );

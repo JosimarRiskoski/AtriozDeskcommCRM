@@ -19,6 +19,8 @@ import {
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
+import { Copy } from "@/lib/ui/icons";
+import { copyToClipboard } from "@/lib/clipboard";
 
 const TEMPLATES_KEY = ["message-templates"];
 
@@ -99,6 +101,12 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
     }
   };
 
+  const copyVariable = async (variable: string) => {
+    const copied = await copyToClipboard(variable);
+    if (copied) toast.success(`${variable} copiado.`);
+    else toast.error("Não foi possível copiar a variável.");
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -133,9 +141,28 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               required
               rows={5}
             />
-            <p className="text-xs text-muted-foreground">
-              Use {"{{primeiro_nome}}"} e {"{{nome}}"} para personalizar.
-            </p>
+            <div className="rounded-md border bg-muted/30 p-3">
+              <p className="mb-2 text-xs font-medium">Variáveis disponíveis</p>
+              <div className="flex flex-wrap gap-2">
+                {["{{primeiro_nome}}", "{{nome}}"].map((variable) => (
+                  <Button
+                    key={variable}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 font-mono text-xs"
+                    onClick={() => void copyVariable(variable)}
+                    title={`Copiar ${variable}`}
+                  >
+                    <Copy size={13} aria-hidden />
+                    {variable}
+                  </Button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Clique para copiar e cole no ponto desejado da mensagem.
+              </p>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="tpl-shortcut">Atalho (opcional)</Label>

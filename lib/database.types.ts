@@ -1883,6 +1883,7 @@ export type Database = {
       }
       conversations: {
         Row: {
+          ai_control_mode: string
           assigned_at: string | null
           assigned_to_user_id: string | null
           assignee_kind: string | null
@@ -1916,6 +1917,7 @@ export type Database = {
           usable_for_rag_marked_by: string | null
         }
         Insert: {
+          ai_control_mode?: string
           assigned_at?: string | null
           assigned_to_user_id?: string | null
           assignee_kind?: string | null
@@ -1949,6 +1951,7 @@ export type Database = {
           usable_for_rag_marked_by?: string | null
         }
         Update: {
+          ai_control_mode?: string
           assigned_at?: string | null
           assigned_to_user_id?: string | null
           assignee_kind?: string | null
