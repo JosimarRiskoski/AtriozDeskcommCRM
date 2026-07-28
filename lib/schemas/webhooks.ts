@@ -38,6 +38,8 @@ export const actionSchema = z.discriminatedUnion("type", [
 
 export const createWebhookSourceSchema = z.object({
   name: z.string().min(1).max(120),
+  source_code: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/).default("webhook"),
+  require_external_id: z.boolean().default(false),
   default_pipeline_id: z.string().uuid(),
   default_stage_id: z.string().uuid(),
   redirect_to: z.string().url().max(2000).nullish(),

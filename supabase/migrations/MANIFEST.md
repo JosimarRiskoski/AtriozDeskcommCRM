@@ -85,6 +85,8 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 
 | `20260727220000` | `0085_safe_outreach_campaigns` | Campanhas WhatsApp sequenciais e retomáveis: campanha + destinatários, consentimento obrigatório, deduplicação/idempotência, intervalo mínimo, horário comercial, criação prévia de contato/lead/conversa, controle individual de IA, pausa e cancelamento; RLS separa organizações e restringe escrita a manager/admin. |
 | `20260727221000` | `0086_campaign_delivery_claims` | Claim atômico `FOR UPDATE SKIP LOCKED`, lease recuperável e checkpoints separados de texto/áudio. Impede dois workers de pegar o mesmo destinatário e permite retomar após falha sem reiniciar conscientemente a sequência. RPC exclusiva do `service_role`. |
+| `20260727222000` | `0087_webhook_source_contracts` | Fontes de entrada ganham origem explícita e opção de exigir `external_id`; permite credencial exclusiva da 3C, escopo fixo por organização/funil, deduplicação e auditoria sem entregar acesso ao Supabase. Fonte com segredo passa a falhar fechado se a decifragem estiver indisponível. |
+| `20260727223000` | `0088_meta_capi_queue` | Ao ganhar um negócio, trigger transacional cria exatamente um evento local por lead; worker assíncrono envia à Meta com `event_id` estável, hashes SHA-256, consentimento, tentativas limitadas, resposta auditável e sem reverter o fechamento se a Meta falhar. Token fica cifrado. |
 
 ## Reproducibility
 

@@ -66,7 +66,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const admin = createAdminClient();
   const { data: source, error: srcErr } = await admin
     .from("webhook_sources")
-    .select("id, organization_id, secret_encrypted, default_pipeline_id, default_stage_id, field_map, redirect_to, is_active")
+    .select("id, organization_id, secret_encrypted, default_pipeline_id, default_stage_id, field_map, redirect_to, is_active, source_code, require_external_id")
     .eq("path_token", token)
     .maybeSingle();
   if (srcErr) return fail("internal_error", srcErr.message, 500, { requestId });
@@ -93,10 +93,11 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   // ausente/trocada)? Precedente WAHA: pula a validação em vez de derrubar a
   // captação — secret aqui é defesa opcional, não gate de disponibilidade.
   let sourceSecret: string | null = null;
-  let hmacSkipped = false;
   if (source.secret_encrypted) {
     sourceSecret = await decryptWebhookSecret(admin, source.secret_encrypted as unknown as string);
-    if (sourceSecret === null) hmacSkipped = true;
+    if (sourceSecret === null) {
+      return fail("integration_unavailable", "integration_secret_unavailable", 503, { requestId });
+    }
   }
   const validSignature = sourceSecret ? verifyInboundSignature(rawBody, sigHeader, sourceSecret) : null;
   if (sourceSecret && !validSignature) {
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     // hmacSkipped (decrypt indisponível) conta como "não validado mas aceito",
     // igual ao webhook WAHA — o feed da UI não pinta de vermelho.
     valid_signature: validSignature ?? true,
-    event_type: hmacSkipped ? "lead_capture.received_hmac_skipped" : "lead_capture.received",
+    event_type: "lead_capture.received",
     external_id: null,
     status: "received",
     attempts: 0,
@@ -141,6 +142,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const externalIdRaw = payload["external_id"];
   const externalId =
     typeof externalIdRaw === "string" && externalIdRaw.trim() ? externalIdRaw.trim().slice(0, 255) : null;
+  if (source.require_external_id && !externalId) {
+    return fail("invalid_request", "external_id é obrigatório para esta integração.", 400, { requestId });
+  }
+  const sourceCode = source.source_code || "webhook";
 
   const respondWithLead = (leadId: string): NextResponse => {
     if (isForm && source.redirect_to) {
@@ -155,7 +160,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       .from("crm_leads")
       .select("id")
       .eq("organization_id", source.organization_id)
-      .eq("source", "webhook")
+      .eq("source", sourceCode)
       .eq("external_id", externalId)
       .maybeSingle();
     return (data?.id as string | undefined) ?? null;
@@ -206,7 +211,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           name: mapped.name ?? mapped.phone,
           phone_number: mapped.phone,
           email: mapped.email,
-          source: "webhook",
+          source: sourceCode,
           source_metadata: { webhook_source_id: source.id, ...mapped.source_metadata },
         })
         .select("id")
@@ -243,7 +248,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     contact_id: contactId,
     currency: "BRL",
     tags: [],
-    source: "webhook",
+    source: sourceCode,
     custom_fields: mapped.custom_fields,
     source_metadata: { webhook_source_id: source.id, ...mapped.source_metadata },
     ...(externalId ? { external_id: externalId } : {}),
@@ -285,7 +290,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     resourceType: "crm_lead",
     resourceId: String(lead.id),
     requestId,
-    metadata: { webhook_source_id: source.id },
+    metadata: { webhook_source_id: source.id, source_code: sourceCode, external_id: externalId },
   });
 
   return respondWithLead(String(lead.id));

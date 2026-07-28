@@ -38,6 +38,8 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
   const [pipelineId, setPipelineId] = React.useState<string>("");
   const [stageId, setStageId] = React.useState<string>("");
   const [redirectTo, setRedirectTo] = React.useState("");
+  const [contract, setContract] = React.useState<"generic" | "3c">("generic");
+  const [secret, setSecret] = React.useState("");
 
   const { data: pipelinesRes, isLoading: pipelinesLoading } = usePipelines();
   const { data: boardRes, isLoading: stagesLoading } = usePipelineStages(pipelineId || null);
@@ -52,6 +54,8 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
       setPipelineId("");
       setStageId("");
       setRedirectTo("");
+      setContract("generic");
+      setSecret("");
     }
   }, [open]);
 
@@ -68,6 +72,9 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
     try {
       const res = await create.mutateAsync({
         name,
+        source_code: contract === "3c" ? "3c" : "webhook",
+        require_external_id: contract === "3c",
+        secret: secret || undefined,
         default_pipeline_id: pipelineId,
         default_stage_id: stageId,
         redirect_to: redirectTo.trim() || undefined,
@@ -103,6 +110,22 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
               required
             />
           </div>
+          <div className="space-y-2">
+            <Label>Tipo de integração</Label>
+            <Select value={contract} onValueChange={(value) => setContract(value as "generic" | "3c")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="generic">Formulário ou integração genérica</SelectItem>
+                <SelectItem value="3c">3C — contrato protegido</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">3C exige identificador externo e assinatura, impedindo duplicações e acesso direto ao banco.</p>
+          </div>
+          {contract === "3c" && <div className="space-y-2">
+            <Label htmlFor="src-secret">Segredo compartilhado com a 3C</Label>
+            <Input id="src-secret" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} minLength={16} required />
+            <p className="text-xs text-muted-foreground">Aparece somente durante a configuração e fica cifrado no servidor.</p>
+          </div>}
           <div className="space-y-2">
             <Label>Funil de entrada</Label>
             <Select value={pipelineId} onValueChange={setPipelineId} disabled={pipelinesLoading}>

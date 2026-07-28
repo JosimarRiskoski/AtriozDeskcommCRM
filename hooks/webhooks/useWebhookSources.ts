@@ -8,6 +8,8 @@ export interface WebhookSourceRow {
   id: string;
   organization_id: string;
   name: string;
+  source_code: string;
+  require_external_id: boolean;
   path_token: string;
   is_active: boolean;
   kind: string;
@@ -31,6 +33,9 @@ export interface WebhookSourceEvent {
 
 export interface CreateWebhookSourceInput {
   name: string;
+  source_code?: string;
+  require_external_id?: boolean;
+  secret?: string;
   default_pipeline_id: string;
   default_stage_id: string;
   redirect_to?: string | null;

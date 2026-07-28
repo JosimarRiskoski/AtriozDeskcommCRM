@@ -89,6 +89,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       organization_id: activeOrg.orgId,
       created_by_user_id: user.id,
       name: parsed.data.name,
+      source_code: parsed.data.source_code,
+      require_external_id: parsed.data.require_external_id,
       path_token: pathToken,
       secret_encrypted: secretEncrypted,
       default_pipeline_id: parsed.data.default_pipeline_id,
