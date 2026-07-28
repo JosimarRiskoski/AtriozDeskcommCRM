@@ -37,6 +37,7 @@ Este documento é o ponto de retomada para publicar e homologar as melhorias fei
 - Desempenho com período selecionável, origem dos cálculos e separação entre mensagens registradas, entregues, lidas e falhas;
 - Memória da IA com criação, histórico, edição, arquivamento, reativação e remoção auditada.
 - respostas rápidas em formato de enquete do WhatsApp, com opções persistidas, voto recebido no Inbox e fallback automático para texto numerado;
+- configuração do Agente de IA em seis etapas, com modelos iniciais, explicação de risco das ferramentas e revisão antes de salvar/publicar;
 
 ## Etapa 1 — aplicar o banco
 
@@ -99,6 +100,8 @@ Antes de iniciar, abrir **Configurações > Implantação do cliente**. Os itens
 - [ ] negócio muda de etapa pelo humano e pela IA;
 - [ ] IA pode ser pausada globalmente, ativada somente para um contato e devolvida ao atendimento normal;
 - [ ] erro do provedor de IA não é enviado ao cliente;
+- [ ] criação e edição do Agente de IA percorrem as seis etapas sem perder dados, e salvar não publica automaticamente;
+- [ ] os modelos iniciais alteram somente identidade e instruções, sem liberar ferramentas, credenciais ou canais;
 - [ ] resposta rápida substitui as variáveis corretamente;
 - [ ] enquete chega no WhatsApp, o voto volta ao Inbox e uma falha do recurso envia as opções em texto;
 - [ ] mensagem registrada, entregue, lida e falha aparecem separadamente em Desempenho;

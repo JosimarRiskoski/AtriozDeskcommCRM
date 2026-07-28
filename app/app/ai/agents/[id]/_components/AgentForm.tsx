@@ -39,11 +39,7 @@ import { TriggerEditor, type TriggerValue } from "./TriggerEditor";
 import { HandoffKeywordsInput } from "./HandoffKeywordsInput";
 import { FollowupFlowPicker } from "./FollowupFlowPicker";
 import { PublishConfirmDialog } from "./PublishConfirmDialog";
-import {
-  saveAgentDraftAction,
-  publishAgentAction,
-  createMcpAgentAction,
-} from "../_actions";
+import { saveAgentDraftAction, publishAgentAction, createMcpAgentAction } from "../_actions";
 
 import { versionCreateSchema, agentMcpCreateSchema } from "@/lib/ai/agents/validation";
 import type { AgentRow } from "@/hooks/ai/useAgent";
@@ -76,6 +72,38 @@ interface CreateProps extends BaseProps {
 }
 
 type Props = EditProps | CreateProps;
+
+type SetupStep = "identity" | "model" | "behavior" | "tools" | "automation" | "review";
+
+const SETUP_STEPS: Array<{ id: SetupStep; label: string; description: string }> = [
+  { id: "identity", label: "1. Identidade", description: "Nome e finalidade" },
+  { id: "model", label: "2. Modelo", description: "IA, credencial e canal" },
+  { id: "behavior", label: "3. Comportamento", description: "Instruções e gatilhos" },
+  { id: "tools", label: "4. Ferramentas", description: "Permissões do agente" },
+  { id: "automation", label: "5. Automações", description: "Handoff e follow-up" },
+  { id: "review", label: "6. Revisar", description: "Conferência antes de salvar" },
+];
+
+const AGENT_PRESETS = {
+  commercial: {
+    name: "Atendimento comercial",
+    description: "Qualifica contatos, registra informações confirmadas e encaminha oportunidades.",
+    system_prompt:
+      "Você é um atendente comercial. Responda em pt-BR com clareza, confirme dados antes de registrá-los e encaminhe para atendimento humano quando necessário. Nunca invente preços, prazos ou condições.",
+  },
+  realEstate: {
+    name: "Atendimento imobiliário",
+    description: "Entende o perfil do interessado e organiza o atendimento de imóveis.",
+    system_prompt:
+      "Você é um atendente de uma imobiliária. Responda em pt-BR, identifique o perfil e as preferências do interessado, registre apenas dados confirmados e encaminhe negociações e visitas para um humano. Nunca invente disponibilidade ou valores.",
+  },
+  support: {
+    name: "Atendimento e suporte",
+    description: "Faz a triagem inicial e encaminha solicitações que exigem uma pessoa.",
+    system_prompt:
+      "Você é um atendente de suporte. Responda em pt-BR de forma objetiva, reúna as informações necessárias e encaminhe para atendimento humano quando não puder resolver com segurança. Nunca afirme que executou uma ação sem confirmação da ferramenta.",
+  },
+} as const;
 
 interface FormState {
   name: string;
@@ -117,10 +145,7 @@ const DEFAULT_TRIGGER: TriggerValue = {
   concurrency: "one_per_conversation",
 };
 
-function buildState(args: {
-  agent?: AgentRow;
-  version: AgentVersionRow | null;
-}): FormState {
+function buildState(args: { agent?: AgentRow; version: AgentVersionRow | null }): FormState {
   const { agent, version } = args;
   return {
     name: agent?.name ?? "",
@@ -131,8 +156,7 @@ function buildState(args: {
     credential_id: version?.credential_id ?? "",
     channel_session_id: version?.channel_session_id ?? "",
     system_prompt:
-      version?.system_prompt ??
-      "Você é um atendente. Responda de forma educada e clara, em pt-BR.",
+      version?.system_prompt ?? "Você é um atendente. Responda de forma educada e clara, em pt-BR.",
     tool_ids: version?.tool_ids ?? [],
     trigger_config: (version?.trigger_config as unknown as TriggerValue) ?? DEFAULT_TRIGGER,
     max_steps: version?.max_steps ?? 10,
@@ -140,11 +164,7 @@ function buildState(args: {
     cost_budget_cents: version?.cost_budget_cents ?? 50,
     history_message_window: version?.history_message_window ?? 20,
     history_token_window: version?.history_token_window ?? 8_000,
-    handoff_keywords: version?.handoff_keywords ?? [
-      "falar com humano",
-      "atendente",
-      "pessoa real",
-    ],
+    handoff_keywords: version?.handoff_keywords ?? ["falar com humano", "atendente", "pessoa real"],
     handoff_tool_enabled: version?.handoff_tool_enabled ?? true,
     cases_enabled: version?.cases_enabled ?? false,
     followup: version?.followup ?? DEFAULT_FOLLOWUP,
@@ -189,11 +209,29 @@ export function AgentForm(props: Props) {
   const [saving, setSaving] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [activeStep, setActiveStep] = React.useState<SetupStep>("identity");
 
   const dirty = JSON.stringify(form) !== JSON.stringify(baseline);
 
   function patch(p: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...p }));
+  }
+
+  function applyPreset(preset: keyof typeof AGENT_PRESETS) {
+    const selected = AGENT_PRESETS[preset];
+    patch({
+      name: selected.name,
+      description: selected.description,
+      system_prompt: selected.system_prompt,
+    });
+    toast.success("Modelo aplicado. Revise os textos antes de salvar.");
+  }
+
+  const activeStepIndex = SETUP_STEPS.findIndex((step) => step.id === activeStep);
+
+  function moveStep(direction: -1 | 1) {
+    const next = SETUP_STEPS[activeStepIndex + direction];
+    if (next) setActiveStep(next.id);
   }
 
   // Quando provider muda, limpa credential e modelo (eles dependem do provider).
@@ -219,8 +257,7 @@ export function AgentForm(props: Props) {
       errors.system_prompt = "Prompt máximo de 20.000 caracteres.";
     if (!form.model) errors.model = "Selecione um modelo.";
     if (!form.credential_id) errors.credential_id = "Selecione uma credencial.";
-    if (!form.channel_session_id)
-      errors.channel_session_id = "Selecione um número de WhatsApp.";
+    if (!form.channel_session_id) errors.channel_session_id = "Selecione um número de WhatsApp.";
     if (form.tool_ids.length > 20) errors.tool_ids = "Máximo de 20 tools.";
 
     // Tenta o schema completo:
@@ -354,11 +391,7 @@ export function AgentForm(props: Props) {
 
         <div className="flex flex-wrap items-center gap-2">
           {isEdit ? (
-            <Button
-              variant="outline"
-              onClick={handleReset}
-              disabled={!dirty || disabled}
-            >
+            <Button variant="outline" onClick={handleReset} disabled={!dirty || disabled}>
               Descartar alterações
             </Button>
           ) : null}
@@ -383,13 +416,75 @@ export function AgentForm(props: Props) {
         </div>
       </div>
 
+      <Card className="space-y-4 p-4">
+        <div>
+          <h3 className="text-sm font-semibold">Configuração guiada</h3>
+          <p className="text-xs text-muted-foreground">
+            Configure uma etapa por vez. Salvar cria apenas um rascunho; nada entra em produção até
+            você publicar conscientemente.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+          {SETUP_STEPS.map((step) => (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => setActiveStep(step.id)}
+              className={`rounded-lg border p-3 text-left transition-colors ${
+                activeStep === step.id
+                  ? "bg-primary/10 border-primary"
+                  : "hover:bg-muted/60 border-border"
+              }`}
+            >
+              <span className="block text-sm font-medium">{step.label}</span>
+              <span className="block text-xs text-muted-foreground">{step.description}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
+
       {/* Two-column grid */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* COLUMN 1 */}
         <div className="space-y-4">
           {/* Identification */}
-          <Card className="space-y-3 p-4">
+          <Card className={activeStep === "identity" ? "space-y-3 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Identificação</h3>
+            {!isEdit ? (
+              <div className="bg-muted/30 space-y-2 rounded-lg border p-3">
+                <p className="text-xs font-medium">Começar com um modelo</p>
+                <p className="text-xs text-muted-foreground">
+                  O modelo preenche somente os textos iniciais. Credencial, WhatsApp, ferramentas e
+                  publicação continuam sob seu controle.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyPreset("commercial")}
+                  >
+                    Comercial
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyPreset("realEstate")}
+                  >
+                    Imobiliária
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyPreset("support")}
+                  >
+                    Suporte
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             <div className="space-y-1">
               <Label htmlFor="name">Nome</Label>
               <Input
@@ -434,7 +529,7 @@ export function AgentForm(props: Props) {
           </Card>
 
           {/* Provider + credential + model */}
-          <Card className="space-y-3 p-4">
+          <Card className={activeStep === "model" ? "space-y-3 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Modelo & credencial</h3>
             <div className="space-y-1">
               <Label htmlFor="provider">Provider</Label>
@@ -484,7 +579,7 @@ export function AgentForm(props: Props) {
           </Card>
 
           {/* WhatsApp session */}
-          <Card className="space-y-3 p-4">
+          <Card className={activeStep === "model" ? "space-y-3 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Número de WhatsApp</h3>
             <div className="space-y-1">
               <Label htmlFor="channel_session_id">Sessão</Label>
@@ -517,7 +612,7 @@ export function AgentForm(props: Props) {
           </Card>
 
           {/* Limits */}
-          <Card className="space-y-3 p-4">
+          <Card className={activeStep === "model" ? "space-y-3 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Limites</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -565,9 +660,7 @@ export function AgentForm(props: Props) {
                   min={0}
                   max={200}
                   value={form.history_message_window}
-                  onChange={(e) =>
-                    patch({ history_message_window: Number(e.target.value) })
-                  }
+                  onChange={(e) => patch({ history_message_window: Number(e.target.value) })}
                   disabled={disabled}
                 />
               </div>
@@ -580,9 +673,7 @@ export function AgentForm(props: Props) {
                   max={50000}
                   step={500}
                   value={form.history_token_window}
-                  onChange={(e) =>
-                    patch({ history_token_window: Number(e.target.value) })
-                  }
+                  onChange={(e) => patch({ history_token_window: Number(e.target.value) })}
                   disabled={disabled}
                 />
               </div>
@@ -593,7 +684,7 @@ export function AgentForm(props: Props) {
         {/* COLUMN 2 */}
         <div className="space-y-4">
           {/* Prompt */}
-          <Card className="space-y-2 p-4">
+          <Card className={activeStep === "behavior" ? "space-y-2 p-4" : "hidden"}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium">System prompt</h3>
               <TokenCounter
@@ -618,8 +709,12 @@ export function AgentForm(props: Props) {
           </Card>
 
           {/* Tools */}
-          <Card className="space-y-2 p-4">
+          <Card className={activeStep === "tools" ? "space-y-2 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Tools (catálogo MCP)</h3>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+              Ferramentas são permissões reais. Libere somente o que este agente precisa para
+              trabalhar. Escrita, exclusão, handoff e integrações externas merecem revisão extra.
+            </div>
             <ToolPicker
               value={form.tool_ids}
               onChange={(ids) => patch({ tool_ids: ids })}
@@ -631,7 +726,7 @@ export function AgentForm(props: Props) {
           </Card>
 
           {/* Triggers */}
-          <Card className="space-y-2 p-4">
+          <Card className={activeStep === "behavior" ? "space-y-2 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Gatilhos</h3>
             <TriggerEditor
               value={form.trigger_config}
@@ -641,7 +736,7 @@ export function AgentForm(props: Props) {
           </Card>
 
           {/* Handoff */}
-          <Card className="space-y-3 p-4">
+          <Card className={activeStep === "automation" ? "space-y-3 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Handoff humano</h3>
             <div className="flex items-center gap-2">
               <Switch
@@ -662,7 +757,7 @@ export function AgentForm(props: Props) {
           </Card>
 
           {/* Casos humanos */}
-          <Card className="space-y-3 p-4">
+          <Card className={activeStep === "automation" ? "space-y-3 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Casos humanos</h3>
             <div className="flex items-center gap-2">
               <Switch
@@ -676,40 +771,125 @@ export function AgentForm(props: Props) {
               </Label>
             </div>
             <p className="text-xs text-muted-foreground">
-              Diferente do handoff: o agente não sai da conversa — ele abre um caso quando
-              esbarra num bloqueio (ex.: aprovar desconto) e retoma assim que o humano responde.
+              Diferente do handoff: o agente não sai da conversa — ele abre um caso quando esbarra
+              num bloqueio (ex.: aprovar desconto) e retoma assim que o humano responde.
             </p>
           </Card>
 
           {/* Follow-up */}
-          <Card className="space-y-3 p-4">
+          <Card className={activeStep === "automation" ? "space-y-3 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Follow-up</h3>
             <div className="flex items-center gap-2">
               <Switch
                 id="followup_enabled"
                 checked={form.followup.enabled}
-                onCheckedChange={(v) =>
-                  patch({ followup: { ...form.followup, enabled: v } })
-                }
+                onCheckedChange={(v) => patch({ followup: { ...form.followup, enabled: v } })}
                 disabled={disabled}
               />
-              <Label htmlFor="followup_enabled">
-                Habilitar gatilhos automáticos de follow-up
-              </Label>
+              <Label htmlFor="followup_enabled">Habilitar gatilhos automáticos de follow-up</Label>
             </div>
             <p className="text-xs text-muted-foreground">
-              Gatilhos de silêncio/etapa só enrollam um lead num fluxo abaixo se
-              este agente estiver publicado com follow-up habilitado.
+              Gatilhos de silêncio/etapa só enrollam um lead num fluxo abaixo se este agente estiver
+              publicado com follow-up habilitado.
             </p>
             <FollowupFlowPicker
               value={form.followup.flow_pointer_ids}
-              onChange={(ids) =>
-                patch({ followup: { ...form.followup, flow_pointer_ids: ids } })
-              }
+              onChange={(ids) => patch({ followup: { ...form.followup, flow_pointer_ids: ids } })}
               disabled={disabled}
             />
           </Card>
+
+          <Card className={activeStep === "review" ? "space-y-4 p-4" : "hidden"}>
+            <div>
+              <h3 className="text-sm font-semibold">Revisão da configuração</h3>
+              <p className="text-xs text-muted-foreground">
+                Confira os pontos que determinam onde e como o agente poderá atuar.
+              </p>
+            </div>
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Agente</dt>
+                <dd className="font-medium">{form.name || "Não informado"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Modelo</dt>
+                <dd className="font-medium">
+                  {form.provider} / {form.model || "não selecionado"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Credencial</dt>
+                <dd className="font-medium">
+                  {cred ? `${cred.label} (${credSt})` : "Não selecionada"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">WhatsApp</dt>
+                <dd className="font-medium">
+                  {channelSession
+                    ? `${channelSession.display_name} (${channelSession.status})`
+                    : "Não selecionado"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Ferramentas</dt>
+                <dd className="font-medium">{form.tool_ids.length} liberada(s)</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Follow-up</dt>
+                <dd className="font-medium">{form.followup.enabled ? "Ativo" : "Desativado"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Handoff humano</dt>
+                <dd className="font-medium">
+                  {form.handoff_tool_enabled ? "Permitido" : "Desativado"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Limite de custo</dt>
+                <dd className="font-medium">{form.cost_budget_cents} centavos por execução</dd>
+              </div>
+            </dl>
+            {!isValid ? (
+              <div className="border-destructive/40 bg-destructive/5 rounded-lg border p-3">
+                <p className="text-sm font-medium text-destructive">
+                  Ainda há campos obrigatórios.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                  {Object.values(validation).map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
+                Configuração válida. Salve o rascunho e teste antes de publicar.
+              </div>
+            )}
+          </Card>
         </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 border-t pt-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => moveStep(-1)}
+          disabled={activeStepIndex === 0}
+        >
+          Voltar etapa
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          Etapa {activeStepIndex + 1} de {SETUP_STEPS.length}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => moveStep(1)}
+          disabled={activeStepIndex === SETUP_STEPS.length - 1}
+        >
+          Próxima etapa
+        </Button>
       </div>
 
       {/* Publish dialog */}
