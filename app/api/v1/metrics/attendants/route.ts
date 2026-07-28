@@ -39,6 +39,13 @@ interface AttendantRow {
 interface MetricsPayload {
   funnel: { stage_id: string; stage_name: string; position: number; count: number }[];
   attendants: AttendantRow[];
+  messages: {
+    received: number;
+    outbound_recorded: number;
+    outbound_delivered: number;
+    outbound_read: number;
+    outbound_failed: number;
+  };
 }
 
 export async function GET(req: NextRequest): Promise<Response> {
@@ -81,7 +88,17 @@ export async function GET(req: NextRequest): Promise<Response> {
   });
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
-  const metrics = (data ?? { funnel: [], attendants: [] }) as unknown as MetricsPayload;
+  const metrics = (data ?? {
+    funnel: [],
+    attendants: [],
+    messages: {
+      received: 0,
+      outbound_recorded: 0,
+      outbound_delivered: 0,
+      outbound_read: 0,
+      outbound_failed: 0,
+    },
+  }) as unknown as MetricsPayload;
 
   // Enriquece cada atendente com nome/email (mesmo padrão de /api/v1/team).
   // Degrada com name=null quando o service role não está configurado (dev).
@@ -112,6 +129,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       owner_user_id: parsed.data.owner_user_id ?? null,
       funnel: metrics.funnel,
       attendants,
+      messages: metrics.messages,
     },
     { requestId },
   );

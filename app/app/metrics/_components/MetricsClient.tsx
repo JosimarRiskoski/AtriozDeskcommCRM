@@ -42,13 +42,15 @@ interface Props {
 
 export function MetricsClient({ canCompare, currentUserId }: Props) {
   const [owner, setOwner] = useState<string>(ALL);
+  const [days, setDays] = useState("30");
   const selectedOwner = owner === ALL ? null : owner;
-  const { data, isLoading, isError } = useAttendantMetrics(selectedOwner);
+  const { data, isLoading, isError } = useAttendantMetrics(selectedOwner, Number(days));
   // Opções do filtro: só manager+ (a rota /team é manager+). Agent nem vê o filtro.
   const team = useTeamMembers({ enabled: canCompare });
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
-  if (isError || !data) return <p className="text-sm text-destructive">Erro ao carregar métricas.</p>;
+  if (isError || !data)
+    return <p className="text-sm text-destructive">Erro ao carregar métricas.</p>;
 
   const metrics = data.data;
   const funnelTotal = metrics.funnel.reduce((acc, s) => acc + s.count, 0);
@@ -56,27 +58,74 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      {canCompare ? (
+      <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">Atendente</span>
-          <Select value={owner} onValueChange={setOwner}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Todos os atendentes" />
+          <span className="text-sm text-muted-foreground">Período</span>
+          <Select value={days} onValueChange={setDays}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>Todos os atendentes</SelectItem>
-              {(team.data?.data ?? [])
-                .filter((m) => m.role !== "viewer")
-                .map((m) => (
-                  <SelectItem key={m.user_id} value={m.user_id}>
-                    {m.full_name ?? m.email ?? m.user_id.slice(0, 8)}
-                    {m.user_id === currentUserId ? " (você)" : ""}
-                  </SelectItem>
-                ))}
+              <SelectItem value="7">Últimos 7 dias</SelectItem>
+              <SelectItem value="30">Últimos 30 dias</SelectItem>
+              <SelectItem value="90">Últimos 90 dias</SelectItem>
             </SelectContent>
           </Select>
         </div>
-      ) : null}
+        {canCompare ? (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">Atendente</span>
+            <Select value={owner} onValueChange={setOwner}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Todos os atendentes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Todos os atendentes</SelectItem>
+                {(team.data?.data ?? [])
+                  .filter((m) => m.role !== "viewer")
+                  .map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      {m.full_name ?? m.email ?? m.user_id.slice(0, 8)}
+                      {m.user_id === currentUserId ? " (você)" : ""}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {[
+          ["Recebidas", metrics.messages.received, "Mensagens que chegaram ao CRM pelo provedor."],
+          [
+            "Saídas registradas",
+            metrics.messages.outbound_recorded,
+            "Mensagens criadas no CRM; ainda não prova entrega.",
+          ],
+          [
+            "Entregues",
+            metrics.messages.outbound_delivered,
+            "Confirmação de entrega ou leitura recebida do provedor.",
+          ],
+          ["Lidas", metrics.messages.outbound_read, "Confirmação de leitura recebida do WhatsApp."],
+          [
+            "Falharam",
+            metrics.messages.outbound_failed,
+            "Envios que terminaram com falha registrada.",
+          ],
+        ].map(([label, value, description]) => (
+          <Card key={String(label)}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">{label}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold tabular-nums">{value}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{description}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       <Card>
         <CardHeader>
@@ -84,6 +133,9 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
             Funil {selectedOwner ? "do atendente" : ""} · {funnelTotal}{" "}
             {funnelTotal === 1 ? "aberto" : "abertos"}
           </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Fotografia dos negócios abertos agora; não é limitada pelo período selecionado.
+          </p>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {metrics.funnel.length === 0 ? (
@@ -110,6 +162,11 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
           <CardTitle className="text-base">
             {canCompare ? "Performance por atendente" : "Sua performance"}
           </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Ganhos e perdidos usam a data de fechamento. Conversas usam a atribuição. A primeira
+            resposta mede somente resposta humana após a primeira mensagem recebida; respostas da IA
+            não entram nessa média.
+          </p>
         </CardHeader>
         <CardContent>
           {metrics.attendants.length === 0 ? (
