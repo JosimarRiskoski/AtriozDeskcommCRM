@@ -10,6 +10,10 @@ export interface Contact {
   email: string | null;
   email_normalized: string | null;
   phone_number: string | null;
+  company: string | null;
+  city: string | null;
+  state: string | null;
+  custom_fields: Record<string, string | number | boolean | null>;
   cpf_hash: string | null;
   birthdate: string | null;
   is_blocked: boolean;

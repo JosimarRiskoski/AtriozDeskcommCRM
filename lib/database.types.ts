@@ -1707,6 +1707,10 @@ export type Database = {
           name: string | null
           organization_id: string
           phone_number: string | null
+          company: string | null
+          city: string | null
+          state: string | null
+          custom_fields: Json
           source: string
           source_metadata: Json
           tags: string[]
@@ -1736,6 +1740,10 @@ export type Database = {
           name?: string | null
           organization_id: string
           phone_number?: string | null
+          company?: string | null
+          city?: string | null
+          state?: string | null
+          custom_fields?: Json
           source?: string
           source_metadata?: Json
           tags?: string[]
@@ -1765,6 +1773,10 @@ export type Database = {
           name?: string | null
           organization_id?: string
           phone_number?: string | null
+          company?: string | null
+          city?: string | null
+          state?: string | null
+          custom_fields?: Json
           source?: string
           source_metadata?: Json
           tags?: string[]

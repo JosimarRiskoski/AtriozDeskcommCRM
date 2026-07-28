@@ -40,8 +40,22 @@ export const contactCreateSchema = z.object({
     .regex(PHONE_REGEX, "Telefone deve estar em formato E.164 (+5511999998888)")
     .optional(),
   cpf: z.string().refine(isValidCpf, "CPF inválido").optional(),
-  birthdate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  birthdate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   tags: z.array(z.string()).optional(),
+  company: z.string().trim().max(200).optional(),
+  city: z.string().trim().max(120).optional(),
+  state: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || /^[A-Za-z]{2}$/.test(value), "UF deve ter duas letras")
+    .transform((value) => value.toUpperCase())
+    .optional(),
+  custom_fields: z
+    .record(z.string().max(80), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+    .optional(),
   source: z.string().min(1).default("manual"),
   source_metadata: z.record(z.string(), z.unknown()).optional(),
   consent: z.record(z.string(), z.unknown()).optional(),

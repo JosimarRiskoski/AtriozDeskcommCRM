@@ -22,7 +22,7 @@ import type {
 type SB = SupabaseClient;
 
 const SELECT_COLS =
-  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at";
+  "id, organization_id, name, display_name, email, email_normalized, phone_number, company, city, state, custom_fields, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at";
 
 const ROLE_RANK: Record<string, number> = {
   viewer: 1,
@@ -318,6 +318,7 @@ export async function patchContactHandler(
     .from("contacts")
     .select("id, organization_id, is_anonymized, tags")
     .eq("id", contactId)
+    .eq("organization_id", ctx.organization_id)
     .maybeSingle();
 
   if (selErr) {
@@ -344,6 +345,10 @@ export async function patchContactHandler(
     patch.email_normalized = input.email ? input.email.trim().toLowerCase() : null;
   }
   if (input.phone_number !== undefined) patch.phone_number = input.phone_number;
+  if (input.company !== undefined) patch.company = input.company || null;
+  if (input.city !== undefined) patch.city = input.city || null;
+  if (input.state !== undefined) patch.state = input.state || null;
+  if (input.custom_fields !== undefined) patch.custom_fields = input.custom_fields;
   if (input.birthdate !== undefined) patch.birthdate = input.birthdate;
   if (input.tags !== undefined) patch.tags = input.tags;
   if (input.source !== undefined) patch.source = input.source;
@@ -371,6 +376,7 @@ export async function patchContactHandler(
     .from("contacts")
     .update(patch)
     .eq("id", contactId)
+    .eq("organization_id", ctx.organization_id)
     .select(SELECT_COLS)
     .maybeSingle();
 

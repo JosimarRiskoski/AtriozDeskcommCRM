@@ -8,26 +8,16 @@
  */
 import type { McpToolDefinition } from "../types";
 import { TOOL_CATALOG, VALID_TOOL_IDS } from "./catalog";
-import { crmSearchContacts, crmGetContact } from "./contacts";
+import { crmSearchContacts, crmGetContact, crmUpdateContact, crmAddContactNote } from "./contacts";
 import {
   crmListConversations,
   crmGetConversation,
   crmGetConversationHistory,
 } from "./conversations";
-import {
-  crmListLeads,
-  crmGetLead,
-  crmCreateLead,
-  crmUpdateLead,
-  crmMoveLeadStage,
-} from "./leads";
+import { crmListLeads, crmGetLead, crmCreateLead, crmUpdateLead, crmMoveLeadStage } from "./leads";
 import { crmListPipelines } from "./pipelines";
 import { crmSendWhatsappMessage } from "./messages";
-import {
-  crmAssignConversation,
-  crmManageTags,
-  crmGetQueueStatus,
-} from "./governance";
+import { crmAssignConversation, crmManageTags, crmGetQueueStatus } from "./governance";
 import { crmRequestHumanHandoff } from "./handoff";
 
 // Cast via `unknown` porque McpToolDefinition<TInput> nao e covariante
@@ -48,6 +38,8 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmListPipelines,
   // write
   crmCreateLead,
+  crmUpdateContact,
+  crmAddContactNote,
   crmUpdateLead,
   crmMoveLeadStage,
   crmSendWhatsappMessage,

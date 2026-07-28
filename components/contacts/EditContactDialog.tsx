@@ -21,6 +21,9 @@ interface FormShape {
   name?: string;
   email?: string;
   phone_number?: string;
+  company?: string;
+  city?: string;
+  state?: string;
   tagsRaw?: string;
 }
 
@@ -33,12 +36,21 @@ interface Props {
 export function EditContactDialog({ contact, open, onOpenChange }: Props) {
   const update = useUpdateContact(contact.id);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>(
+    Object.entries(contact.custom_fields ?? {}).map(([key, value]) => ({
+      key,
+      value: value == null ? "" : String(value),
+    })),
+  );
 
   const form = useForm<FormShape>({
     defaultValues: {
       name: contact.name ?? "",
       email: contact.email ?? "",
       phone_number: contact.phone_number ?? "",
+      company: contact.company ?? "",
+      city: contact.city ?? "",
+      state: contact.state ?? "",
       tagsRaw: contact.tags.join(", "),
     },
   });
@@ -49,6 +61,9 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
         name: contact.name ?? "",
         email: contact.email ?? "",
         phone_number: contact.phone_number ?? "",
+        company: contact.company ?? "",
+        city: contact.city ?? "",
+        state: contact.state ?? "",
         tagsRaw: contact.tags.join(", "),
       });
     }
@@ -65,7 +80,16 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
     if (values.name?.trim()) payload.name = values.name.trim();
     if (values.email?.trim()) payload.email = values.email.trim();
     if (values.phone_number?.trim()) payload.phone_number = values.phone_number.trim();
+    payload.company = values.company?.trim() ?? "";
+    payload.city = values.city?.trim() ?? "";
+    payload.state = values.state?.trim().toUpperCase() ?? "";
     payload.tags = tags;
+    payload.custom_fields = Object.fromEntries(
+      customFields.flatMap((item): Array<[string, string]> => {
+        const key = item.key.trim();
+        return key ? [[key, item.value]] : [];
+      }),
+    );
 
     const parsed = contactPatchSchema.safeParse(payload);
     if (!parsed.success) {
@@ -102,8 +126,75 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
             <Input id="ec-phone" {...form.register("phone_number")} />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="ec-company">Empresa</Label>
+            <Input id="ec-company" {...form.register("company")} />
+          </div>
+          <div className="grid grid-cols-[1fr_90px] gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="ec-city">Cidade</Label>
+              <Input id="ec-city" {...form.register("city")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ec-state">UF</Label>
+              <Input id="ec-state" maxLength={2} {...form.register("state")} />
+            </div>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="ec-tags">Tags</Label>
             <Input id="ec-tags" {...form.register("tagsRaw")} />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Campos personalizados</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setCustomFields((items) => [...items, { key: "", value: "" }])}
+              >
+                Adicionar campo
+              </Button>
+            </div>
+            {customFields.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum campo personalizado.</p>
+            ) : (
+              customFields.map((field, index) => (
+                <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                  <Input
+                    value={field.key}
+                    onChange={(e) =>
+                      setCustomFields((items) =>
+                        items.map((item, i) =>
+                          i === index ? { ...item, key: e.target.value } : item,
+                        ),
+                      )
+                    }
+                    placeholder="Nome do campo"
+                    aria-label={`Nome do campo personalizado ${index + 1}`}
+                  />
+                  <Input
+                    value={field.value}
+                    onChange={(e) =>
+                      setCustomFields((items) =>
+                        items.map((item, i) =>
+                          i === index ? { ...item, value: e.target.value } : item,
+                        ),
+                      )
+                    }
+                    placeholder="Valor"
+                    aria-label={`Valor do campo personalizado ${index + 1}`}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setCustomFields((items) => items.filter((_, i) => i !== index))}
+                  >
+                    Remover
+                  </Button>
+                </div>
+              ))
+            )}
           </div>
           {serverError && <p className="text-sm text-error-fg">{serverError}</p>}
           <DialogFooter>
