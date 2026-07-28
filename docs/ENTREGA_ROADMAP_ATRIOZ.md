@@ -88,6 +88,7 @@ Depois, revisar a diferença contra `main` e integrar somente após a aplicaçã
 - revisar, campo a campo, quais dados do contato cada agente pode ler ou alterar; agentes antigos recebem o padrão compatível somente após a migration 0095;
 - configurar a chave HMAC da origem 3C;
 - configurar Meta Dataset/Pixel e token somente no servidor;
+- para importar Google Sheets em campanhas, configurar `GOOGLE_SHEETS_SERVICE_ACCOUNT_EMAIL` e `GOOGLE_SHEETS_PRIVATE_KEY` somente no servidor; compartilhar cada planilha como leitora com o e-mail da conta de serviço;
 - conferir o cron do worker de campanhas, follow-ups, notificações e conversões Meta;
 - confirmar que segredos não aparecem novamente na interface;
 - manter campanhas desativadas até concluir o teste com uma lista controlada.
@@ -115,6 +116,7 @@ Antes de iniciar, abrir **Configurações > Implantação do cliente**. Os itens
 - [ ] aprendizado da IA pode ser criado, editado, arquivado, reativado e removido;
 - [ ] follow-up manual inicia e para quando o contato responde;
 - [ ] campanha cria contato, negócio e conversa antes do primeiro envio;
+- [ ] campanha lê uma planilha Google autorizada sem expor a credencial no navegador e aplica a mesma validação de consentimento, telefone e duplicidade do CSV;
 - [ ] campanha envia texto, espera, envia áudio e aguarda o intervalo antes do próximo contato;
 - [ ] pausa e retomada da campanha não duplicam mensagens;
 - [ ] notificação crítica abre o item correto;
