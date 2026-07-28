@@ -17,16 +17,19 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
-import { Archive, ArrowsClockwise, Plus } from "@/lib/ui/icons";
+import { Archive, ArrowsClockwise, PencilSimple, Plus, Trash } from "@/lib/ui/icons";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import {
   useOrgMemory,
   usePublishOrgMemory,
   useCreateOrgMemoryEntry,
   useSetOrgMemoryEntryStatus,
+  useUpdateOrgMemoryEntry,
+  useDeleteOrgMemoryEntry,
   useOrgMemoryVersion,
   type OrgMemoryState,
   type OrgMemoryVersionMeta,
+  type OrgMemoryEntryRow,
 } from "@/hooks/ai/useOrgMemory";
 
 interface Props {
@@ -56,10 +59,13 @@ export function OrgMemoryClient({ initialState }: Props) {
   const [formOpen, setFormOpen] = React.useState(false);
   const [title, setTitle] = React.useState("");
   const [body, setBody] = React.useState("");
+  const [editingEntry, setEditingEntry] = React.useState<OrgMemoryEntryRow | null>(null);
 
   const publish = usePublishOrgMemory();
   const createEntry = useCreateOrgMemoryEntry();
   const setStatus = useSetOrgMemoryEntryStatus();
+  const updateEntry = useUpdateOrgMemoryEntry();
+  const deleteEntry = useDeleteOrgMemoryEntry();
   const versionDetail = useOrgMemoryVersion(historyTarget?.id ?? null);
 
   // Sincroniza o textarea quando a versão ativa mudar sob nós (ex.: outro admin publicou).
@@ -77,7 +83,9 @@ export function OrgMemoryClient({ initialState }: Props) {
   function handlePublish() {
     publish.mutate(content, {
       onSuccess: (res) => {
-        toast.success(`Versão v${res.data.version_number} publicada — já vale para todos os agentes.`);
+        toast.success(
+          `Versão v${res.data.version_number} publicada — já vale para todos os agentes.`,
+        );
       },
       onError: showApiError,
     });
@@ -86,7 +94,9 @@ export function OrgMemoryClient({ initialState }: Props) {
   function handleRestore(versionContent: string, versionNumber: number) {
     setContent(versionContent);
     setHistoryTarget(null);
-    toast.info(`Conteúdo da v${versionNumber} carregado no editor. Clique em "Publicar versão" para confirmar.`);
+    toast.info(
+      `Conteúdo da v${versionNumber} carregado no editor. Clique em "Publicar versão" para confirmar.`,
+    );
   }
 
   function handleCreateEntry(e: React.FormEvent) {
@@ -118,7 +128,43 @@ export function OrgMemoryClient({ initialState }: Props) {
     );
   }
 
-  const visibleEntries = entries.filter((e) => (showArchived ? e.status === "archived" : e.status === "active"));
+  function openEdit(entry: OrgMemoryEntryRow) {
+    setEditingEntry(entry);
+    setTitle(entry.title);
+    setBody(entry.body);
+  }
+
+  function handleEditEntry(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingEntry || !title.trim() || !body.trim()) return;
+    updateEntry.mutate(
+      { id: editingEntry.id, title: title.trim(), body: body.trim() },
+      {
+        onSuccess: () => {
+          toast.success("Aprendizado atualizado.");
+          setEditingEntry(null);
+          setTitle("");
+          setBody("");
+        },
+        onError: showApiError,
+      },
+    );
+  }
+
+  function handleDelete(entry: OrgMemoryEntryRow) {
+    const confirmed = window.confirm(
+      `Remover definitivamente o aprendizado “${entry.title}”? Esta ação não pode ser desfeita.`,
+    );
+    if (!confirmed) return;
+    deleteEntry.mutate(entry.id, {
+      onSuccess: () => toast.success("Aprendizado removido."),
+      onError: showApiError,
+    });
+  }
+
+  const visibleEntries = entries.filter((e) =>
+    showArchived ? e.status === "archived" : e.status === "active",
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -128,8 +174,8 @@ export function OrgMemoryClient({ initialState }: Props) {
             <div>
               <CardTitle>Documento da organização</CardTitle>
               <CardDescription>
-                O texto-base que qualquer agente de IA lê antes de responder — como a "política
-                da casa" que todo atendente novo teria que decorar.
+                O texto-base que qualquer agente de IA lê antes de responder — como a "política da
+                casa" que todo atendente novo teria que decorar.
               </CardDescription>
             </div>
             {document ? (
@@ -154,10 +200,7 @@ export function OrgMemoryClient({ initialState }: Props) {
                   Somente admins podem publicar uma nova versão.
                 </span>
               )}
-              <Button
-                onClick={handlePublish}
-                disabled={!canSubmitPublish || publish.isPending}
-              >
+              <Button onClick={handlePublish} disabled={!canSubmitPublish || publish.isPending}>
                 {publish.isPending ? "Publicando…" : "Publicar versão"}
               </Button>
             </div>
@@ -175,9 +218,13 @@ export function OrgMemoryClient({ initialState }: Props) {
                       className="flex w-full items-center gap-3 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent-soft"
                     >
                       <span className="font-mono text-xs">v{v.version_number}</span>
-                      <span className="text-xs text-muted-foreground">{formatDate(v.created_at)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDate(v.created_at)}
+                      </span>
                       {document?.version_id === v.id && (
-                        <Badge variant="success" className="text-[10px]">ativa</Badge>
+                        <Badge variant="success" className="text-[10px]">
+                          ativa
+                        </Badge>
                       )}
                     </button>
                   </li>
@@ -194,8 +241,8 @@ export function OrgMemoryClient({ initialState }: Props) {
             <div>
               <CardTitle>Aprendizados</CardTitle>
               <CardDescription>
-                Fatos e correções pontuais que os agentes também levam em conta — adicionados à
-                mão ou aprendidos automaticamente pelo sistema a partir de conversas reais.
+                Fatos e correções pontuais que os agentes também levam em conta — adicionados à mão
+                ou aprendidos automaticamente pelo sistema a partir de conversas reais.
               </CardDescription>
             </div>
             <Button variant="secondary" size="sm" onClick={() => setFormOpen((v) => !v)}>
@@ -256,30 +303,41 @@ export function OrgMemoryClient({ initialState }: Props) {
             <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
               {showArchived
                 ? "Nenhum aprendizado arquivado."
-                : "Nenhum aprendizado ainda. Use \"+ Novo aprendizado\" para ensinar algo que os agentes devem lembrar em toda conversa — ou aguarde o sistema sugerir aprendizados automaticamente a partir do atendimento real."}
+                : 'Nenhum aprendizado ainda. Use "+ Novo aprendizado" para ensinar algo que os agentes devem lembrar em toda conversa — ou aguarde o sistema sugerir aprendizados automaticamente a partir do atendimento real.'}
             </p>
           ) : (
             <ol className="flex flex-col gap-2">
               {visibleEntries.map((entry) => (
                 <li
                   key={entry.id}
-                  className="flex flex-col gap-1.5 rounded-md border border-border/60 p-3 text-sm"
+                  className="border-border/60 flex flex-col gap-1.5 rounded-md border p-3 text-sm"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{entry.title}</span>
-                    <Badge variant={entry.source === "flywheel" ? "info" : "neutral"} className="text-[10px]">
+                    <Badge
+                      variant={entry.source === "flywheel" ? "info" : "neutral"}
+                      className="text-[10px]"
+                    >
                       {entry.source === "flywheel" ? "aprendido automaticamente" : "manual"}
                     </Badge>
-                    <span className="ml-auto text-xs text-muted-foreground">{formatDate(entry.created_at)}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {formatDate(entry.created_at)}
+                    </span>
                   </div>
                   <p className="whitespace-pre-wrap text-text-muted">{entry.body}</p>
-                  <div className="flex justify-end">
+                  <div className="flex flex-wrap justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(entry)}>
+                      <PencilSimple /> Editar
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       disabled={setStatus.isPending}
                       onClick={() =>
-                        handleToggleArchive(entry.id, entry.status === "active" ? "archived" : "active")
+                        handleToggleArchive(
+                          entry.id,
+                          entry.status === "active" ? "archived" : "active",
+                        )
                       }
                     >
                       {entry.status === "active" ? (
@@ -291,6 +349,15 @@ export function OrgMemoryClient({ initialState }: Props) {
                           <ArrowsClockwise /> Reativar
                         </>
                       )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      disabled={deleteEntry.isPending}
+                      onClick={() => handleDelete(entry)}
+                    >
+                      <Trash /> Remover
                     </Button>
                   </div>
                 </li>
@@ -327,6 +394,47 @@ export function OrgMemoryClient({ initialState }: Props) {
               Restaurar como nova versão
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editingEntry != null} onOpenChange={(open) => !open && setEditingEntry(null)}>
+        <DialogContent>
+          <form onSubmit={handleEditEntry} className="flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle>Editar aprendizado</DialogTitle>
+              <DialogDescription>
+                A alteração passa a valer para os agentes assim que for salva.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-entry-title">Título</Label>
+              <Input
+                id="edit-entry-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={200}
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-entry-body">O que o agente deve saber</Label>
+              <Textarea
+                id="edit-entry-body"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                className="min-h-[120px]"
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setEditingEntry(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={updateEntry.isPending}>
+                {updateEntry.isPending ? "Salvando…" : "Salvar alterações"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

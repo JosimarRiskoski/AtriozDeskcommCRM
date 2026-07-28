@@ -132,6 +132,7 @@ export type AuditAction =
   | "ai.org_memory_published"
   | "ai.org_memory_entry_created"
   | "ai.org_memory_entry_updated"
+  | "ai.org_memory_entry_deleted"
   | "ai_agent.run_started"
   | "ai_agent.run_completed"
   | "ai_agent.run_failed"

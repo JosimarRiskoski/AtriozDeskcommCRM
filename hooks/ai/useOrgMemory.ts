@@ -47,7 +47,10 @@ export function usePublishOrgMemory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (content: string) =>
-      apiClient.post<{ data: { version_id: string; version_number: number } }>("/api/v1/ai/memory", { content }),
+      apiClient.post<{ data: { version_id: string; version_number: number } }>(
+        "/api/v1/ai/memory",
+        { content },
+      ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
   });
 }
@@ -65,7 +68,31 @@ export function useSetOrgMemoryEntryStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { id: string; status: "archived" | "active" }) =>
-      apiClient.patch<{ data: { id: string; status: string } }>(`/api/v1/ai/memory/entries/${input.id}`, { status: input.status }),
+      apiClient.patch<{ data: { id: string; status: string } }>(
+        `/api/v1/ai/memory/entries/${input.id}`,
+        { status: input.status },
+      ),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
+export function useUpdateOrgMemoryEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; title: string; body: string }) =>
+      apiClient.patch<{ data: { id: string } }>(`/api/v1/ai/memory/entries/${input.id}`, {
+        title: input.title,
+        body: input.body,
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
+export function useDeleteOrgMemoryEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete<{ data: { id: string; deleted: true } }>(`/api/v1/ai/memory/entries/${id}`),
     onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
   });
 }
