@@ -30,6 +30,13 @@ const LINKS: SettingsLink[] = [
     group: "Conta",
   },
   {
+    href: "/app/system-health",
+    title: "Saúde do sistema",
+    description: "WhatsApp, banco, automações, IA, e-mail e webhooks em uma única tela.",
+    group: "Integrações",
+    managerOnly: true,
+  },
+  {
     href: "/app/settings/api-tokens",
     title: "API Tokens",
     description: "Acesso técnico entre sistemas. Use apenas com orientação especializada.",
