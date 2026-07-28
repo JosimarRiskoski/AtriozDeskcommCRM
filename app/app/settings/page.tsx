@@ -51,11 +51,6 @@ const LINKS: SettingsLink[] = [
     adminOnly: true,
   },
   { href: "/app/audit", title: "Audit Log", description: "Histórico de ações.", managerOnly: true },
-  {
-    href: "/app/settings/billing",
-    title: "Billing",
-    description: "Planos e cobrança (em breve).",
-  },
 ];
 
 export default async function SettingsHubPage() {

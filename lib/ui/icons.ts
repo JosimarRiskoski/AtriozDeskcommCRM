@@ -34,6 +34,8 @@ export {
   WifiHigh,
   Brain,
   ArrowsClockwise,
+  ArrowCounterClockwise,
+  ArrowClockwise,
   Dot,
   // actions
   Bell,

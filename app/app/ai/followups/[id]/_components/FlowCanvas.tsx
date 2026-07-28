@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -12,6 +12,8 @@ import {
   useReactFlow,
   type Connection,
   type EdgeMouseHandler,
+  type EdgeChange,
+  type NodeChange,
   type NodeMouseHandler,
   type NodeTypes,
 } from "@xyflow/react";
@@ -40,6 +42,8 @@ import { ConditionNode } from "./nodes/ConditionNode";
 import { ClassifyNode } from "./nodes/ClassifyNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { EndNode } from "./nodes/EndNode";
+import { Button } from "@/components/ui/button";
+import { ArrowCounterClockwise, ArrowClockwise } from "@/lib/ui/icons";
 
 const EMPTY_GRAPH: FlowGraph = { nodes: [], edges: [] };
 const DND_MIME = "application/x-followup-node-type";
@@ -60,6 +64,11 @@ interface Props {
   initialData: FollowupFlowDetailRow;
 }
 
+interface CanvasSnapshot {
+  nodes: RFNode[];
+  edges: RFEdge[];
+}
+
 function FlowCanvasInner({ flowId, initialData }: Props) {
   const { data: flow } = useFollowupFlow(flowId, { initialData });
   // `initial` seeds React Flow state ONCE on mount — it must NOT react to
@@ -77,6 +86,73 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
   const { screenToFlowPosition } = useReactFlow();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const undoStack = useRef<CanvasSnapshot[]>([]);
+  const redoStack = useRef<CanvasSnapshot[]>([]);
+  const [historyVersion, setHistoryVersion] = useState(0);
+
+  const remember = useCallback(() => {
+    undoStack.current = [...undoStack.current.slice(-49), { nodes, edges }];
+    redoStack.current = [];
+    setHistoryVersion((version) => version + 1);
+  }, [nodes, edges]);
+
+  const undo = useCallback(() => {
+    const previous = undoStack.current.at(-1);
+    if (!previous) return;
+    undoStack.current = undoStack.current.slice(0, -1);
+    redoStack.current = [...redoStack.current.slice(-49), { nodes, edges }];
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setHistoryVersion((version) => version + 1);
+  }, [edges, nodes, setEdges, setNodes]);
+
+  const redo = useCallback(() => {
+    const next = redoStack.current.at(-1);
+    if (!next) return;
+    redoStack.current = redoStack.current.slice(0, -1);
+    undoStack.current = [...undoStack.current.slice(-49), { nodes, edges }];
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setHistoryVersion((version) => version + 1);
+  }, [edges, nodes, setEdges, setNodes]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      const modifier = event.ctrlKey || event.metaKey;
+      if (modifier && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+      } else if (modifier && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [redo, undo]);
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<RFNode>[]) => {
+      if (changes.some((change) => change.type === "remove")) remember();
+      onNodesChange(changes);
+    },
+    [onNodesChange, remember],
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange<RFEdge>[]) => {
+      if (changes.some((change) => change.type === "remove")) remember();
+      onEdgesChange(changes);
+    },
+    [onEdgesChange, remember],
+  );
 
   const liveGraph = useMemo(() => fromReactFlow(nodes, edges), [nodes, edges]);
   const dirty = useMemo(() => !graphsEqual(liveGraph, savedGraph), [liveGraph, savedGraph]);
@@ -107,17 +183,19 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
   const updateNodeData = useCallback(
     (id: string, patch: Partial<RFNodeData>) => {
+      remember();
       setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
     },
-    [setNodes],
+    [remember, setNodes],
   );
   const updateEdgeCondition = useCallback(
     (id: string, condition: FlowEdge["condition"]) => {
+      remember();
       setEdges((eds) =>
         eds.map((e) => (e.id === id ? { ...e, data: { priority: e.data?.priority ?? 0, condition } } : e)),
       );
     },
-    [setEdges],
+    [remember, setEdges],
   );
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
@@ -139,6 +217,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
   const onConnect = useCallback(
     (connection: Connection) => {
+      remember();
       const newEdge: RFEdge = {
         id: `edge-${nextEdgeId.current++}`,
         source: connection.source,
@@ -149,11 +228,12 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
       };
       setEdges((eds) => addEdge(newEdge, eds));
     },
-    [setEdges],
+    [remember, setEdges],
   );
 
   const addNodeAt = useCallback(
     (type: NodeType, position: { x: number; y: number }) => {
+      remember();
       const visual = NODE_VISUALS[type];
       const id = `${type}-${nextId.current++}`;
       const newNode: RFNode = {
@@ -164,7 +244,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
       };
       setNodes((nds) => nds.concat(newNode));
     },
-    [setNodes],
+    [remember, setNodes],
   );
 
   const onPaletteAdd = useCallback(
@@ -207,12 +287,38 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
       <div className="flex flex-1 overflow-hidden">
         <NodePalette onAdd={onPaletteAdd} />
         <div className="relative h-full flex-1" data-testid="flow-canvas" onDragOver={onDragOver} onDrop={onDrop}>
+          <div className="absolute left-3 top-3 z-10 flex gap-1 rounded-md border bg-background/95 p-1 shadow-sm" data-history-version={historyVersion}>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={undo}
+              disabled={undoStack.current.length === 0}
+              aria-label="Desfazer última alteração"
+              title="Desfazer (Ctrl+Z)"
+            >
+              <ArrowCounterClockwise size={16} aria-hidden />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={redo}
+              disabled={redoStack.current.length === 0}
+              aria-label="Refazer última alteração"
+              title="Refazer (Ctrl+Y)"
+            >
+              <ArrowClockwise size={16} aria-hidden />
+            </Button>
+          </div>
           <ReactFlow
             nodes={nodes}
             edges={edgesForRender}
             nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
