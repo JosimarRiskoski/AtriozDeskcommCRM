@@ -15,8 +15,6 @@ import { useUploadMedia } from "@/hooks/inbox/useUploadMedia";
 import { interpolateTemplate } from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
 import { TemplateFormDialog } from "@/app/app/templates/_components/TemplateFormDialog";
-import { useAuth } from "@/hooks/auth/AuthProvider";
-import { ROLE_RANK } from "@/lib/auth/types";
 
 export interface ComposerHandle {
   focus: () => void;
@@ -45,10 +43,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const upload = useUploadMedia();
   const createNote = useCreateNote();
   const templates = useMessageTemplates();
-  const { activeOrg, user } = useAuth();
-  const canShareTemplate =
-    user.is_platform_admin ||
-    Boolean(activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager);
   const slash = resolveSlash(text);
   const menuOpen = mode === "reply" && slash.open && !menuDismissed;
 
@@ -281,7 +275,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       <TemplateFormDialog
         open={templateDialogOpen}
         onOpenChange={setTemplateDialogOpen}
-        canShare={canShareTemplate}
+        canShare={false}
       />
     </>
   );

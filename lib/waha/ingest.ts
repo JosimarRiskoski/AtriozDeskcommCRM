@@ -339,13 +339,11 @@ async function handleInbound(
   // A resposta encerra a participação deste destinatário na campanha sem
   // disparar novamente nem esperar o restante da conversa. O vínculo é pelo
   // contato/conversa já normalizados pelo mesmo ingest do Inbox.
-  await admin
-    .from("outreach_campaign_recipients" as never)
-    .update({ status: "replied", replied_at: now, processing_lease_until: null, updated_at: now } as never)
-    .eq("organization_id", session.organization_id)
-    .eq("contact_id", contactId)
-    .eq("conversation_id", conversationId)
-    .in("status", ["processing", "sent"]);
+  await admin.rpc("fn_mark_campaign_recipient_replied" as never, {
+    p_org: session.organization_id,
+    p_contact: contactId,
+    p_conversation: conversationId,
+  } as never);
 
   if (p.body && STOP_RX.test(p.body)) {
     await admin

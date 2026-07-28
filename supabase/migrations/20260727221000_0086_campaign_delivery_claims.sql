@@ -82,3 +82,13 @@ $$;
 revoke all on function public.fn_claim_due_outreach_recipient(integer) from public, anon, authenticated;
 grant execute on function public.fn_claim_due_outreach_recipient(integer) to service_role;
 
+create or replace function public.fn_mark_campaign_recipient_replied(p_org uuid,p_contact uuid,p_conversation uuid)
+returns integer language plpgsql security definer set search_path=public as $$
+declare v_count integer;
+begin
+  update public.outreach_campaign_recipients set status='replied',replied_at=now(),processing_lease_until=null,updated_at=now()
+   where organization_id=p_org and contact_id=p_contact and conversation_id=p_conversation and status in ('processing','sent');
+  get diagnostics v_count = row_count; return v_count;
+end $$;
+revoke all on function public.fn_mark_campaign_recipient_replied(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_mark_campaign_recipient_replied(uuid,uuid,uuid) to service_role;
