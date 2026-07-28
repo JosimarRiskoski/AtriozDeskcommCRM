@@ -4,6 +4,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
+import { BackNavigation } from "@/components/shell/BackNavigation";
 
 import { AgentForm, type ChannelSessionLite } from "../[id]/_components/AgentForm";
 
@@ -42,6 +43,7 @@ export default async function NewAgentPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
+      <BackNavigation fallbackHref="/app/ai" label="Voltar aos agentes" />
       <AgentForm
         mode="create"
         credentials={credentials}

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
+import { BackNavigation } from "@/components/shell/BackNavigation";
 
 import { AgentEditorClient } from "./_client";
 import { AgentTabs } from "./_components/AgentTabs";
@@ -53,6 +54,7 @@ export default async function AgentEditorPage({
   if ((agent.kind ?? "rag_bot") !== "mcp_agent") {
     return (
       <div className="flex h-full flex-col gap-6 p-6">
+        <BackNavigation fallbackHref="/app/ai" label="Voltar aos agentes" />
         <AgentEditorClient agentId={agent.id} initialData={agent} readOnly={readOnly} />
       </div>
     );
@@ -96,6 +98,7 @@ export default async function AgentEditorPage({
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
+      <BackNavigation fallbackHref="/app/ai" label="Voltar aos agentes" />
       <AgentTabs
         agent={agent}
         draft={draft}
