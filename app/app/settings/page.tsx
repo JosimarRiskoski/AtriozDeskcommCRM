@@ -37,6 +37,13 @@ const LINKS: SettingsLink[] = [
     managerOnly: true,
   },
   {
+    href: "/app/deployment-checklist",
+    title: "Implantação do cliente",
+    description: "Checklist de domínio, Supabase, WhatsApp, e-mail, agente, funil, backup e teste final.",
+    group: "Integrações",
+    adminOnly: true,
+  },
+  {
     href: "/app/settings/api-tokens",
     title: "API Tokens",
     description: "Acesso técnico entre sistemas. Use apenas com orientação especializada.",
