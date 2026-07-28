@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useAtRiskLeads, type AtRiskLead } from "@/hooks/leads/useAtRiskLeads";
 import type { RiskBucket } from "@/lib/leads/risk-radar";
@@ -43,6 +44,8 @@ function followupWhen(iso: string): string {
 export function RiskRadarList() {
   const { data, isLoading } = useAtRiskLeads();
   const [filter, setFilter] = useState<"todos" | Exclude<RiskBucket, "em_dia">>("todos");
+  const [ownerFilter, setOwnerFilter] = useState<"todos" | "human" | "ai" | "none">("todos");
+  const [ageFilter, setAgeFilter] = useState<"24" | "72" | "168">("24");
 
   if (isLoading) {
     return (
@@ -69,8 +72,14 @@ export function RiskRadarList() {
     );
   }
 
-  const visibleItems =
-    filter === "todos" ? data.items : data.items.filter((lead) => lead.risk === filter);
+  const visibleItems = data.items.filter((lead) => {
+    if (filter !== "todos" && lead.risk !== filter) return false;
+    if (lead.hours_since_activity < Number(ageFilter)) return false;
+    if (ownerFilter === "human" && !(lead.owner_kind === "user" || lead.owner_user_id)) return false;
+    if (ownerFilter === "ai" && !(lead.owner_kind === "ai" || lead.assignee_kind === "ai")) return false;
+    if (ownerFilter === "none" && (lead.owner_kind || lead.owner_user_id || lead.assignee_kind)) return false;
+    return true;
+  });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -112,6 +121,32 @@ export function RiskRadarList() {
         <Button size="sm" variant={filter === "em_voo" ? "default" : "outline"} onClick={() => setFilter("em_voo")}>
           Em voo ({data.counts.em_voo})
         </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-3 rounded-lg border p-3">
+        <div className="min-w-52 space-y-1">
+          <label className="text-xs font-medium" htmlFor="radar-age">Tempo sem atividade</label>
+          <Select value={ageFilter} onValueChange={(value) => setAgeFilter(value as typeof ageFilter)}>
+            <SelectTrigger id="radar-age"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="24">Há pelo menos 24 horas</SelectItem>
+              <SelectItem value="72">Há pelo menos 3 dias</SelectItem>
+              <SelectItem value="168">Há pelo menos 7 dias</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-52 space-y-1">
+          <label className="text-xs font-medium" htmlFor="radar-owner">Responsável atual</label>
+          <Select value={ownerFilter} onValueChange={(value) => setOwnerFilter(value as typeof ownerFilter)}>
+            <SelectTrigger id="radar-owner"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="human">Atendimento humano</SelectItem>
+              <SelectItem value="ai">Agente de IA</SelectItem>
+              <SelectItem value="none">Sem responsável</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <ul className="divide-y divide-border rounded-lg border border-border">
