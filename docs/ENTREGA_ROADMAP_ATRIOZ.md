@@ -33,6 +33,9 @@ Este documento é o ponto de retomada para publicar e homologar as melhorias fei
 - central de saúde do sistema por organização;
 - checklist de implantação que combina verificações automáticas e confirmações manuais;
 - Conexões com última mensagem realmente recebida e enviada por número.
+- convites de equipe persistidos, com estados, reenvio e cancelamento;
+- Desempenho com período selecionável, origem dos cálculos e separação entre mensagens registradas, entregues, lidas e falhas;
+- Memória da IA com criação, histórico, edição, arquivamento, reativação e remoção auditada.
 
 ## Etapa 1 — aplicar o banco
 
@@ -47,6 +50,7 @@ Antes de publicar a aplicação, aplicar em ordem todas as migrations ainda ause
 7. `20260727225000_0090_pipeline_stage_reorder.sql`
 8. `20260727230000_0091_contact_commercial_profile.sql`
 9. `20260727231000_0092_team_invitations.sql`
+10. `20260727232000_0093_metrics_message_delivery.sql`
 
 Use o mecanismo normal de migrations do projeto. Não copie trechos isolados nem pule arquivos, porque as APIs e as telas dependem desse conjunto.
 
@@ -94,6 +98,8 @@ Antes de iniciar, abrir **Configurações > Implantação do cliente**. Os itens
 - [ ] IA pode ser pausada globalmente, ativada somente para um contato e devolvida ao atendimento normal;
 - [ ] erro do provedor de IA não é enviado ao cliente;
 - [ ] resposta rápida substitui as variáveis corretamente;
+- [ ] mensagem registrada, entregue, lida e falha aparecem separadamente em Desempenho;
+- [ ] aprendizado da IA pode ser criado, editado, arquivado, reativado e removido;
 - [ ] follow-up manual inicia e para quando o contato responde;
 - [ ] campanha cria contato, negócio e conversa antes do primeiro envio;
 - [ ] campanha envia texto, espera, envia áudio e aguarda o intervalo antes do próximo contato;
