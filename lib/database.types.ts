@@ -4766,6 +4766,71 @@ export type Database = {
           },
         ]
       }
+      team_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          cancelled_at: string | null
+          created_at: string
+          email: string
+          email_dispatched: boolean
+          expires_at: string
+          id: string
+          invited_by: string | null
+          last_error: string | null
+          last_sent_at: string | null
+          organization_id: string
+          provider_message_id: string | null
+          role: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          email: string
+          email_dispatched?: boolean
+          expires_at: string
+          id?: string
+          invited_by?: string | null
+          last_error?: string | null
+          last_sent_at?: string | null
+          organization_id: string
+          provider_message_id?: string | null
+          role: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          email?: string
+          email_dispatched?: boolean
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          last_error?: string | null
+          last_sent_at?: string | null
+          organization_id?: string
+          provider_message_id?: string | null
+          role?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_organizations: {
         Row: {
           accepted_at: string | null

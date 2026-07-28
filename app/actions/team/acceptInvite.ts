@@ -43,6 +43,23 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteRes
   // token HMAC verificado + email do usuário autenticado === email do convite; org e
   // role vêm do token assinado (fonte confiável), nunca do body.
   const db = createAdminClient();
+  const { data: invitation, error: invitationError } = await db
+    .from("team_invitations")
+    .select("id,status,email,organization_id,role,expires_at")
+    .eq("id", payload.invite_id)
+    .eq("organization_id", payload.organization_id)
+    .maybeSingle();
+  if (invitationError || !invitation) {
+    return { ok: false, error: "invalid_or_expired" };
+  }
+  if (
+    invitation.status !== "pending" ||
+    invitation.email.trim().toLowerCase() !== inviteEmail ||
+    invitation.role !== payload.role ||
+    Date.parse(invitation.expires_at) <= Date.now()
+  ) {
+    return { ok: false, error: "invalid_or_expired" };
+  }
   const { data: existing, error: fetchErr } = await db
     .from("user_organizations")
     .select("id, revoked_at")
@@ -97,6 +114,21 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteRes
       resourceId: inserted.id,
       metadata: { invite_id: payload.invite_id, role: payload.role },
     });
+  }
+
+  const { error: invitationUpdateError } = await db
+    .from("team_invitations")
+    .update({
+      status: "accepted",
+      accepted_by: user.id,
+      accepted_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("id", payload.invite_id)
+    .eq("organization_id", payload.organization_id)
+    .eq("status", "pending");
+  if (invitationUpdateError) {
+    return { ok: false, error: "internal_error", message: invitationUpdateError.message };
   }
 
   redirect("/app/inbox");

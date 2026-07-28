@@ -28,6 +28,11 @@ Este documento é o ponto de retomada para publicar e homologar as melhorias fei
 - Radar explicado e filtrável;
 - Conexões com diagnóstico de prontidão e explicação da proteção de envio;
 - busca do topo ampliada e Configurações agrupadas por finalidade.
+- busca global real por contatos, conversas, negócios, arquivos e atalhos autorizados;
+- histórico de alterações traduzido, com detalhes técnicos recolhidos;
+- central de saúde do sistema por organização;
+- checklist de implantação que combina verificações automáticas e confirmações manuais;
+- Conexões com última mensagem realmente recebida e enviada por número.
 
 ## Etapa 1 — aplicar o banco
 
@@ -41,6 +46,7 @@ Antes de publicar a aplicação, aplicar em ordem todas as migrations ainda ause
 6. `20260727224000_0089_notification_center.sql`
 7. `20260727225000_0090_pipeline_stage_reorder.sql`
 8. `20260727230000_0091_contact_commercial_profile.sql`
+9. `20260727231000_0092_team_invitations.sql`
 
 Use o mecanismo normal de migrations do projeto. Não copie trechos isolados nem pule arquivos, porque as APIs e as telas dependem desse conjunto.
 
@@ -77,6 +83,8 @@ Depois, revisar a diferença contra `main` e integrar somente após a aplicaçã
 
 ## Etapa 5 — homologação obrigatória
 
+Antes de iniciar, abrir **Configurações > Implantação do cliente**. Os itens automáticos precisam estar concluídos. Marcar backup/restauração e teste ponta a ponta somente depois de comprová-los.
+
 - [ ] login, convite e organização correta;
 - [ ] WhatsApp conecta e reconecta;
 - [ ] mensagem recebida aparece no Inbox;
@@ -105,4 +113,3 @@ O repositório original é apenas `upstream`. Antes de incorporar uma atualizaç
 3. integrar em uma branch separada;
 4. executar testes e build;
 5. nunca fazer merge automático nem editar o container em produção.
-
