@@ -103,8 +103,7 @@ export async function listMessagesHandler(
   const hasMore = rows.length > q.limit;
   const page = hasMore ? rows.slice(0, q.limit) : rows;
   const last = page[page.length - 1];
-  const cursor =
-    hasMore && last ? encodeMsgCursor({ sent_at: last.sent_at, id: last.id }) : null;
+  const cursor = hasMore && last ? encodeMsgCursor({ sent_at: last.sent_at, id: last.id }) : null;
 
   return { messages: page, cursor, has_more: hasMore };
 }
@@ -151,7 +150,11 @@ export async function sendMessageHandler(
     channel_session_id: string;
     is_group: boolean;
     group_chat_id: string | null;
-    contacts: { phone_number: string | null; wa_identity: string | null; is_blocked: boolean } | null;
+    contacts: {
+      phone_number: string | null;
+      wa_identity: string | null;
+      is_blocked: boolean;
+    } | null;
     channel_sessions: { waha_session_name: string; status: string } | null;
   };
   const c = conv as unknown as Joined;
@@ -166,7 +169,10 @@ export async function sendMessageHandler(
     );
   }
 
-  if (input.media_storage_path && !isMediaPathOwnedBy(input.media_storage_path, c.organization_id, c.id)) {
+  if (
+    input.media_storage_path &&
+    !isMediaPathOwnedBy(input.media_storage_path, c.organization_id, c.id)
+  ) {
     throw new ApiError(
       422,
       "invalid_media_path",
@@ -190,11 +196,17 @@ export async function sendMessageHandler(
     media_mime: input.media_mime ?? null,
     media_storage_path: input.media_storage_path ?? null,
     media_size_bytes: input.media_size_bytes ?? null,
-    sent_via: ctx.actor.type === "user" ? ("user" as const) : ctx.actor.type === "ai_agent" ? ("ai" as const) : ("system" as const),
+    sent_via:
+      ctx.actor.type === "user"
+        ? ("user" as const)
+        : ctx.actor.type === "ai_agent"
+          ? ("ai" as const)
+          : ("system" as const),
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {
       ...(input.metadata ?? {}),
+      ...(input.interactive_poll ? { interactive_poll: input.interactive_poll } : {}),
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
     },
   };
@@ -282,6 +294,34 @@ export async function sendMessageHandler(
             caption: input.body ?? null,
           }),
         );
+      } else if (input.interactive_poll) {
+        try {
+          wahaRes = await waha.sendPoll(
+            c.channel_sessions.waha_session_name,
+            chatId,
+            input.body ?? "Escolha uma opção",
+            input.interactive_poll.options,
+            input.interactive_poll.multipleAnswers,
+          );
+        } catch (pollError) {
+          const fallback = [
+            input.body ?? "Escolha uma opção",
+            ...input.interactive_poll.options.map((option, index) => `${index + 1}. ${option}`),
+            "Responda com o número da opção desejada.",
+          ].join("\n");
+          wahaRes = await waha.sendMessage(c.channel_sessions.waha_session_name, chatId, fallback);
+          await supabase
+            .from("messages")
+            .update({
+              body: fallback,
+              metadata: {
+                ...(message.metadata ?? {}),
+                interactive_fallback: true,
+                interactive_error: pollError instanceof Error ? pollError.message : "poll_failed",
+              },
+            })
+            .eq("id", message.id);
+        }
       } else {
         wahaRes = await waha.sendMessage(
           c.channel_sessions.waha_session_name,

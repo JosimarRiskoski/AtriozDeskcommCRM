@@ -12,6 +12,7 @@ interface SendArgs {
   media_storage_path?: string;
   media_size_bytes?: number;
   type?: string;
+  interactive_poll?: { options: string[]; multipleAnswers: boolean };
 }
 
 interface MessagesPage {

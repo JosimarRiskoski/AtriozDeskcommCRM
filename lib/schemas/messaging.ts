@@ -47,6 +47,12 @@ export const sendMessageSchema = z
     media_mime: z.string().optional(),
     media_size_bytes: z.number().int().positive().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
+    interactive_poll: z
+      .object({
+        options: z.array(z.string().trim().min(1).max(100)).min(2).max(12),
+        multipleAnswers: z.boolean().default(false),
+      })
+      .optional(),
   })
   .refine((d) => !!d.body || !!d.media_url || !!d.media_storage_path, {
     message: "body, media_url or media_storage_path required",

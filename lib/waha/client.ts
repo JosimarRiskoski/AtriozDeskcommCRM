@@ -33,14 +33,11 @@ export class WahaClient {
     }
 
     // 2) Start session
-    const startRes = await fetch(
-      `${this.baseUrl}/api/sessions/${encodeURIComponent(name)}/start`,
-      {
-        method: "POST",
-        headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      },
-    );
+    const startRes = await fetch(`${this.baseUrl}/api/sessions/${encodeURIComponent(name)}/start`, {
+      method: "POST",
+      headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
     if (!startRes.ok && startRes.status !== 422 && startRes.status !== 409) {
       const body = await startRes.text().catch(() => "");
       throw new Error(`waha_start_${startRes.status}: ${body.slice(0, 200)}`);
@@ -57,14 +54,11 @@ export class WahaClient {
    * are treated as success so callers can compose reconnect = stop + start.
    */
   async stopSession(name: string): Promise<void> {
-    const res = await fetch(
-      `${this.baseUrl}/api/sessions/${encodeURIComponent(name)}/stop`,
-      {
-        method: "POST",
-        headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      },
-    );
+    const res = await fetch(`${this.baseUrl}/api/sessions/${encodeURIComponent(name)}/stop`, {
+      method: "POST",
+      headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
     if (!res.ok && ![404, 422, 409].includes(res.status)) {
       const body = await res.text().catch(() => "");
       throw new Error(`waha_stop_${res.status}: ${body.slice(0, 200)}`);
@@ -89,6 +83,29 @@ export class WahaClient {
       body: JSON.stringify({ session, chatId, text }),
     });
     if (!res.ok) throw new Error(`waha_${res.status}`);
+    return res.json();
+  }
+
+  async sendPoll(
+    session: string,
+    chatId: string,
+    question: string,
+    options: string[],
+    multipleAnswers = false,
+  ): Promise<unknown> {
+    const res = await fetch(`${this.baseUrl}/api/sendPoll`, {
+      method: "POST",
+      headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session,
+        chatId,
+        poll: { name: question, options, multipleAnswers },
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`waha_poll_${res.status}: ${body.slice(0, 200)}`);
+    }
     return res.json();
   }
 

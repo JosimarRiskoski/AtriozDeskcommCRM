@@ -16,7 +16,8 @@ import { createTemplateSchema } from "@/lib/schemas/templates";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-const COLS = "id, organization_id, owner_user_id, title, body, shortcut, created_by_user_id, created_at, updated_at";
+const COLS =
+  "id, organization_id, owner_user_id, title, body, shortcut, kind, interactive_config, created_by_user_id, created_at, updated_at";
 
 export async function GET(_req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       details: parsed.error.flatten().fieldErrors as Record<string, unknown>,
     });
   }
-  const { title, body, shortcut, shared } = parsed.data;
+  const { title, body, shortcut, shared, kind, interactive_config } = parsed.data;
   // Compartilhado exige manager+. requireRole já resolveu o role efetivo do
   // banco em org.role — reusar em vez de uma 2ª chamada/RPC. A RLS with_check
   // barra de qualquer forma; isto só dá um erro claro antes do insert.
@@ -65,6 +66,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       title,
       body,
       shortcut: shortcut ?? null,
+      kind,
+      interactive_config: kind === "poll" ? interactive_config : null,
       created_by_user_id: user.id,
     })
     .select(COLS)

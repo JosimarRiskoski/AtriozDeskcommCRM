@@ -36,6 +36,8 @@ interface CreateInput {
   body: string;
   shortcut?: string;
   shared?: boolean;
+  kind: "text" | "poll";
+  interactive_config?: { options: string[]; multipleAnswers: boolean } | null;
 }
 
 interface UpdateInput {
@@ -43,6 +45,8 @@ interface UpdateInput {
   title: string;
   body: string;
   shortcut: string | null;
+  kind: "text" | "poll";
+  interactive_config: { options: string[]; multipleAnswers: boolean } | null;
 }
 
 export function TemplateFormDialog({ open, onOpenChange, canShare, template }: Props) {
@@ -51,6 +55,9 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
   const [body, setBody] = React.useState("");
   const [shortcut, setShortcut] = React.useState("");
   const [shared, setShared] = React.useState(false);
+  const [kind, setKind] = React.useState<"text" | "poll">("text");
+  const [pollOptions, setPollOptions] = React.useState<string[]>(["Sim", "Não"]);
+  const [multipleAnswers, setMultipleAnswers] = React.useState(false);
 
   const qc = useQueryClient();
   const create = useMutation({
@@ -69,10 +76,16 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
 
   React.useEffect(() => {
     if (!open) return;
+    // O formulário permanece montado entre aberturas; ao trocar de template,
+    // este reset deliberado impede que dados do item anterior sejam salvos no próximo.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTitle(template?.title ?? "");
     setBody(template?.body ?? "");
     setShortcut(template?.shortcut ?? "");
     setShared(template ? template.owner_user_id === null : false);
+    setKind(template?.kind ?? "text");
+    setPollOptions(template?.interactive_config?.options ?? ["Sim", "Não"]);
+    setMultipleAnswers(template?.interactive_config?.multipleAnswers ?? false);
   }, [open, template]);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -84,6 +97,8 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
           title,
           body,
           shortcut: shortcut.trim() || null,
+          kind,
+          interactive_config: kind === "poll" ? { options: pollOptions, multipleAnswers } : null,
         });
         toast.success("Template atualizado.");
       } else {
@@ -92,6 +107,8 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
           body,
           shortcut: shortcut.trim() || undefined,
           shared: canShare ? shared : false,
+          kind,
+          interactive_config: kind === "poll" ? { options: pollOptions, multipleAnswers } : null,
         });
         toast.success("Template criado.");
       }
@@ -118,6 +135,29 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
+            <Label>Formato</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={kind === "text" ? "secondary" : "outline"}
+                onClick={() => setKind("text")}
+              >
+                Texto
+              </Button>
+              <Button
+                type="button"
+                variant={kind === "poll" ? "secondary" : "outline"}
+                onClick={() => setKind("poll")}
+              >
+                Enquete interativa
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A enquete usa o recurso nativo do WhatsApp. Se o provedor recusar, o sistema envia
+              automaticamente as opções numeradas em texto.
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="tpl-title">Título</Label>
             <Input
               id="tpl-title"
@@ -129,6 +169,58 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               required
             />
           </div>
+          {kind === "poll" && (
+            <div className="space-y-3 rounded-md border p-3">
+              <div>
+                <Label>Opções da enquete</Label>
+                <p className="text-xs text-muted-foreground">Mínimo 2 e máximo 12 opções.</p>
+              </div>
+              {pollOptions.map((option, index) => (
+                <div key={index} className="flex gap-2">
+                  <Input
+                    value={option}
+                    onChange={(e) =>
+                      setPollOptions((current) =>
+                        current.map((value, i) => (i === index ? e.target.value : value)),
+                      )
+                    }
+                    placeholder={`Opção ${index + 1}`}
+                    maxLength={100}
+                    required
+                  />
+                  {pollOptions.length > 2 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() =>
+                        setPollOptions((current) => current.filter((_, i) => i !== index))
+                      }
+                    >
+                      Remover
+                    </Button>
+                  )}
+                </div>
+              ))}
+              {pollOptions.length < 12 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPollOptions((current) => [...current, ""])}
+                >
+                  Adicionar opção
+                </Button>
+              )}
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="poll-multiple"
+                  checked={multipleAnswers}
+                  onCheckedChange={setMultipleAnswers}
+                />
+                <Label htmlFor="poll-multiple">Permitir mais de uma resposta</Label>
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="tpl-body">Mensagem</Label>
             <Textarea
@@ -141,7 +233,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               required
               rows={5}
             />
-            <div className="rounded-md border bg-muted/30 p-3">
+            <div className="bg-muted/30 rounded-md border p-3">
               <p className="mb-2 text-xs font-medium">Variáveis disponíveis</p>
               <div className="flex flex-wrap gap-2">
                 {["{{primeiro_nome}}", "{{nome}}"].map((variable) => (

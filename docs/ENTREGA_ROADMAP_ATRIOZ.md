@@ -36,6 +36,7 @@ Este documento é o ponto de retomada para publicar e homologar as melhorias fei
 - convites de equipe persistidos, com estados, reenvio e cancelamento;
 - Desempenho com período selecionável, origem dos cálculos e separação entre mensagens registradas, entregues, lidas e falhas;
 - Memória da IA com criação, histórico, edição, arquivamento, reativação e remoção auditada.
+- respostas rápidas em formato de enquete do WhatsApp, com opções persistidas, voto recebido no Inbox e fallback automático para texto numerado;
 
 ## Etapa 1 — aplicar o banco
 
@@ -51,6 +52,7 @@ Antes de publicar a aplicação, aplicar em ordem todas as migrations ainda ause
 8. `20260727230000_0091_contact_commercial_profile.sql`
 9. `20260727231000_0092_team_invitations.sql`
 10. `20260727232000_0093_metrics_message_delivery.sql`
+11. `20260727233000_0094_interactive_poll_templates.sql`
 
 Use o mecanismo normal de migrations do projeto. Não copie trechos isolados nem pule arquivos, porque as APIs e as telas dependem desse conjunto.
 
@@ -98,6 +100,7 @@ Antes de iniciar, abrir **Configurações > Implantação do cliente**. Os itens
 - [ ] IA pode ser pausada globalmente, ativada somente para um contato e devolvida ao atendimento normal;
 - [ ] erro do provedor de IA não é enviado ao cliente;
 - [ ] resposta rápida substitui as variáveis corretamente;
+- [ ] enquete chega no WhatsApp, o voto volta ao Inbox e uma falha do recurso envia as opções em texto;
 - [ ] mensagem registrada, entregue, lida e falha aparecem separadamente em Desempenho;
 - [ ] aprendizado da IA pode ser criado, editado, arquivado, reativado e removido;
 - [ ] follow-up manual inicia e para quando o contato responde;

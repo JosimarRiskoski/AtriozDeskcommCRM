@@ -88,8 +88,16 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
                     <Badge variant={template.owner_user_id ? "neutral" : "default"}>
                       {template.owner_user_id ? "Pessoal" : "Compartilhado"}
                     </Badge>
+                    <Badge variant={template.kind === "poll" ? "info" : "neutral"}>
+                      {template.kind === "poll" ? "Enquete" : "Texto"}
+                    </Badge>
                   </div>
                   <p className="line-clamp-2 text-sm text-muted-foreground">{template.body}</p>
+                  {template.kind === "poll" && template.interactive_config && (
+                    <p className="text-xs text-muted-foreground">
+                      Opções: {template.interactive_config.options.join(" · ")}
+                    </p>
+                  )}
                 </div>
                 {canModify && (
                   <div className="flex shrink-0 gap-1">

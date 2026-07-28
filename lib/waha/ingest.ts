@@ -47,6 +47,15 @@ export interface WahaPayload {
     /** NOWEB: o conteúdo real (imageMessage, stickerMessage, …) — fonte do tipo. */
     message?: Record<string, unknown>;
   } & Record<string, unknown>;
+  vote?: {
+    id?: string;
+    to?: string;
+    from?: string;
+    fromMe?: boolean;
+    selectedOptions?: string[];
+    timestamp?: number;
+  };
+  poll?: { id?: string };
 }
 
 export interface WahaEnvelope {
@@ -80,11 +89,7 @@ export function parseChatId(chatId: string): ChatIdentity {
 
 const STOP_RX = /\b(STOP|PARAR|SAIR|UNSUBSCRIBE)\b/i;
 
-export function verifyHmacSha512(
-  rawBody: string,
-  signatureHeader: string | null,
-  secret: string,
-): boolean {
+export function verifyHmacSha512(rawBody: string, signatureHeader: string | null, secret: string): boolean {
   if (!signatureHeader) return false;
   const expected = createHmac("sha512", secret).update(rawBody, "utf8").digest("hex");
   const got = signatureHeader.replace(/^sha512=/i, "").trim();
@@ -191,14 +196,17 @@ async function upsertContact(
   notifyName: string | null,
 ): Promise<string | null> {
   if (parsed.kind === "group") return null;
-  const { data, error } = await admin.rpc("fn_upsert_wa_contact" as never, {
-    p_org: orgId,
-    p_kind: parsed.kind,
-    p_phone: parsed.kind === "phone" ? parsed.phone : null,
-    p_lid: parsed.kind === "lid" ? parsed.lid : null,
-    p_chat_id: chatId,
-    p_notify: notifyName,
-  } as never);
+  const { data, error } = await admin.rpc(
+    "fn_upsert_wa_contact" as never,
+    {
+      p_org: orgId,
+      p_kind: parsed.kind,
+      p_phone: parsed.kind === "phone" ? parsed.phone : null,
+      p_lid: parsed.kind === "lid" ? parsed.lid : null,
+      p_chat_id: chatId,
+      p_notify: notifyName,
+    } as never,
+  );
   if (error) {
     console.error("[waha.ingest] fn_upsert_wa_contact failed", error.message);
     return null;
@@ -212,11 +220,14 @@ async function upsertConversation(
   contactId: string,
   sessionId: string,
 ): Promise<string | null> {
-  const { data, error } = await admin.rpc("fn_upsert_wa_conversation" as never, {
-    p_org: orgId,
-    p_contact: contactId,
-    p_session: sessionId,
-  } as never);
+  const { data, error } = await admin.rpc(
+    "fn_upsert_wa_conversation" as never,
+    {
+      p_org: orgId,
+      p_contact: contactId,
+      p_session: sessionId,
+    } as never,
+  );
   if (error) {
     console.error("[waha.ingest] fn_upsert_wa_conversation failed", error.message);
     return null;
@@ -251,25 +262,31 @@ async function markConversation(
   preview: string,
   at: string,
 ): Promise<void> {
-  const { error } = await admin.rpc("fn_mark_conversation_message" as never, {
-    p_conv: convId,
-    p_direction: direction,
-    p_preview: preview,
-    p_at: at,
-  } as never);
+  const { error } = await admin.rpc(
+    "fn_mark_conversation_message" as never,
+    {
+      p_conv: convId,
+      p_direction: direction,
+      p_preview: preview,
+      p_at: at,
+    } as never,
+  );
   if (!error) return;
 
-  const { error: erroAviso } = await admin.rpc("emit_event" as never, {
-    p_event_type: "whatsapp.conversation_mark_failed",
-    p_entity_kind: "conversation",
-    p_entity_id: convId,
-    // O preview NÃO entra no payload: ele é o texto da mensagem do cliente, e
-    // isto é registro operacional, não cópia de conteúdo. O que se precisa
-    // saber para agir é qual conversa, que sentido, e o erro.
-    p_payload: { direction, erro: error.message },
-    p_metadata: { severity: "warn" },
-    p_organization_id: organizationId,
-  } as never);
+  const { error: erroAviso } = await admin.rpc(
+    "emit_event" as never,
+    {
+      p_event_type: "whatsapp.conversation_mark_failed",
+      p_entity_kind: "conversation",
+      p_entity_id: convId,
+      // O preview NÃO entra no payload: ele é o texto da mensagem do cliente, e
+      // isto é registro operacional, não cópia de conteúdo. O que se precisa
+      // saber para agir é qual conversa, que sentido, e o erro.
+      p_payload: { direction, erro: error.message },
+      p_metadata: { severity: "warn" },
+      p_organization_id: organizationId,
+    } as never,
+  );
 
   if (erroAviso) {
     // Segunda linha de defesa: o próprio canal de aviso caiu. Aqui o log do
@@ -285,12 +302,7 @@ async function markConversation(
 /**
  * Mensagem recebida (fromMe=false). Contato = remetente (`from`).
  */
-async function handleInbound(
-  admin: Admin,
-  session: Session,
-  p: WahaPayload,
-  requestId: string,
-): Promise<void> {
+async function handleInbound(admin: Admin, session: Session, p: WahaPayload, requestId: string): Promise<void> {
   const chatId = p.from ?? "";
   const parsed = parseChatId(chatId);
   if (parsed.kind === "group") return; // grupos não fazem binding CRM
@@ -322,7 +334,12 @@ async function handleInbound(
       sent_via: "external_device",
       sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
       delivered_at: now,
-      metadata: { raw_type: p.type, ack_name: p.ackName },
+      metadata: {
+        raw_type: p.type,
+        ack_name: p.ackName,
+        ...(p._data?.poll_id ? { poll_id: p._data.poll_id } : {}),
+        ...(p._data?.poll_vote ? { poll_vote: true } : {}),
+      },
     })
     .select("id")
     .maybeSingle();
@@ -339,11 +356,14 @@ async function handleInbound(
   // A resposta encerra a participação deste destinatário na campanha sem
   // disparar novamente nem esperar o restante da conversa. O vínculo é pelo
   // contato/conversa já normalizados pelo mesmo ingest do Inbox.
-  await admin.rpc("fn_mark_campaign_recipient_replied" as never, {
-    p_org: session.organization_id,
-    p_contact: contactId,
-    p_conversation: conversationId,
-  } as never);
+  await admin.rpc(
+    "fn_mark_campaign_recipient_replied" as never,
+    {
+      p_org: session.organization_id,
+      p_contact: contactId,
+      p_conversation: conversationId,
+    } as never,
+  );
 
   if (p.body && STOP_RX.test(p.body)) {
     await admin
@@ -371,52 +391,61 @@ async function handleInbound(
   if (insertedMessage?.id) {
     const inboundMessageId = insertedMessage.id;
     admin
-      .rpc("emit_event" as never, {
-        p_event_type: "ai_agent.dispatch_requested",
-        p_entity_kind: "message",
-        p_entity_id: inboundMessageId,
-        p_payload: {
-          organization_id: session.organization_id,
-          conversation_id: conversationId,
-          contact_id: contactId,
-          channel_session_id: session.id,
-          inbound_message_id: inboundMessageId,
-        },
-        p_metadata: { source: "waha_webhook", request_id: requestId },
-        p_organization_id: session.organization_id,
-      } as never)
+      .rpc(
+        "emit_event" as never,
+        {
+          p_event_type: "ai_agent.dispatch_requested",
+          p_entity_kind: "message",
+          p_entity_id: inboundMessageId,
+          p_payload: {
+            organization_id: session.organization_id,
+            conversation_id: conversationId,
+            contact_id: contactId,
+            channel_session_id: session.id,
+            inbound_message_id: inboundMessageId,
+          },
+          p_metadata: { source: "waha_webhook", request_id: requestId },
+          p_organization_id: session.organization_id,
+        } as never,
+      )
       .then(({ error }) => {
         if (error) console.error("[waha.ingest] emit dispatch_requested failed", error.message);
       });
 
     admin
-      .rpc("emit_event" as never, {
-        p_event_type: "message.received",
-        p_entity_kind: "message",
-        p_entity_id: inboundMessageId,
-        p_payload: {
-          conversation_id: conversationId,
-          contact_id: contactId,
-          channel_session_id: session.id,
-          body_preview: (p.body ?? "").slice(0, 280),
-        },
-        p_metadata: { source: "waha_webhook", request_id: requestId },
-        p_organization_id: session.organization_id,
-      } as never)
+      .rpc(
+        "emit_event" as never,
+        {
+          p_event_type: "message.received",
+          p_entity_kind: "message",
+          p_entity_id: inboundMessageId,
+          p_payload: {
+            conversation_id: conversationId,
+            contact_id: contactId,
+            channel_session_id: session.id,
+            body_preview: (p.body ?? "").slice(0, 280),
+          },
+          p_metadata: { source: "waha_webhook", request_id: requestId },
+          p_organization_id: session.organization_id,
+        } as never,
+      )
       .then(({ error }) => {
         if (error) console.error("[waha.ingest] emit message.received failed", error.message);
       });
 
     if (mediaUrlOf(p)) {
       admin
-        .rpc("emit_event" as never, {
-          p_event_type: "media.persist_requested",
-          p_entity_kind: "message",
-          p_entity_id: inboundMessageId,
-          p_payload: { message_id: inboundMessageId, conversation_id: conversationId },
-          p_metadata: { source: "waha_webhook", request_id: requestId },
-          p_organization_id: session.organization_id,
-        } as never)
+        .rpc(
+          "emit_event" as never,
+          {
+            p_event_type: "media.persist_requested",
+            p_entity_kind: "message",
+            p_entity_id: inboundMessageId,
+            p_payload: { message_id: inboundMessageId, conversation_id: conversationId },
+            p_metadata: { source: "waha_webhook", request_id: requestId },
+            p_organization_id: session.organization_id,
+          } as never,
+        )
         .then(({ error }) => {
           if (error) console.error("[waha.ingest] emit media.persist_requested failed", error.message);
         });
@@ -481,19 +510,27 @@ async function handleOutboundFromUserPhone(
     organizationId: session.organization_id,
     resourceType: "message",
     requestId,
-    metadata: { conversation_id: conversationId, type: p.type, external_id: p.id, from_user_phone: true },
+    metadata: {
+      conversation_id: conversationId,
+      type: p.type,
+      external_id: p.id,
+      from_user_phone: true,
+    },
   });
 
   if (insertedOutbound?.id && mediaUrlOf(p)) {
     admin
-      .rpc("emit_event" as never, {
-        p_event_type: "media.persist_requested",
-        p_entity_kind: "message",
-        p_entity_id: insertedOutbound.id,
-        p_payload: { message_id: insertedOutbound.id, conversation_id: conversationId },
-        p_metadata: { source: "waha_webhook", request_id: requestId },
-        p_organization_id: session.organization_id,
-      } as never)
+      .rpc(
+        "emit_event" as never,
+        {
+          p_event_type: "media.persist_requested",
+          p_entity_kind: "message",
+          p_entity_id: insertedOutbound.id,
+          p_payload: { message_id: insertedOutbound.id, conversation_id: conversationId },
+          p_metadata: { source: "waha_webhook", request_id: requestId },
+          p_organization_id: session.organization_id,
+        } as never,
+      )
       .then(({ error }) => {
         if (error) console.error("[waha.ingest] emit media.persist_requested failed", error.message);
       });
@@ -528,11 +565,7 @@ interface SessionStatusRow extends Session {
   warmup_started_at: string | null;
 }
 
-async function handleSessionStatus(
-  admin: Admin,
-  session: SessionStatusRow,
-  p: WahaPayload,
-): Promise<void> {
+async function handleSessionStatus(admin: Admin, session: SessionStatusRow, p: WahaPayload): Promise<void> {
   const status = (p.status ?? "").toUpperCase() || null;
   if (!status) return;
   const allowed = new Set(["STARTING", "SCAN_QR_CODE", "WORKING", "STOPPED", "FAILED"]);
@@ -565,6 +598,26 @@ export async function dispatchWahaEvent(
       await handleOutboundFromUserPhone(admin, session, payload, requestId);
     } else {
       await handleInbound(admin, session, payload, requestId);
+    }
+  } else if (eventType === "poll.vote" || eventType === "poll.vote.failed") {
+    const vote = payload.vote;
+    const options = vote?.selectedOptions ?? [];
+    if (vote && options.length > 0) {
+      await handleInbound(
+        admin,
+        session,
+        {
+          id: vote.id,
+          from: vote.from,
+          to: vote.to,
+          fromMe: vote.fromMe,
+          body: options.join(", "),
+          type: "text",
+          timestamp: vote.timestamp,
+          _data: { poll_vote: true, poll_id: payload.poll?.id ?? null },
+        },
+        requestId,
+      );
     }
   } else if (eventType === "message.ack") {
     await handleAck(admin, session, payload);

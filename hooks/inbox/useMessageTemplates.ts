@@ -8,6 +8,8 @@ export interface MessageTemplate {
   body: string;
   shortcut: string | null;
   owner_user_id: string | null;
+  kind: "text" | "poll";
+  interactive_config: { options: string[]; multipleAnswers: boolean } | null;
 }
 
 /** Onda 5: templates de script (pessoais + compartilhados) para o slash-menu do composer. */

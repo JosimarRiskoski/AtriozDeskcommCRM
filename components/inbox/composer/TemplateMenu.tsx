@@ -30,7 +30,9 @@ export function TemplateMenu({ open, query, templates, onPick, onClose: _onClose
       aria-label="Templates de script"
     >
       {filtered.length === 0 ? (
-        <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum template. Crie em Configurações.</div>
+        <div className="px-3 py-2 text-xs text-muted-foreground">
+          Nenhum template. Crie em Configurações.
+        </div>
       ) : (
         filtered.map((t) => (
           <button
@@ -41,6 +43,11 @@ export function TemplateMenu({ open, query, templates, onPick, onClose: _onClose
           >
             <span className="text-sm font-medium">{t.title}</span>
             <span className="line-clamp-1 text-xs text-muted-foreground">{t.body}</span>
+            {t.kind === "poll" && (
+              <span className="text-[10px] font-medium uppercase tracking-wide text-info-fg">
+                Enquete · fallback em texto
+              </span>
+            )}
           </button>
         ))
       )}

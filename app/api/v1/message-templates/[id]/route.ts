@@ -16,7 +16,8 @@ import { updateTemplateSchema } from "@/lib/schemas/templates";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-const COLS = "id, organization_id, owner_user_id, title, body, shortcut, created_by_user_id, created_at, updated_at";
+const COLS =
+  "id, organization_id, owner_user_id, title, body, shortcut, kind, interactive_config, created_by_user_id, created_at, updated_at";
 
 interface RouteParams {
   params: Promise<{ id: string }>;

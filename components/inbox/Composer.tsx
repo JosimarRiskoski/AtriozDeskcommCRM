@@ -38,6 +38,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [interactivePoll, setInteractivePoll] =
+    useState<MessageTemplate["interactive_config"]>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const send = useSendMessage();
   const upload = useUploadMedia();
@@ -76,10 +78,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       return;
     }
     send.mutate(
-      { conversation_id: conversationId, body, type: "text" },
+      {
+        conversation_id: conversationId,
+        body,
+        type: "text",
+        ...(interactivePoll ? { interactive_poll: interactivePoll } : {}),
+      },
       {
         onSuccess: () => {
           setText("");
+          setInteractivePoll(null);
           requestAnimationFrame(() => autoresize());
         },
       },
@@ -89,6 +97,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   function applyTemplate(t: MessageTemplate) {
     const filled = interpolateTemplate(t.body, { name: contactName ?? null });
     setText(filled);
+    setInteractivePoll(t.kind === "poll" ? t.interactive_config : null);
     setMenuDismissed(true);
     const ta = taRef.current;
     if (!ta) return;
@@ -124,7 +133,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   if (blockedReason) {
     return (
-      <div className="border-t border-border bg-muted/40 px-4 py-3 text-center text-xs text-muted-foreground">
+      <div className="bg-muted/40 border-t border-border px-4 py-3 text-center text-xs text-muted-foreground">
         {blockedReason}
       </div>
     );
@@ -188,7 +197,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             </Button>
           )}
           {mode === "reply" && (
-            <DraftReplyButton conversationId={conversationId} disabled={isDisabled} onDraft={applyDraft} />
+            <DraftReplyButton
+              conversationId={conversationId}
+              disabled={isDisabled}
+              onDraft={applyDraft}
+            />
           )}
           <EmojiButton
             disabled={isDisabled}
@@ -214,6 +227,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             value={text}
             onChange={(e) => {
               setText(e.target.value);
+              setInteractivePoll(null);
               if (!resolveSlash(e.target.value).open) setMenuDismissed(false);
               autoresize();
             }}
@@ -225,12 +239,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 : "Escreva uma mensagem… (Enter envia, Shift+Enter quebra linha)"
             }
             className={cn(
-              "min-h-9 max-h-40 flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm",
+              "max-h-40 min-h-9 flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm",
               "placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring",
             )}
             disabled={isDisabled}
             aria-label="Mensagem"
           />
+          {interactivePoll && (
+            <span className="absolute bottom-full right-3 mb-1 rounded-full bg-info-bg px-2 py-1 text-[11px] text-info-fg">
+              Enquete · {interactivePoll.options.length} opções
+            </span>
+          )}
           {text.trim() || mode === "note" ? (
             <Button
               type="button"

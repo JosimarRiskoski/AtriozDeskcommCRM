@@ -47,6 +47,24 @@ describe("sendMessageSchema", () => {
     });
     expect(r.success).toBe(false);
   });
+
+  it("aceita enquete com opções válidas", () => {
+    const r = sendMessageSchema.safeParse({
+      conversation_id: "11111111-1111-4111-8111-111111111111",
+      body: "Qual horário você prefere?",
+      interactive_poll: { options: ["Manhã", "Tarde"], multipleAnswers: false },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejeita enquete com uma única opção", () => {
+    const r = sendMessageSchema.safeParse({
+      conversation_id: "11111111-1111-4111-8111-111111111111",
+      body: "Escolha",
+      interactive_poll: { options: ["Somente esta"], multipleAnswers: false },
+    });
+    expect(r.success).toBe(false);
+  });
 });
 
 describe("listConversationsQuerySchema", () => {
