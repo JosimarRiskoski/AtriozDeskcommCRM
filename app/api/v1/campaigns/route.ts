@@ -23,6 +23,18 @@ const configSchema = z.object({
   ai_mode: z.enum(["paused", "inherit", "active"]).default("paused"),
 });
 
+export async function GET(): Promise<Response> {
+  const requestId = randomUUID();
+  const authz = await requireRole("manager", { requestId, resource: "outreach_campaigns" });
+  if (!authz.ok) return authz.response;
+  const admin = createAdminClient() as unknown as SupabaseClient;
+  const { data, error } = await admin.from("outreach_campaigns")
+    .select("id,name,status,text_template,audio_storage_path,interval_seconds,ai_mode,scheduled_for,next_dispatch_at,created_at,outreach_campaign_recipients(count)")
+    .eq("organization_id", authz.org.orgId).order("created_at", { ascending: false }).limit(100);
+  if (error) return fail("internal_error", "Não foi possível listar as campanhas.", 500, { requestId });
+  return ok(data ?? [], { requestId });
+}
+
 export async function POST(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const authz = await requireRole("manager", { requestId, resource: "outreach_campaigns" });

@@ -190,7 +190,7 @@ export async function sendMessageHandler(
     media_mime: input.media_mime ?? null,
     media_storage_path: input.media_storage_path ?? null,
     media_size_bytes: input.media_size_bytes ?? null,
-    sent_via: ctx.actor.type !== "user" ? ("ai" as const) : ("user" as const),
+    sent_via: ctx.actor.type === "user" ? ("user" as const) : ctx.actor.type === "ai_agent" ? ("ai" as const) : ("system" as const),
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {

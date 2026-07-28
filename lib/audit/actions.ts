@@ -63,6 +63,7 @@ export type AuditAction =
   | "ai.paused_by_agent"
   | "ai.contact_control_changed"
   | "campaign.created"
+  | "campaign.worker_run"
   | "conversation.usable_for_rag_toggled"
   | "rag.conversations_batch_run"
   | "lgpd.redact_received"
