@@ -49,8 +49,12 @@ x-logging: &default-logging
 
 services:
   app:
-    image: ${APP_IMAGE:-ghcr.io/melgarafael/deskcommcrm:latest}
-    pull_policy: always
+    # Build the application from this repository. Using the upstream `latest`
+    # image here silently discarded every customization made in the Atrioz
+    # fork whenever EasyPanel redeployed the stack.
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment: *runtime-environment
     depends_on:
       srh:
