@@ -42,6 +42,7 @@ const AGENT: PublishedAgentConfig = {
   multimodalInput: false,
   casesEnabled: false,
   toolIds: [],
+  contactFieldAccess: {},
   activeKbVersionId: null,
   ragTopK: 5,
   ragSimilarityThreshold: 0.72,
@@ -49,14 +50,21 @@ const AGENT: PublishedAgentConfig = {
   agentCreatedBy: null,
 };
 
-function contextResult(overrides: Partial<LeadContextResult & { ok: true }> = {}): LeadContextResult {
+function contextResult(
+  overrides: Partial<LeadContextResult & { ok: true }> = {},
+): LeadContextResult {
   return {
     ok: true,
     tokenCount: 42,
     lgpd: {
       isAnonymized: false,
       isProspecting: false,
-      legalBasis: { basis: null, legalBasisRef: null, consentGranted: false, dataOrigin: "whatsapp" },
+      legalBasis: {
+        basis: null,
+        legalBasisRef: null,
+        consentGranted: false,
+        dataOrigin: "whatsapp",
+      },
     },
     context: {
       lead_id: input.leadId,
@@ -64,7 +72,11 @@ function contextResult(overrides: Partial<LeadContextResult & { ok: true }> = {}
       conversation_id: input.conversationId,
       last_human_decision: null,
       messages: [
-        { direction: "inbound", body: "Oi, quero saber o preço do produto X.", sent_at: "2026-07-22T10:00:00Z" },
+        {
+          direction: "inbound",
+          body: "Oi, quero saber o preço do produto X.",
+          sent_at: "2026-07-22T10:00:00Z",
+        },
       ],
     },
     ...overrides,
@@ -139,7 +151,12 @@ describe("generateDraftReply", () => {
         lgpd: {
           isAnonymized: true,
           isProspecting: false,
-          legalBasis: { basis: null, legalBasisRef: null, consentGranted: false, dataOrigin: "whatsapp" },
+          legalBasis: {
+            basis: null,
+            legalBasisRef: null,
+            consentGranted: false,
+            dataOrigin: "whatsapp",
+          },
         },
       }),
     );

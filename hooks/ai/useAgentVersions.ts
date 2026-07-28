@@ -14,6 +14,7 @@ export interface AgentVersionRow {
   model: string;
   credential_id: string;
   tool_ids: string[];
+  contact_field_access: Record<string, "none" | "read" | "write">;
   trigger_config: Record<string, unknown> | null;
   channel_session_id: string;
   max_steps: number;
@@ -36,8 +37,7 @@ interface ListResponse {
   data: AgentVersionRow[];
 }
 
-export const agentVersionsKey = (agentId: string) =>
-  ["ai", "agents", agentId, "versions"] as const;
+export const agentVersionsKey = (agentId: string) => ["ai", "agents", agentId, "versions"] as const;
 
 export function useAgentVersions(agentId: string, opts?: { initialData?: AgentVersionRow[] }) {
   return useQuery({

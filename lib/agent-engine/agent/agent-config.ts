@@ -13,7 +13,7 @@
  *   - sem agente publicado para a sessão ⇒ null (o turno cai no comportamento
  *     de fallback: playbook por ponteiro + settings.llm da org + knobs de env).
  */
-import type pg from 'pg';
+import type pg from "pg";
 
 export interface PublishedAgentConfig {
   agentId: string;
@@ -36,6 +36,8 @@ export interface PublishedAgentConfig {
   casesEnabled: boolean;
   /** tool_ids do catálogo MCP habilitadas na tela (2B-tools). */
   toolIds: string[];
+  /** Acesso comercial por campo: none, read ou write. */
+  contactFieldAccess: Record<string, "none" | "read" | "write">;
   /** KB ativa do agente (ai_agents.active_kb_version_id) — null = sem RAG. */
   activeKbVersionId: string | null;
   /** knobs de RAG do ai_agents.config (defaults do guardrails-schema: 5 / 0.72). */
@@ -64,6 +66,7 @@ interface Row {
   multimodal_input: boolean;
   cases_enabled: boolean;
   tool_ids: string[] | null;
+  contact_field_access: Record<string, "none" | "read" | "write"> | null;
   active_kb_version_id: string | null;
   config: Record<string, unknown> | null;
   version_created_by: string | null;
@@ -93,6 +96,7 @@ export async function loadPublishedAgentConfig(
             v.multimodal_input,
             v.cases_enabled,
             v.tool_ids,
+            v.contact_field_access,
             a.active_kb_version_id,
             a.config,
             v.created_by as version_created_by,
@@ -115,11 +119,16 @@ export async function loadPublishedAgentConfig(
 
   const cfg = (r.config ?? {}) as { rag_top_k?: unknown; rag_similarity_threshold?: unknown };
   const ragTopK =
-    typeof cfg.rag_top_k === 'number' && Number.isInteger(cfg.rag_top_k) && cfg.rag_top_k >= 1 && cfg.rag_top_k <= 20
+    typeof cfg.rag_top_k === "number" &&
+    Number.isInteger(cfg.rag_top_k) &&
+    cfg.rag_top_k >= 1 &&
+    cfg.rag_top_k <= 20
       ? cfg.rag_top_k
       : 5;
   const ragSimilarityThreshold =
-    typeof cfg.rag_similarity_threshold === 'number' && cfg.rag_similarity_threshold >= 0 && cfg.rag_similarity_threshold <= 1
+    typeof cfg.rag_similarity_threshold === "number" &&
+    cfg.rag_similarity_threshold >= 0 &&
+    cfg.rag_similarity_threshold <= 1
       ? cfg.rag_similarity_threshold
       : 0.72;
 
@@ -134,13 +143,16 @@ export async function loadPublishedAgentConfig(
     maxSteps: r.max_steps,
     historyMessageWindow: r.history_message_window,
     historyTokenWindow: r.history_token_window,
-    handoffKeywords: (r.handoff_keywords ?? []).map((k) => k.toLowerCase().trim()).filter((k) => k !== ''),
+    handoffKeywords: (r.handoff_keywords ?? [])
+      .map((k) => k.toLowerCase().trim())
+      .filter((k) => k !== ""),
     handoffToolEnabled: r.handoff_tool_enabled,
     splitMessages: r.split_messages,
     splitMaxChars: r.split_max_chars,
     multimodalInput: r.multimodal_input,
     casesEnabled: r.cases_enabled,
     toolIds: r.tool_ids ?? [],
+    contactFieldAccess: r.contact_field_access ?? {},
     activeKbVersionId: r.active_kb_version_id,
     ragTopK,
     ragSimilarityThreshold,

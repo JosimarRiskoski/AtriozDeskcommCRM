@@ -90,6 +90,10 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 | `20260727224000` | `0089_notification_center` | Central real multi-organização: eventos acionáveis, preferências por usuário para CRM/e-mail, lido/não lido, fan-out, fila Resend com claim/lease/retry e gatilhos para cliente novo, handoff, arquivos, falha de envio/IA/WhatsApp, campanha e resultado/atribuição de negócio. Push permanece oculto até existir entrega real. |
 | `20260727225000` | `0090_pipeline_stage_reorder` | Reordenação atômica de funis e etapas, com autorização administrativa e bloqueio de linhas; troca posições sem colisão de unicidade e sem depender de atualizações parciais do navegador. |
 | `20260727230000` | `0091_contact_commercial_profile` | Perfil comercial estruturado do contato (empresa, cidade, UF e campos personalizados) compartilhado pela tela humana e ferramentas restritas da IA, sem misturar consentimento, CPF ou controles administrativos. |
+| `20260727231000` | `0092_team_invitations` | Convites de equipe auditáveis com papel definido, expiração, aceite seguro e isolamento por organização. |
+| `20260727232000` | `0093_metrics_message_delivery` | Métricas operacionais de entrega de mensagens e desempenho com dados reais e escopo por organização. |
+| `20260727233000` | `0094_interactive_poll_templates` | Templates interativos de enquete com fallback textual para provedores ou clientes sem suporte. |
+| `20260727234000` | `0095_ai_contact_field_access` | Permissões imutáveis por versão do agente e por campo comercial do contato: sem acesso, somente leitura ou leitura e alteração. |
 
 ## Reproducibility
 

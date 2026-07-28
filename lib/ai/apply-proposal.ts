@@ -31,7 +31,7 @@ export type ApplyProposalErrorCode =
 
 /** Colunas copiadas da versão publicada para a nova (conteúdo imutável — cópia integral). */
 const VERSION_COPY_COLUMNS =
-  "id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled";
+  "id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled";
 
 export async function applyProposal(
   admin: SupabaseClient,
@@ -142,6 +142,7 @@ export async function applyProposal(
       model: base.model,
       credential_id: base.credential_id,
       tool_ids: base.tool_ids,
+      contact_field_access: base.contact_field_access,
       trigger_config: base.trigger_config ?? undefined,
       channel_session_id: base.channel_session_id,
       max_steps: base.max_steps,
@@ -186,7 +187,11 @@ export async function applyProposal(
     .eq("organization_id", orgId)
     .is("applied_at", null);
   if (markErr) {
-    return { ok: false, code: "internal_error", message: "Versão publicada, mas falhou ao marcar a proposta." };
+    return {
+      ok: false,
+      code: "internal_error",
+      message: "Versão publicada, mas falhou ao marcar a proposta.",
+    };
   }
 
   return { ok: true, versionId: created.id, versionNumber: created.version_number };

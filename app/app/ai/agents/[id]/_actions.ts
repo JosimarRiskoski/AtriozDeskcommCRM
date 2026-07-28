@@ -35,11 +35,10 @@ import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
 
 type ActionResult<T = void> =
-  | { ok: true; data?: T }
-  | { ok: false; error: string; message?: string; details?: unknown };
+  { ok: true; data?: T } | { ok: false; error: string; message?: string; details?: unknown };
 
 async function ensureAdmin() {
   const authUser = await loadAuthUser();
@@ -160,6 +159,7 @@ export async function saveAgentDraftAction(
         model: v.model,
         credential_id: v.credential_id,
         tool_ids: v.tool_ids,
+        contact_field_access: v.contact_field_access,
         trigger_config: v.trigger_config ?? undefined,
         channel_session_id: v.channel_session_id,
         max_steps: v.max_steps,
@@ -341,6 +341,7 @@ export async function revertToVersionAction(
     model: string;
     credential_id: string;
     tool_ids: string[];
+    contact_field_access: Record<string, "none" | "read" | "write">;
     trigger_config: Record<string, unknown> | null;
     channel_session_id: string;
     max_steps: number;
@@ -378,6 +379,7 @@ export async function revertToVersionAction(
         model: src.model,
         credential_id: src.credential_id,
         tool_ids: src.tool_ids,
+        contact_field_access: src.contact_field_access,
         trigger_config: src.trigger_config ?? undefined,
         channel_session_id: src.channel_session_id,
         max_steps: src.max_steps,
@@ -521,6 +523,7 @@ export async function createMcpAgentAction(
     model: v.model,
     credential_id: v.credential_id,
     tool_ids: v.tool_ids,
+    contact_field_access: v.contact_field_access,
     trigger_config: v.trigger_config ?? undefined,
     channel_session_id: v.channel_session_id,
     max_steps: v.max_steps,

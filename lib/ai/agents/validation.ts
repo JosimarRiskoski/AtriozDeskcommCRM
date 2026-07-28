@@ -34,8 +34,15 @@ const triggerConfigSchema = z
           .optional()
           .default(null),
       })
-      .default({ ignore_groups: true, ignore_self: true, keyword_regex: null, business_hours: null }),
-    concurrency: z.enum(["one_per_conversation", "one_per_contact"]).default("one_per_conversation"),
+      .default({
+        ignore_groups: true,
+        ignore_self: true,
+        keyword_regex: null,
+        business_hours: null,
+      }),
+    concurrency: z
+      .enum(["one_per_conversation", "one_per_contact"])
+      .default("one_per_conversation"),
   })
   .strict();
 
@@ -57,6 +64,28 @@ const followupConfigSchema = z
 
 export type FollowupConfig = z.infer<typeof followupConfigSchema>;
 
+export const CONTACT_FIELD_KEYS = [
+  "name",
+  "email",
+  "phone_number",
+  "company",
+  "city",
+  "state",
+  "tags",
+  "custom_fields",
+  "notes",
+] as const;
+export type ContactFieldKey = (typeof CONTACT_FIELD_KEYS)[number];
+export type ContactFieldMode = "none" | "read" | "write";
+
+export const DEFAULT_CONTACT_FIELD_ACCESS = Object.fromEntries(
+  CONTACT_FIELD_KEYS.map((field) => [field, "write"]),
+) as Record<ContactFieldKey, ContactFieldMode>;
+
+const contactFieldAccessSchema = z
+  .record(z.enum(CONTACT_FIELD_KEYS), z.enum(["none", "read", "write"]))
+  .default(DEFAULT_CONTACT_FIELD_ACCESS);
+
 const versionShapeSchema = z
   .object({
     system_prompt: z.string().trim().min(10).max(20000),
@@ -67,10 +96,10 @@ const versionShapeSchema = z
       .array(z.string().min(1).max(80))
       .max(20)
       .default([])
-      .refine(
-        (ids) => ids.every((id) => (VALID_TOOL_IDS as readonly string[]).includes(id)),
-        { message: "tool_id_invalid" },
-      ),
+      .refine((ids) => ids.every((id) => (VALID_TOOL_IDS as readonly string[]).includes(id)), {
+        message: "tool_id_invalid",
+      }),
+    contact_field_access: contactFieldAccessSchema,
     trigger_config: triggerConfigSchema.optional(),
     channel_session_id: UUID,
     max_steps: z.number().int().min(1).max(25).default(10),
@@ -130,9 +159,7 @@ export const runsListQuerySchema = z
   .object({
     cursor: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(100).default(25),
-    status: z
-      .enum(["pending", "running", "completed", "failed", "aborted", "handoff"])
-      .optional(),
+    status: z.enum(["pending", "running", "completed", "failed", "aborted", "handoff"]).optional(),
   })
   .strict();
 

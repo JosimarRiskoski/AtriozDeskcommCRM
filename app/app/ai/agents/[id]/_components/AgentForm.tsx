@@ -41,7 +41,14 @@ import { FollowupFlowPicker } from "./FollowupFlowPicker";
 import { PublishConfirmDialog } from "./PublishConfirmDialog";
 import { saveAgentDraftAction, publishAgentAction, createMcpAgentAction } from "../_actions";
 
-import { versionCreateSchema, agentMcpCreateSchema } from "@/lib/ai/agents/validation";
+import {
+  versionCreateSchema,
+  agentMcpCreateSchema,
+  CONTACT_FIELD_KEYS,
+  DEFAULT_CONTACT_FIELD_ACCESS,
+  type ContactFieldKey,
+  type ContactFieldMode,
+} from "@/lib/ai/agents/validation";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow, Provider } from "@/hooks/ai/useCredentials";
@@ -105,6 +112,18 @@ const AGENT_PRESETS = {
   },
 } as const;
 
+const CONTACT_FIELD_LABELS: Record<ContactFieldKey, string> = {
+  name: "Nome",
+  email: "E-mail",
+  phone_number: "Telefone",
+  company: "Empresa",
+  city: "Cidade",
+  state: "Estado/UF",
+  tags: "Tags",
+  custom_fields: "Campos personalizados",
+  notes: "Observações comerciais",
+};
+
 interface FormState {
   name: string;
   description: string;
@@ -115,6 +134,7 @@ interface FormState {
   channel_session_id: string;
   system_prompt: string;
   tool_ids: string[];
+  contact_field_access: Record<ContactFieldKey, ContactFieldMode>;
   trigger_config: TriggerValue;
   max_steps: number;
   token_budget: number;
@@ -158,6 +178,10 @@ function buildState(args: { agent?: AgentRow; version: AgentVersionRow | null })
     system_prompt:
       version?.system_prompt ?? "Você é um atendente. Responda de forma educada e clara, em pt-BR.",
     tool_ids: version?.tool_ids ?? [],
+    contact_field_access: {
+      ...DEFAULT_CONTACT_FIELD_ACCESS,
+      ...(version?.contact_field_access ?? {}),
+    },
     trigger_config: (version?.trigger_config as unknown as TriggerValue) ?? DEFAULT_TRIGGER,
     max_steps: version?.max_steps ?? 10,
     token_budget: version?.token_budget ?? 50_000,
@@ -178,6 +202,7 @@ function toVersionPayload(s: FormState) {
     model: s.model,
     credential_id: s.credential_id,
     tool_ids: s.tool_ids,
+    contact_field_access: s.contact_field_access,
     trigger_config: s.trigger_config,
     channel_session_id: s.channel_session_id,
     max_steps: s.max_steps,
@@ -723,6 +748,43 @@ export function AgentForm(props: Props) {
             {validation.tool_ids ? (
               <p className="text-xs text-destructive">{validation.tool_ids}</p>
             ) : null}
+            <div className="space-y-3 border-t pt-4">
+              <div>
+                <h4 className="text-sm font-medium">Acesso aos dados do contato</h4>
+                <p className="text-xs text-muted-foreground">
+                  A regra é aplicada dentro das ferramentas. “Sem acesso” também remove o campo das
+                  consultas feitas por este agente.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {CONTACT_FIELD_KEYS.map((field) => (
+                  <div key={field} className="space-y-1">
+                    <Label htmlFor={`contact-field-${field}`}>{CONTACT_FIELD_LABELS[field]}</Label>
+                    <Select
+                      value={form.contact_field_access[field]}
+                      onValueChange={(mode) =>
+                        patch({
+                          contact_field_access: {
+                            ...form.contact_field_access,
+                            [field]: mode as ContactFieldMode,
+                          },
+                        })
+                      }
+                      disabled={disabled}
+                    >
+                      <SelectTrigger id={`contact-field-${field}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sem acesso</SelectItem>
+                        <SelectItem value="read">Somente leitura</SelectItem>
+                        <SelectItem value="write">Pode atualizar</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            </div>
           </Card>
 
           {/* Triggers */}
@@ -834,6 +896,29 @@ export function AgentForm(props: Props) {
               <div>
                 <dt className="text-muted-foreground">Ferramentas</dt>
                 <dd className="font-medium">{form.tool_ids.length} liberada(s)</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Dados do contato</dt>
+                <dd className="font-medium">
+                  {
+                    CONTACT_FIELD_KEYS.filter(
+                      (field) => form.contact_field_access[field] === "write",
+                    ).length
+                  }{" "}
+                  para alterar,{" "}
+                  {
+                    CONTACT_FIELD_KEYS.filter(
+                      (field) => form.contact_field_access[field] === "read",
+                    ).length
+                  }{" "}
+                  somente leitura,{" "}
+                  {
+                    CONTACT_FIELD_KEYS.filter(
+                      (field) => form.contact_field_access[field] === "none",
+                    ).length
+                  }{" "}
+                  oculto(s)
+                </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Follow-up</dt>

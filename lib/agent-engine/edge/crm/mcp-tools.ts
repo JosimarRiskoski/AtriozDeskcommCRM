@@ -15,19 +15,19 @@
  *     durável + cancelamento de follow-ups — duas tools de handoff confundiriam
  *     o modelo e a variante do CRM não silencia o harness.
  */
-import type { Tool } from 'ai';
+import type { Tool } from "ai";
 
-import { pickToolsFromMcp, type RuntimeHandoffSignal } from '@/lib/ai/runtime/tools';
-import { mintEphemeralToken, revokeEphemeralToken } from '@/lib/ai/runtime/mcp_token';
-import type { McpAuthResult } from '@/lib/mcp/auth';
-import type { McpContext } from '@/lib/mcp/types';
+import { pickToolsFromMcp, type RuntimeHandoffSignal } from "@/lib/ai/runtime/tools";
+import { mintEphemeralToken, revokeEphemeralToken } from "@/lib/ai/runtime/mcp_token";
+import type { McpAuthResult } from "@/lib/mcp/auth";
+import type { McpContext } from "@/lib/mcp/types";
 
-import type { Logger } from '../../obs/logger';
-import type { CrmEdgeConfig } from './mcp-client';
-import type { PublishedAgentConfig } from '../../agent/agent-config';
+import type { Logger } from "../../obs/logger";
+import type { CrmEdgeConfig } from "./mcp-client";
+import type { PublishedAgentConfig } from "../../agent/agent-config";
 
 /** Tools do catálogo que jamais entram no turno do engine (ver doc acima). */
-const BLOCKED_TOOL_IDS = new Set(['crm_send_whatsapp_message', 'crm_request_human_handoff']);
+const BLOCKED_TOOL_IDS = new Set(["crm_send_whatsapp_message", "crm_request_human_handoff"]);
 
 export interface McpTurnTools {
   tools: Record<string, Tool>;
@@ -47,7 +47,7 @@ export async function buildMcpTurnTools(
   const blocked = agentConfig.toolIds.filter((id) => BLOCKED_TOOL_IDS.has(id));
   if (blocked.length > 0) {
     // A tela permite marcar; o engine recusa em silêncio NUNCA — loga o porquê.
-    log.warn('tools MCP bloqueadas no turno do engine (envio/handoff são do harness)', {
+    log.warn("tools MCP bloqueadas no turno do engine (envio/handoff são do harness)", {
       blocked_tool_ids: blocked,
     });
   }
@@ -64,18 +64,19 @@ export async function buildMcpTurnTools(
 
   const ctx: McpContext = {
     organizationId: ids.organizationId,
-    role: 'agent',
-    actor: { type: 'ai_agent', id: agentConfig.agentId, role: 'agent', api_token_id: ephemeral.id },
+    role: "agent",
+    actor: { type: "ai_agent", id: agentConfig.agentId, role: "agent", api_token_id: ephemeral.id },
     apiTokenId: ephemeral.id,
     requestId: ids.jobId,
     supabase: cfg.supabase,
+    contactFieldAccess: agentConfig.contactFieldAccess,
   };
   const auth: McpAuthResult = {
     organizationId: ids.organizationId,
-    role: 'agent',
+    role: "agent",
     actor: ctx.actor,
     apiTokenId: ephemeral.id,
-    scopes: ['mcp:read', 'mcp:write', 'actor:ai_agent'],
+    scopes: ["mcp:read", "mcp:write", "actor:ai_agent"],
   };
   // O engine não usa o sinal de handoff da ponte (a tool está bloqueada) — dummy.
   const handoffSignal: RuntimeHandoffSignal = { triggered: false };

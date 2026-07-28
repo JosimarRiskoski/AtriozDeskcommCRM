@@ -18,16 +18,12 @@ const AGENT_COLUMNS =
   "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
 
 const CREDENTIAL_COLUMNS =
   "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
 
-export default async function AgentEditorPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function AgentEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const user = await requireAuth();
@@ -87,13 +83,12 @@ export default async function AgentEditorPage({
     phone_number: (c.phone_number as string | null) ?? null,
   }));
 
-  const draft =
-    versions
-      .filter((v) => v.status === "draft")
-      .reduce<AgentVersionRow | null>(
-        (a, b) => (a && a.version_number > b.version_number ? a : b),
-        null,
-      );
+  const draft = versions
+    .filter((v) => v.status === "draft")
+    .reduce<AgentVersionRow | null>(
+      (a, b) => (a && a.version_number > b.version_number ? a : b),
+      null,
+    );
   const published = versions.find((v) => v.status === "published") ?? null;
 
   return (

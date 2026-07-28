@@ -370,6 +370,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           credential_id: string | null
+          contact_field_access: Json
           followup: Json
           handoff_keywords: string[]
           handoff_tool_enabled: boolean
@@ -401,6 +402,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           credential_id?: string | null
+          contact_field_access?: Json
           followup?: Json
           handoff_keywords?: string[]
           handoff_tool_enabled?: boolean
@@ -432,6 +434,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           credential_id?: string | null
+          contact_field_access?: Json
           followup?: Json
           handoff_keywords?: string[]
           handoff_tool_enabled?: boolean

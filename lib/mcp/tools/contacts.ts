@@ -15,7 +15,23 @@ import {
   patchContactHandler,
 } from "@/app/api/v1/contacts/_handler";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
-import type { McpToolDefinition } from "../types";
+import type { McpContext, McpToolDefinition } from "../types";
+
+type ContactAccessMode = "none" | "read" | "write";
+
+function contactAccess(ctx: McpContext, field: string): ContactAccessMode {
+  if (ctx.actor.type !== "ai_agent" || !ctx.contactFieldAccess) return "write";
+  return ctx.contactFieldAccess[field] ?? "none";
+}
+
+function canRead(ctx: McpContext, field: string): boolean {
+  return contactAccess(ctx, field) !== "none";
+}
+
+function assertCanWrite(ctx: McpContext, fields: readonly string[]): void {
+  const denied = fields.filter((field) => contactAccess(ctx, field) !== "write");
+  if (denied.length > 0) throw new Error(`contact_field_write_denied:${denied.join(",")}`);
+}
 
 const searchInputShape = {
   query: z.string().min(1).max(200).describe("Termo de busca (nome, email ou telefone)."),
@@ -48,13 +64,13 @@ export const crmSearchContacts: McpToolDefinition<typeof searchInputShape> = {
     return {
       contacts: result.contacts.map((c) => ({
         id: c.id,
-        name: c.display_name ?? c.name,
-        phone: c.phone_number,
-        email: c.email,
-        company: c.company,
-        city: c.city,
-        state: c.state,
-        tags: c.tags ?? [],
+        ...(canRead(ctx, "name") ? { name: c.display_name ?? c.name } : {}),
+        ...(canRead(ctx, "phone_number") ? { phone: c.phone_number } : {}),
+        ...(canRead(ctx, "email") ? { email: c.email } : {}),
+        ...(canRead(ctx, "company") ? { company: c.company } : {}),
+        ...(canRead(ctx, "city") ? { city: c.city } : {}),
+        ...(canRead(ctx, "state") ? { state: c.state } : {}),
+        ...(canRead(ctx, "tags") ? { tags: c.tags ?? [] } : {}),
         is_blocked: c.is_blocked,
         is_anonymized: c.is_anonymized,
         created_at: c.created_at,
@@ -90,15 +106,14 @@ export const crmGetContact: McpToolDefinition<typeof getInputShape> = {
     );
     return {
       id: contact.id,
-      name: contact.name,
-      display_name: contact.display_name,
-      email: contact.email,
-      phone: contact.phone_number,
-      company: contact.company,
-      city: contact.city,
-      state: contact.state,
-      custom_fields: contact.custom_fields ?? {},
-      tags: contact.tags ?? [],
+      ...(canRead(ctx, "name") ? { name: contact.name, display_name: contact.display_name } : {}),
+      ...(canRead(ctx, "email") ? { email: contact.email } : {}),
+      ...(canRead(ctx, "phone_number") ? { phone: contact.phone_number } : {}),
+      ...(canRead(ctx, "company") ? { company: contact.company } : {}),
+      ...(canRead(ctx, "city") ? { city: contact.city } : {}),
+      ...(canRead(ctx, "state") ? { state: contact.state } : {}),
+      ...(canRead(ctx, "custom_fields") ? { custom_fields: contact.custom_fields ?? {} } : {}),
+      ...(canRead(ctx, "tags") ? { tags: contact.tags ?? [] } : {}),
       source: contact.source,
       consent: contact.consent ?? {},
       is_blocked: contact.is_blocked,
@@ -144,6 +159,17 @@ export const crmUpdateContact: McpToolDefinition<typeof updateInputShape> = {
   requiresRole: "manager",
   requiresScope: "mcp:write",
   handler: async (input, ctx) => {
+    const fieldsToWrite = [
+      ...(input.name !== undefined || input.display_name !== undefined ? ["name"] : []),
+      ...(input.email !== undefined ? ["email"] : []),
+      ...(input.phone_number !== undefined ? ["phone_number"] : []),
+      ...(input.company !== undefined ? ["company"] : []),
+      ...(input.city !== undefined ? ["city"] : []),
+      ...(input.state !== undefined ? ["state"] : []),
+      ...(input.add_tags !== undefined || input.remove_tags !== undefined ? ["tags"] : []),
+      ...(input.custom_fields !== undefined ? ["custom_fields"] : []),
+    ];
+    assertCanWrite(ctx, fieldsToWrite);
     const existing = await getContactHandler(
       ctx.supabase,
       { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId },
@@ -207,6 +233,7 @@ export const crmAddContactNote: McpToolDefinition<typeof noteInputShape> = {
   requiresRole: "manager",
   requiresScope: "mcp:write",
   handler: async (input, ctx) => {
+    assertCanWrite(ctx, ["notes"]);
     const { data: contact } = await ctx.supabase
       .from("contacts")
       .select("id,is_anonymized")

@@ -25,7 +25,13 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { generateText, stepCountIs, type LanguageModel, type StopCondition, type ToolSet } from "ai";
+import {
+  generateText,
+  stepCountIs,
+  type LanguageModel,
+  type StopCondition,
+  type ToolSet,
+} from "ai";
 
 import { CredentialUnavailableError, loadCredential } from "@/lib/ai/credentials";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -89,6 +95,7 @@ interface VersionRow {
   model: string;
   credential_id: string | null;
   tool_ids: string[];
+  contact_field_access: Record<string, "none" | "read" | "write">;
   channel_session_id: string;
   max_steps: number;
   token_budget: number;
@@ -138,7 +145,9 @@ function buildModel(provider: string, apiKey: string, modelId: string): Language
   }
 }
 
-function totalUsage(steps: ReadonlyArray<{ usage?: { inputTokens?: number; outputTokens?: number } }>) {
+function totalUsage(
+  steps: ReadonlyArray<{ usage?: { inputTokens?: number; outputTokens?: number } }>,
+) {
   let inputTokens = 0;
   let outputTokens = 0;
   for (const s of steps) {
@@ -196,16 +205,23 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     organizationId: run.organization_id,
     resourceType: "ai_agent_run",
     resourceId: run.id,
-    metadata: { agent_id: run.agent_id, agent_version_id: run.agent_version_id, is_dry_run: run.is_dry_run },
+    metadata: {
+      agent_id: run.agent_id,
+      agent_version_id: run.agent_version_id,
+      is_dry_run: run.is_dry_run,
+    },
   });
-  await admin.rpc("emit_event" as never, {
-    p_event_type: "ai_agent.run_started",
-    p_entity_kind: "ai_agent_run",
-    p_entity_id: run.id,
-    p_payload: { run_id: run.id, agent_id: run.agent_id, is_dry_run: run.is_dry_run },
-    p_metadata: { source: "agent-runtime" },
-    p_organization_id: run.organization_id,
-  } as never);
+  await admin.rpc(
+    "emit_event" as never,
+    {
+      p_event_type: "ai_agent.run_started",
+      p_entity_kind: "ai_agent_run",
+      p_entity_id: run.id,
+      p_payload: { run_id: run.id, agent_id: run.agent_id, is_dry_run: run.is_dry_run },
+      p_metadata: { source: "agent-runtime" },
+      p_organization_id: run.organization_id,
+    } as never,
+  );
 
   let ephemeralTokenId: string | null = null;
 
@@ -214,7 +230,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     const { data: versionRaw } = await admin
       .from("ai_agent_versions")
       .select(
-        "id, organization_id, agent_id, system_prompt, provider, model, credential_id, tool_ids, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, created_by",
+        "id, organization_id, agent_id, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, created_by",
       )
       .eq("id", run.agent_version_id)
       .eq("organization_id", run.organization_id)
@@ -340,13 +356,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         api_token_id: ephemeral.id,
       },
       apiTokenId: ephemeral.id,
-      scopes: [
-        "mcp:read",
-        "mcp:write",
-        "actor:ai_agent",
-        `agent_run:${run.id}`,
-        "role:agent",
-      ],
+      scopes: ["mcp:read", "mcp:write", "actor:ai_agent", `agent_run:${run.id}`, "role:agent"],
     };
     const ctx: McpContext = {
       organizationId: run.organization_id,
@@ -355,6 +365,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       apiTokenId: ephemeral.id,
       requestId: run.id,
       supabase: admin,
+      contactFieldAccess: version.contact_field_access,
     };
     const handoffSignal: RuntimeHandoffSignal = { triggered: false };
     const tools = pickToolsFromMcp({
@@ -387,7 +398,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         abortReason = "handoff_tool";
         return true;
       }
-      const usage = totalUsage(steps as Array<{ usage?: { inputTokens?: number; outputTokens?: number } }>);
+      const usage = totalUsage(
+        steps as Array<{ usage?: { inputTokens?: number; outputTokens?: number } }>,
+      );
       const totalTokens = usage.inputTokens + usage.outputTokens;
       if (totalTokens > version.token_budget) {
         abortReason = "token_budget_exceeded";
@@ -421,7 +434,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     });
 
     // 12) Aggregate metrics.
-    const usage = totalUsage(result.steps as Array<{ usage?: { inputTokens?: number; outputTokens?: number } }>);
+    const usage = totalUsage(
+      result.steps as Array<{ usage?: { inputTokens?: number; outputTokens?: number } }>,
+    );
     const cost = await computeCostCents({
       provider: version.provider,
       model: version.model,
@@ -596,12 +611,7 @@ async function failRun(
   };
 }
 
-function failFast(
-  run: RunRow,
-  code: string,
-  message: string,
-  startedAt: number,
-): RunAgentResult {
+function failFast(run: RunRow, code: string, message: string, startedAt: number): RunAgentResult {
   // Used when we couldn't even promote to running — no row mutation here.
   return {
     run_id: run.id,

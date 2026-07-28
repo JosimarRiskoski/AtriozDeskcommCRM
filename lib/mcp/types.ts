@@ -17,6 +17,8 @@ export interface McpContext {
   actor: Actor;
   apiTokenId: string;
   requestId: string;
+  /** Permissões por campo da versão publicada; ausente para usuários/tokens MCP comuns. */
+  contactFieldAccess?: Record<string, "none" | "read" | "write">;
   /** Service-role admin client. Tools devem filtrar `organization_id` em toda query. */
   supabase: SupabaseClient;
 }
