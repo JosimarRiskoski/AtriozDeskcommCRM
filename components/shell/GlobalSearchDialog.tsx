@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MagnifyingGlass, Users, Kanban, Gear, Inbox } from "@/lib/ui/icons";
+import { MagnifyingGlass, Users, Kanban, Gear, Inbox, ChatsCircle, FileText } from "@/lib/ui/icons";
 import {
   Dialog,
   DialogContent,
@@ -10,9 +10,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Contact } from "@/lib/types/contacts";
+import type { GlobalSearchPayload } from "@/app/api/v1/search/route";
 
-type ContactResponse = { data?: Contact[] };
+type SearchResponse = { data?: GlobalSearchPayload };
+
+const EMPTY_RESULTS: GlobalSearchPayload = {
+  contacts: [],
+  conversations: [],
+  leads: [],
+  files: [],
+};
 
 const SHORTCUTS = [
   { label: "Inbox", description: "Conversas do WhatsApp", href: "/app/inbox", Icon: Inbox },
@@ -25,16 +32,12 @@ const SHORTCUTS = [
   { label: "Follow-ups", description: "Retornos automáticos e modelos prontos", href: "/app/ai/followups", Icon: Inbox },
 ];
 
-function contactName(contact: Contact) {
-  return contact.display_name?.trim() || contact.name?.trim() || contact.phone_number || "Contato sem nome";
-}
-
 export function GlobalSearchDialog() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [results, setResults] = useState<GlobalSearchPayload>(EMPTY_RESULTS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,7 +50,7 @@ export function GlobalSearchDialog() {
   useEffect(() => {
     if (!open) {
       setQuery("");
-      setContacts([]);
+      setResults(EMPTY_RESULTS);
       setError(null);
       return;
     }
@@ -57,7 +60,7 @@ export function GlobalSearchDialog() {
   useEffect(() => {
     const term = query.trim();
     if (term.length < 2) {
-      setContacts([]);
+      setResults(EMPTY_RESULTS);
       setLoading(false);
       setError(null);
       return;
@@ -68,15 +71,15 @@ export function GlobalSearchDialog() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/v1/contacts?search=${encodeURIComponent(term)}&limit=8`, {
+        const response = await fetch(`/api/v1/search?q=${encodeURIComponent(term)}&limit=6`, {
           signal: controller.signal,
         });
         if (!response.ok) throw new Error("Não foi possível concluir a busca.");
-        const payload = (await response.json()) as ContactResponse;
-        setContacts(Array.isArray(payload.data) ? payload.data : []);
+        const payload = (await response.json()) as SearchResponse;
+        setResults(payload.data ?? EMPTY_RESULTS);
       } catch (cause) {
         if (controller.signal.aborted) return;
-        setContacts([]);
+        setResults(EMPTY_RESULTS);
         setError(cause instanceof Error ? cause.message : "Falha inesperada na busca.");
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -94,6 +97,9 @@ export function GlobalSearchDialog() {
     if (!term) return SHORTCUTS;
     return SHORTCUTS.filter((item) => `${item.label} ${item.description}`.toLocaleLowerCase("pt-BR").includes(term));
   }, [query]);
+
+  const resultCount =
+    results.contacts.length + results.conversations.length + results.leads.length + results.files.length;
 
   const navigate = (href: string) => {
     setOpen(false);
@@ -123,12 +129,12 @@ export function GlobalSearchDialog() {
           {loading ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">Buscando...</p> : null}
           {error ? <p className="px-3 py-6 text-center text-sm text-destructive">{error}</p> : null}
 
-          {!loading && contacts.length > 0 ? (
+          {!loading && results.contacts.length > 0 ? (
             <section aria-labelledby="search-contacts-title">
               <h3 id="search-contacts-title" className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Contatos
               </h3>
-              {contacts.map((contact) => (
+              {results.contacts.map((contact) => (
                 <button
                   key={contact.id}
                   type="button"
@@ -137,18 +143,46 @@ export function GlobalSearchDialog() {
                 >
                   <Users size={18} className="text-muted-foreground" aria-hidden />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{contactName(contact)}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {[contact.phone_number, contact.email].filter(Boolean).join(" · ") || "Sem telefone ou e-mail"}
-                    </span>
+                    <span className="block truncate text-sm font-medium">{contact.title}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{contact.description}</span>
                   </span>
                 </button>
               ))}
             </section>
           ) : null}
 
+          {!loading && results.conversations.length > 0 ? (
+            <SearchSection
+              title="Conversas"
+              className="mt-4 border-t pt-3"
+              items={results.conversations.map((item) => ({ ...item, href: `/app/inbox/${item.id}` }))}
+              Icon={ChatsCircle}
+              onNavigate={navigate}
+            />
+          ) : null}
+
+          {!loading && results.leads.length > 0 ? (
+            <SearchSection
+              title="Negócios"
+              className="mt-4 border-t pt-3"
+              items={results.leads.map((item) => ({ ...item, href: `/app/pipelines/${item.pipeline_id}` }))}
+              Icon={Kanban}
+              onNavigate={navigate}
+            />
+          ) : null}
+
+          {!loading && results.files.length > 0 ? (
+            <SearchSection
+              title="Arquivos"
+              className="mt-4 border-t pt-3"
+              items={results.files.map((item) => ({ ...item, href: `/app/inbox/${item.conversation_id}` }))}
+              Icon={FileText}
+              onNavigate={navigate}
+            />
+          ) : null}
+
           {!loading && visibleShortcuts.length > 0 ? (
-            <section aria-labelledby="search-pages-title" className={contacts.length ? "mt-4 border-t pt-3" : ""}>
+            <section aria-labelledby="search-pages-title" className={resultCount ? "mt-4 border-t pt-3" : ""}>
               <h3 id="search-pages-title" className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Módulos
               </h3>
@@ -169,11 +203,48 @@ export function GlobalSearchDialog() {
             </section>
           ) : null}
 
-          {!loading && !error && query.trim().length >= 2 && contacts.length === 0 && visibleShortcuts.length === 0 ? (
+          {!loading && !error && query.trim().length >= 2 && resultCount === 0 && visibleShortcuts.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">Nenhum resultado encontrado.</p>
           ) : null}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SearchSection({
+  title,
+  className,
+  items,
+  Icon,
+  onNavigate,
+}: {
+  title: string;
+  className?: string;
+  items: Array<{ id: string; title: string; description: string; href: string }>;
+  Icon: typeof Users;
+  onNavigate: (href: string) => void;
+}) {
+  const sectionId = `search-${title.toLocaleLowerCase("pt-BR").replace(/\s+/g, "-")}`;
+  return (
+    <section aria-labelledby={sectionId} className={className}>
+      <h3 id={sectionId} className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h3>
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => onNavigate(item.href)}
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Icon size={18} className="text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">{item.title}</span>
+            <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
+          </span>
+        </button>
+      ))}
+    </section>
   );
 }
