@@ -82,6 +82,22 @@ export class WahaClient {
     }
   }
 
+  /**
+   * Removes a broken WAHA session completely so the next start creates a
+   * clean session and a fresh QR code. Used only from the explicit reconnect
+   * action for sessions that are already unavailable.
+   */
+  async deleteSession(name: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/api/sessions/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+      headers: { "X-Api-Key": this.apiKey },
+    });
+    if (!res.ok && res.status !== 404) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`waha_delete_${res.status}: ${body.slice(0, 200)}`);
+    }
+  }
+
   async getSessionQr(name: string): Promise<{ qr?: string; status: string }> {
     const res = await fetch(`${this.baseUrl}/api/sessions/${encodeURIComponent(name)}`, {
       headers: { "X-Api-Key": this.apiKey },

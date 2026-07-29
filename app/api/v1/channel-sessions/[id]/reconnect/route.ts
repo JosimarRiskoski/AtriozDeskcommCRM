@@ -52,10 +52,11 @@ export async function POST(
   }
 
   try {
-    // WAHA's documented recovery path for FAILED sessions is logout + start.
-    // For other states, preserve the saved credentials and use stop + start.
-    if (session.status === "FAILED") {
-      await waha.logoutSession(session.waha_session_name);
+    // A user-triggered reconnect on FAILED/STARTING means the existing WAHA
+    // session is unavailable or stuck. Recreate it completely so stale NOWEB
+    // state cannot prevent generation of a fresh QR code.
+    if (["FAILED", "STARTING"].includes(session.status)) {
+      await waha.deleteSession(session.waha_session_name);
     } else {
       await waha.stopSession(session.waha_session_name);
     }
