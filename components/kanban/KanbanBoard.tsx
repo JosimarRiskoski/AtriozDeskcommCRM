@@ -49,18 +49,23 @@ function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> 
 
 function BoardSkeleton() {
   return (
-    <div className="flex gap-3 overflow-x-auto p-4">
-      {[0, 1, 2].map((c) => (
-        <div
-          key={c}
-          className="flex w-80 shrink-0 flex-col gap-2 rounded-lg border border-border bg-surface-muted/40 p-3"
-        >
-          <Skeleton className="h-5 w-32" />
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24 w-full animate-pulse" />
-          ))}
-        </div>
-      ))}
+    <div
+      className="h-full min-h-0 min-w-0 overflow-x-auto overflow-y-hidden pb-2"
+      aria-label="Carregando quadro"
+    >
+      <div className="flex h-full min-w-max gap-3 pr-1">
+        {[0, 1, 2].map((c) => (
+          <div
+            key={c}
+            className="bg-surface-muted/40 flex w-[min(18rem,calc(100vw-3rem))] shrink-0 flex-col gap-2 rounded-lg border border-border p-3 sm:w-72"
+          >
+            <Skeleton className="h-5 w-32" />
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-24 w-full animate-pulse" />
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -131,9 +136,7 @@ export function KanbanBoard({
   const isError = useExternal ? false : queryResult.isError;
   const error = useExternal ? null : queryResult.error;
 
-  const leadDoDossie = dossieId
-    ? (data?.leads.find((l) => l.id === dossieId) ?? null)
-    : null;
+  const leadDoDossie = dossieId ? (data?.leads.find((l) => l.id === dossieId) ?? null) : null;
 
   const grouped = useMemo(() => {
     if (!data) return null;
@@ -166,10 +169,7 @@ export function KanbanBoard({
       if (!data || !grouped) return;
       const { source, destination, draggableId } = result;
       if (!destination) return;
-      if (
-        source.droppableId === destination.droppableId &&
-        source.index === destination.index
-      ) {
+      if (source.droppableId === destination.droppableId && source.index === destination.index) {
         return;
       }
 
@@ -177,13 +177,10 @@ export function KanbanBoard({
       if (!lead) return;
 
       const destStageId = destination.droppableId;
-      const destList = (grouped.get(destStageId) ?? []).filter(
-        (l) => l.id !== draggableId,
-      );
+      const destList = (grouped.get(destStageId) ?? []).filter((l) => l.id !== draggableId);
 
       const before = destination.index > 0 ? destList[destination.index - 1] : null;
-      const after =
-        destination.index < destList.length ? destList[destination.index] : null;
+      const after = destination.index < destList.length ? destList[destination.index] : null;
 
       const newPosition = midpoint(
         before?.position_in_stage ?? null,
@@ -224,31 +221,36 @@ export function KanbanBoard({
 
   if (data.stages.length === 0) {
     return (
-      <Card className="m-4 p-6 text-sm text-text-muted">
-        Nenhum lead nesta pipeline ainda.
-      </Card>
+      <Card className="m-4 p-6 text-sm text-text-muted">Nenhum lead nesta pipeline ainda.</Card>
     );
   }
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex h-full gap-3 overflow-x-auto p-4">
-        {data.stages.map((stage) => (
-          <StageColumn
-            key={stage.id}
-            stage={stage}
-            leads={grouped.get(stage.id) ?? []}
-            pipelineId={pipelineId}
-            ownerNames={ownerNames}
-            coolingIds={coolingIds}
-            reactivations={reactivations}
-            pulses={pulsesProp ?? queryResult.pulses}
-            canonicalTags={canonicalTags}
-            selectedLeadIds={selectedLeadIds}
-            onSelect={handleSelect}
-            onOpen={setDossieId}
-          />
-        ))}
+      <div
+        className="h-full min-h-0 min-w-0 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2"
+        role="region"
+        aria-label="Etapas do funil. Role horizontalmente para ver todas."
+        tabIndex={0}
+      >
+        <div className="flex h-full min-w-max gap-3 pr-1">
+          {data.stages.map((stage) => (
+            <StageColumn
+              key={stage.id}
+              stage={stage}
+              leads={grouped.get(stage.id) ?? []}
+              pipelineId={pipelineId}
+              ownerNames={ownerNames}
+              coolingIds={coolingIds}
+              reactivations={reactivations}
+              pulses={pulsesProp ?? queryResult.pulses}
+              canonicalTags={canonicalTags}
+              selectedLeadIds={selectedLeadIds}
+              onSelect={handleSelect}
+              onOpen={setDossieId}
+            />
+          ))}
+        </div>
       </div>
       {leadDoDossie && (
         <LeadDossier
@@ -256,9 +258,7 @@ export function KanbanBoard({
           onOpenChange={(v) => !v && setDossieId(null)}
           lead={leadDoDossie}
           pipelineId={pipelineId}
-          stageName={
-            data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"
-          }
+          stageName={data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"}
           ownerNames={ownerNames}
         />
       )}

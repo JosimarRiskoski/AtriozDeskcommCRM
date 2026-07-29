@@ -58,17 +58,20 @@ export function StageColumn({
     : undefined;
 
   return (
-    <div className="flex w-80 shrink-0 flex-col rounded-lg border border-border bg-surface-muted/40">
+    <section
+      className="bg-surface-muted/40 flex h-full min-h-0 w-[min(18rem,calc(100vw-3rem))] shrink-0 flex-col overflow-hidden rounded-lg border border-border sm:w-72"
+      aria-labelledby={`kanban-stage-${stage.id}`}
+    >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
         <span
-          className={cn(
-            "h-2 w-2 rounded-full",
-            !stage.color && "bg-text-muted/40",
-          )}
+          className={cn("h-2 w-2 rounded-full", !stage.color && "bg-text-muted/40")}
           style={accentStyle}
           aria-hidden
         />
-        <h2 className="flex-1 truncate text-sm font-semibold text-text">
+        <h2
+          id={`kanban-stage-${stage.id}`}
+          className="flex-1 truncate text-sm font-semibold text-text"
+        >
           {stage.name}
         </h2>
         <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium tabular-nums text-text-muted">
@@ -88,7 +91,7 @@ export function StageColumn({
             ref={provided.innerRef}
             {...provided.droppableProps}
             className={cn(
-              "flex flex-1 flex-col gap-2 p-2 transition-colors",
+              "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-y-contain p-2 transition-colors",
               snapshot.isDraggingOver && "bg-accent/5",
             )}
           >
@@ -113,13 +116,13 @@ export function StageColumn({
             ))}
             {provided.placeholder}
             {leads.length === 0 && !snapshot.isDraggingOver && (
-              <div className="flex h-20 items-center justify-center text-[11px] text-text-muted/70">
+              <div className="text-text-muted/70 flex h-20 items-center justify-center text-[11px]">
                 vazio
               </div>
             )}
           </div>
         )}
       </Droppable>
-    </div>
+    </section>
   );
 }

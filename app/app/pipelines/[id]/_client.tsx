@@ -54,7 +54,7 @@ export function PipelinePageClient({
 
   return (
     <div
-      className="flex h-full flex-col gap-4"
+      className="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden p-4 lg:p-6"
       // OBSERVÁVEL de propósito, e é a razão de existir desta linha: "a
       // assinatura morreu" e "nada aconteceu" produzem o MESMO silêncio na
       // tela, e sem este valor nem o produto nem o teste conseguem separar as
@@ -74,7 +74,7 @@ export function PipelinePageClient({
       data-refetch-divergencias={seguranca.divergencias}
       data-refetch-em={seguranca.ultimaVerificacao ?? ""}
     >
-      <header className="flex items-center justify-between">
+      <header className="flex shrink-0 items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">
           {data?.pipeline.name ?? initialName}
         </h1>
@@ -90,26 +90,29 @@ export function PipelinePageClient({
           stages={data.stages}
         />
       )}
-      <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
+      <div className="shrink-0">
+        <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
+      </div>
       {error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
-          Erro ao carregar pipeline:{" "}
-          {formatError(error)}
+        <div className="border-destructive/30 bg-destructive/10 rounded-md border p-4 text-sm">
+          Erro ao carregar pipeline: {formatError(error)}
         </div>
       ) : isLoading || !data ? (
         <div className="flex flex-1 animate-pulse items-center justify-center text-muted-foreground">
           Carregando…
         </div>
       ) : (
-        <KanbanBoard
-          pipelineId={pipelineId}
-          stages={data.stages}
-          leads={filteredLeads}
-          pulses={pulses}
-          pipeline={data.pipeline}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-        />
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <KanbanBoard
+            pipelineId={pipelineId}
+            stages={data.stages}
+            leads={filteredLeads}
+            pulses={pulses}
+            pipeline={data.pipeline}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
+        </div>
       )}
       <BulkActionBar
         selectedIds={selectedIds}
