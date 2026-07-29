@@ -119,6 +119,23 @@ export class WahaClient {
     return res.json();
   }
 
+  /** Resolve um identificador privado `@lid` para o telefone da sessao. */
+  async getPhoneByLid(session: string, lid: string): Promise<string | null> {
+    const normalizedLid = lid.replace(/@.*$/, "");
+    const res = await fetch(
+      `${this.baseUrl}/api/${encodeURIComponent(session)}/lids/${encodeURIComponent(normalizedLid)}`,
+      { headers: { "X-Api-Key": this.apiKey } },
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`waha_lid_${res.status}: ${body.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as { pn?: string | null };
+    const digits = data.pn?.replace(/@.*$/, "").replace(/^\+/, "") ?? "";
+    return digits ? `+${digits}` : null;
+  }
+
   async sendPoll(
     session: string,
     chatId: string,

@@ -14,6 +14,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { audit } from "@/lib/audit";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ackToStatus } from "@/lib/types/messaging";
+import { getWahaClient } from "@/lib/waha/client";
 import { bareWaMessageId } from "@/lib/waha/message-id";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -21,6 +22,7 @@ type Admin = ReturnType<typeof createAdminClient>;
 interface Session {
   id: string;
   organization_id: string;
+  waha_session_name?: string | null;
 }
 
 export interface WahaPayload {
@@ -84,7 +86,8 @@ export function outboundChatIdOf(p: WahaPayload): string {
 
 export type ChatIdentity =
   | { kind: "phone"; phone: string; lid: null }
-  | { kind: "lid"; phone: null; lid: string } // lid = somente dígitos
+  | { kind: "lid"; phone: null; lid: string }
+  | { kind: "resolved"; phone: string; lid: string }
   | { kind: "group"; phone: null; lid: null };
 
 /**
@@ -103,6 +106,28 @@ export function parseChatId(chatId: string): ChatIdentity {
     return { kind: "phone", phone: "+" + digits, lid: null };
   }
   return { kind: "group", phone: null, lid: null };
+}
+
+async function resolveLidIdentity(
+  session: Session,
+  parsed: ChatIdentity,
+): Promise<ChatIdentity> {
+  if (parsed.kind !== "lid" || !session.waha_session_name) return parsed;
+  const client = getWahaClient();
+  if (!client) return parsed;
+
+  try {
+    const phone = await client.getPhoneByLid(session.waha_session_name, parsed.lid);
+    return phone ? { kind: "resolved", phone, lid: parsed.lid } : parsed;
+  } catch (error) {
+    // Enriquecimento nao bloqueia a mensagem: o LID continua valido.
+    console.warn("[waha.ingest] LID ainda nao resolvido", {
+      session: session.waha_session_name,
+      lid: parsed.lid,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return parsed;
+  }
 }
 
 const STOP_RX = /\b(STOP|PARAR|SAIR|UNSUBSCRIBE)\b/i;
@@ -223,8 +248,8 @@ async function upsertContact(
     {
       p_org: orgId,
       p_kind: parsed.kind,
-      p_phone: parsed.kind === "phone" ? parsed.phone : null,
-      p_lid: parsed.kind === "lid" ? parsed.lid : null,
+      p_phone: parsed.kind === "phone" || parsed.kind === "resolved" ? parsed.phone : null,
+      p_lid: parsed.kind === "lid" || parsed.kind === "resolved" ? parsed.lid : null,
       p_chat_id: chatId,
       p_notify: notifyName,
     } as never,
@@ -331,7 +356,7 @@ async function handleInbound(
   requestId: string,
 ): Promise<void> {
   const chatId = p.from ?? "";
-  const parsed = parseChatId(chatId);
+  const parsed = await resolveLidIdentity(session, parseChatId(chatId));
   if (parsed.kind === "group") return; // grupos não fazem binding CRM
   if (!p.id || !chatId) return;
   // WAHA emite eventos vazios p/ status/read-receipt/presence — não viram mensagem.
@@ -511,7 +536,7 @@ async function handleOutboundFromUserPhone(
   requestId: string,
 ): Promise<void> {
   const chatId = outboundChatIdOf(p);
-  const parsed = parseChatId(chatId);
+  const parsed = await resolveLidIdentity(session, parseChatId(chatId));
   if (parsed.kind === "group") return;
   if (!p.id || !chatId) return;
   if (!p.body && !mediaUrlOf(p) && !p.hasMedia) return;
