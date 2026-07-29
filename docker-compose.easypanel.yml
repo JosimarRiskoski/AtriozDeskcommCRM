@@ -96,7 +96,8 @@ services:
       WHATSAPP_HOOK_URL: http://app:3000/api/v1/webhooks/waha
       WHATSAPP_HOOK_EVENTS: message,message.any,message.ack,session.status,state.change
       WHATSAPP_HOOK_HMAC: ${WAHA_HMAC_SECRET}
-      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
+      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-GOWS}
+      GODEBUG: ${WAHA_GODEBUG:-netdns=go}
       WAHA_DASHBOARD_ENABLED: "false"
     volumes:
       - waha-data:/app/.sessions
