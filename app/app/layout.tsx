@@ -6,20 +6,17 @@ import { AuthProvider } from "@/hooks/auth/AuthProvider";
 import { AppShell } from "./_components/AppShell";
 import { MfaEnrollGate } from "@/components/auth/MfaEnrollGate";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  IMPERSONATE_COOKIE_NAME,
-  verifyImpersonateCookie,
-} from "@/lib/impersonate/cookie";
-import {
-  ImpersonateBanner,
-  type ImpersonatingInfo,
-} from "@/components/app/ImpersonateBanner";
+import { IMPERSONATE_COOKIE_NAME, verifyImpersonateCookie } from "@/lib/impersonate/cookie";
+import { ImpersonateBanner, type ImpersonatingInfo } from "@/components/app/ImpersonateBanner";
+import { OrganizationAppearanceSync } from "@/components/theme/organization-appearance-sync";
+import { DEFAULT_ORGANIZATION_PALETTE, readOrganizationPalette } from "@/lib/appearance";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await loadAuthUser();
   if (!user) redirect("/login");
 
   let activeOrg = await resolveActiveOrg(user);
+  let organizationPalette = DEFAULT_ORGANIZATION_PALETTE;
 
   // EPIC-02: gate /app/* on completed onboarding.
   // EPIC-11: gate /app/* on org not being suspended (S-11.08).
@@ -32,10 +29,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .maybeSingle();
     if (orgRow && !orgRow.onboarded_at) redirect("/onboarding");
     if (orgRow?.status === "suspended") redirect("/account-suspended");
+    organizationPalette = readOrganizationPalette(orgRow?.settings);
     // G4-02: expõe visibility_mode ao client (inbox decide visões visíveis).
     // Fonte confiável (admin client, org do cookie validado) — nunca do body.
-    const mode = (orgRow?.settings as { visibility_mode?: VisibilityMode } | null)
-      ?.visibility_mode;
+    const mode = (orgRow?.settings as { visibility_mode?: VisibilityMode } | null)?.visibility_mode;
     activeOrg = { ...activeOrg, visibility_mode: mode ?? DEFAULT_VISIBILITY_MODE };
   }
 
@@ -73,6 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <AuthProvider user={user} activeOrg={activeOrg}>
+      <OrganizationAppearanceSync palette={organizationPalette} />
       <ImpersonateBanner impersonating={impersonating} />
       {needsMfaGate ? (
         // Gate always mounted for MFA-required roles; it latches the blocking

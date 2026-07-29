@@ -16,7 +16,18 @@ interface SettingsLink {
 }
 
 const LINKS: SettingsLink[] = [
-  { href: "/app/settings/profile", title: "Perfil", description: "Nome, idioma, fuso e avatar.", group: "Conta" },
+  {
+    href: "/app/settings/appearance",
+    title: "Aparência",
+    description: "Tema claro, escuro ou automático e identidade visual do CRM.",
+    group: "Conta",
+  },
+  {
+    href: "/app/settings/profile",
+    title: "Perfil",
+    description: "Nome, idioma, fuso e avatar.",
+    group: "Conta",
+  },
   {
     href: "/app/settings/security",
     title: "Segurança",
@@ -39,7 +50,8 @@ const LINKS: SettingsLink[] = [
   {
     href: "/app/deployment-checklist",
     title: "Implantação do cliente",
-    description: "Checklist de domínio, Supabase, WhatsApp, e-mail, agente, funil, backup e teste final.",
+    description:
+      "Checklist de domínio, Supabase, WhatsApp, e-mail, agente, funil, backup e teste final.",
     group: "Integrações",
     adminOnly: true,
   },
@@ -71,8 +83,20 @@ const LINKS: SettingsLink[] = [
     group: "Integrações",
     adminOnly: true,
   },
-  { href: "/app/settings/meta-capi", title: "Conversões da Meta", description: "Enviar negócios ganhos ao Dataset/Pixel com segurança.", group: "Integrações", adminOnly: true },
-  { href: "/app/audit", title: "Histórico de segurança", description: "Quem alterou o quê e quando.", group: "Segurança avançada", managerOnly: true },
+  {
+    href: "/app/settings/meta-capi",
+    title: "Conversões da Meta",
+    description: "Enviar negócios ganhos ao Dataset/Pixel com segurança.",
+    group: "Integrações",
+    adminOnly: true,
+  },
+  {
+    href: "/app/audit",
+    title: "Histórico de segurança",
+    description: "Quem alterou o quê e quando.",
+    group: "Segurança avançada",
+    managerOnly: true,
+  },
 ];
 
 export default async function SettingsHubPage() {

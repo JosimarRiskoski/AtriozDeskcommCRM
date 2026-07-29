@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 
+import { APPEARANCE_PALETTES } from "@/lib/appearance";
 import { conversationTagSchema } from "./messaging";
 
 const LOCALES = ["pt-BR", "en-US"] as const;
@@ -81,6 +82,11 @@ export const tenantSchema = z.object({
 });
 export type TenantInput = z.infer<typeof tenantSchema>;
 
+export const organizationAppearanceSchema = z.object({
+  palette: z.enum(APPEARANCE_PALETTES),
+});
+export type OrganizationAppearanceInput = z.infer<typeof organizationAppearanceSchema>;
+
 export const NOTIFICATION_CATEGORIES = [
   "lead_assigned",
   "human_handoff",
@@ -129,9 +135,7 @@ const customFieldSchema = z.object({
     "url",
   ]),
   required: z.boolean().optional(),
-  options: z
-    .array(z.object({ value: z.string().min(1), label: z.string().min(1) }))
-    .optional(),
+  options: z.array(z.object({ value: z.string().min(1), label: z.string().min(1) })).optional(),
 });
 
 export const pipelineConfigPatchSchema = z.object({
