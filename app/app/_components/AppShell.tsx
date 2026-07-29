@@ -23,14 +23,14 @@ export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
       <Sidebar collapsed={sidebarCollapsed} />
       <div
         className={cn(
-          "flex h-screen min-h-0 flex-1 flex-col transition-[margin] duration-200",
+          "flex h-screen min-h-0 min-w-0 flex-1 flex-col transition-[margin] duration-200",
           sidebarCollapsed ? "ml-16" : "ml-60",
         )}
       >
         <TopBar />
         <main
           className={cn(
-            "min-h-0 flex-1",
+            "min-h-0 min-w-0 flex-1",
             isFullHeightWorkspace ? "overflow-hidden p-0" : "overflow-auto p-6",
           )}
         >
