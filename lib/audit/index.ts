@@ -16,8 +16,16 @@ import { env } from "@/lib/env";
 import type { AuditAction } from "./actions";
 
 export function isServiceRoleConfigured(): boolean {
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  return key.length > 50 && !key.startsWith("PLACEHOLDER");
+  const key = env.SUPABASE_SERVICE_ROLE_KEY.trim();
+
+  // Supabase supports both the legacy service_role JWT (long `eyJ...`) and
+  // the newer secret key format (`sb_secret_...`). The old length-only check
+  // rejected valid modern keys, silently falling back to the user-scoped
+  // client and causing RLS failures while writing the audit log.
+  return (
+    key.startsWith("sb_secret_") ||
+    (key.length > 50 && !key.startsWith("PLACEHOLDER"))
+  );
 }
 
 interface AuditEntry {
