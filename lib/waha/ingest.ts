@@ -64,6 +64,24 @@ export interface WahaEnvelope {
   payload?: WahaPayload;
 }
 
+/**
+ * Resolve o chat do cliente em mensagens enviadas pelo proprio celular.
+ * NOWEB costuma preencher `to`; GOWS envia `to: null` e coloca o destinatario
+ * em `from` (e tambem em `_data.Info.Chat`).
+ */
+export function outboundChatIdOf(p: WahaPayload): string {
+  if (p.to) return p.to;
+  if (p.fromMe && p.from) return p.from;
+
+  const info = p._data?.Info;
+  if (info && typeof info === "object" && "Chat" in info) {
+    const chat = (info as { Chat?: unknown }).Chat;
+    if (typeof chat === "string") return chat;
+  }
+
+  return "";
+}
+
 export type ChatIdentity =
   | { kind: "phone"; phone: string; lid: null }
   | { kind: "lid"; phone: null; lid: string } // lid = somente dígitos
@@ -89,7 +107,11 @@ export function parseChatId(chatId: string): ChatIdentity {
 
 const STOP_RX = /\b(STOP|PARAR|SAIR|UNSUBSCRIBE)\b/i;
 
-export function verifyHmacSha512(rawBody: string, signatureHeader: string | null, secret: string): boolean {
+export function verifyHmacSha512(
+  rawBody: string,
+  signatureHeader: string | null,
+  secret: string,
+): boolean {
   if (!signatureHeader) return false;
   const expected = createHmac("sha512", secret).update(rawBody, "utf8").digest("hex");
   const got = signatureHeader.replace(/^sha512=/i, "").trim();
@@ -302,7 +324,12 @@ async function markConversation(
 /**
  * Mensagem recebida (fromMe=false). Contato = remetente (`from`).
  */
-async function handleInbound(admin: Admin, session: Session, p: WahaPayload, requestId: string): Promise<void> {
+async function handleInbound(
+  admin: Admin,
+  session: Session,
+  p: WahaPayload,
+  requestId: string,
+): Promise<void> {
   const chatId = p.from ?? "";
   const parsed = parseChatId(chatId);
   if (parsed.kind === "group") return; // grupos não fazem binding CRM
@@ -310,9 +337,20 @@ async function handleInbound(admin: Admin, session: Session, p: WahaPayload, req
   // WAHA emite eventos vazios p/ status/read-receipt/presence — não viram mensagem.
   if (!p.body && !mediaUrlOf(p) && !p.hasMedia) return;
 
-  const contactId = await upsertContact(admin, session.organization_id, parsed, chatId, notifyNameOf(p));
+  const contactId = await upsertContact(
+    admin,
+    session.organization_id,
+    parsed,
+    chatId,
+    notifyNameOf(p),
+  );
   if (!contactId) return;
-  const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
+  const conversationId = await upsertConversation(
+    admin,
+    session.organization_id,
+    contactId,
+    session.id,
+  );
   if (!conversationId) return;
 
   const now = new Date().toISOString();
@@ -351,7 +389,14 @@ async function handleInbound(admin: Admin, session: Session, p: WahaPayload, req
   }
   if (insertErr?.code === "23505") return;
 
-  await markConversation(admin, session.organization_id, conversationId, "inbound", previewFromMessage(p), now);
+  await markConversation(
+    admin,
+    session.organization_id,
+    conversationId,
+    "inbound",
+    previewFromMessage(p),
+    now,
+  );
 
   // A resposta encerra a participação deste destinatário na campanha sem
   // disparar novamente nem esperar o restante da conversa. O vínculo é pelo
@@ -447,7 +492,8 @@ async function handleInbound(admin: Admin, session: Session, p: WahaPayload, req
           } as never,
         )
         .then(({ error }) => {
-          if (error) console.error("[waha.ingest] emit media.persist_requested failed", error.message);
+          if (error)
+            console.error("[waha.ingest] emit media.persist_requested failed", error.message);
         });
     }
   }
@@ -464,15 +510,26 @@ async function handleOutboundFromUserPhone(
   p: WahaPayload,
   requestId: string,
 ): Promise<void> {
-  const chatId = p.to ?? "";
+  const chatId = outboundChatIdOf(p);
   const parsed = parseChatId(chatId);
   if (parsed.kind === "group") return;
   if (!p.id || !chatId) return;
   if (!p.body && !mediaUrlOf(p) && !p.hasMedia) return;
 
-  const contactId = await upsertContact(admin, session.organization_id, parsed, chatId, notifyNameOf(p));
+  const contactId = await upsertContact(
+    admin,
+    session.organization_id,
+    parsed,
+    chatId,
+    notifyNameOf(p),
+  );
   if (!contactId) return;
-  const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
+  const conversationId = await upsertConversation(
+    admin,
+    session.organization_id,
+    contactId,
+    session.id,
+  );
   if (!conversationId) return;
 
   const now = new Date().toISOString();
@@ -503,7 +560,14 @@ async function handleOutboundFromUserPhone(
   }
   if (insertErr?.code === "23505") return;
 
-  await markConversation(admin, session.organization_id, conversationId, "outbound", previewFromMessage(p), now);
+  await markConversation(
+    admin,
+    session.organization_id,
+    conversationId,
+    "outbound",
+    previewFromMessage(p),
+    now,
+  );
 
   await audit({
     action: "message.sent",
@@ -532,7 +596,8 @@ async function handleOutboundFromUserPhone(
         } as never,
       )
       .then(({ error }) => {
-        if (error) console.error("[waha.ingest] emit media.persist_requested failed", error.message);
+        if (error)
+          console.error("[waha.ingest] emit media.persist_requested failed", error.message);
       });
   }
 }
@@ -565,7 +630,11 @@ interface SessionStatusRow extends Session {
   warmup_started_at: string | null;
 }
 
-async function handleSessionStatus(admin: Admin, session: SessionStatusRow, p: WahaPayload): Promise<void> {
+async function handleSessionStatus(
+  admin: Admin,
+  session: SessionStatusRow,
+  p: WahaPayload,
+): Promise<void> {
   const status = (p.status ?? "").toUpperCase() || null;
   if (!status) return;
   const allowed = new Set(["STARTING", "SCAN_QR_CODE", "WORKING", "STOPPED", "FAILED"]);
