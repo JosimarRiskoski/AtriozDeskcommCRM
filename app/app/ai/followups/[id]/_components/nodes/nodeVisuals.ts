@@ -51,7 +51,7 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
     defaultLabel: "Verificar condição",
     defaultConfig: () => ({
       combinator: "and",
-      checks: [{ field: "steps_taken", op: "gte", value: 0 }],
+      checks: [{ field: "lead_stage", op: "eq", value: "" }],
     }),
   },
   ai_classify: {

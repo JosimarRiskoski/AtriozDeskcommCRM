@@ -30,6 +30,7 @@ type ConfigOf<T extends FlowNode["type"]> = Extract<FlowNode, { type: T }>["conf
 interface Props {
   node: RFNode;
   onChange: (patch: Partial<RFNodeData>) => void;
+  onDelete?: () => void;
 }
 
 /**
@@ -38,7 +39,7 @@ interface Props {
  * passes its schema — otherwise the field shows an inline error and the
  * canvas keeps the last valid config (never a half-written value upstream).
  */
-export function NodeConfigPanel({ node, onChange }: Props) {
+export function NodeConfigPanel({ node, onChange, onDelete }: Props) {
   const type = node.type as FlowNode["type"];
   const visual = NODE_VISUALS[type];
   const Icon = visual.icon;
@@ -59,7 +60,9 @@ export function NodeConfigPanel({ node, onChange }: Props) {
     <div className="flex h-full flex-col gap-5 overflow-y-auto" data-testid="node-config-panel">
       <div className="space-y-1">
         <h2 className="flex items-center gap-2 text-base font-semibold text-text">
-          <span className={`flex h-6 w-6 items-center justify-center rounded-full ${visual.chipClassName}`}>
+          <span
+            className={`flex h-6 w-6 items-center justify-center rounded-full ${visual.chipClassName}`}
+          >
             <Icon size={14} aria-hidden />
           </span>
           {visual.paletteLabel}
@@ -83,12 +86,15 @@ export function NodeConfigPanel({ node, onChange }: Props) {
       <div className="space-y-4 border-t border-border pt-4">
         {type === "trigger" && (
           <p className="text-sm text-text-muted">
-            Início do fluxo — sem configuração adicional. O disparo (manual, mudança de
-            etapa, silêncio ou fim de conversa) é definido nas configurações do fluxo.
+            Início do fluxo — sem configuração adicional. O disparo (manual, mudança de etapa,
+            silêncio ou fim de conversa) é definido nas configurações do fluxo.
           </p>
         )}
         {type === "wait" && (
-          <WaitForm config={node.data.config as ConfigOf<"wait">} onChange={(config) => onChange({ config })} />
+          <WaitForm
+            config={node.data.config as ConfigOf<"wait">}
+            onChange={(config) => onChange({ config })}
+          />
         )}
         {type === "condition" && (
           <ConditionForm
@@ -103,12 +109,42 @@ export function NodeConfigPanel({ node, onChange }: Props) {
           />
         )}
         {type === "action" && (
-          <ActionForm config={node.data.config as ConfigOf<"action">} onChange={(config) => onChange({ config })} />
+          <ActionForm
+            config={node.data.config as ConfigOf<"action">}
+            onChange={(config) => onChange({ config })}
+          />
         )}
         {type === "end" && (
-          <EndForm config={node.data.config as ConfigOf<"end">} onChange={(config) => onChange({ config })} />
+          <EndForm
+            config={node.data.config as ConfigOf<"end">}
+            onChange={(config) => onChange({ config })}
+          />
         )}
       </div>
+
+      {onDelete && type !== "trigger" && (
+        <div className="mt-auto border-t border-border pt-4">
+          <Button
+            type="button"
+            variant="destructive"
+            className="w-full"
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Excluir esta etapa? As ligações conectadas a ela também serão removidas. Você poderá desfazer a exclusão.",
+                )
+              ) {
+                onDelete();
+              }
+            }}
+          >
+            <Trash size={16} aria-hidden className="mr-2" /> Excluir etapa
+          </Button>
+          <p className="mt-2 text-xs text-text-muted">
+            Se apagar por engano, use Desfazer ou Ctrl+Z.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -256,6 +292,21 @@ function WaitForm({
 const CONDITION_FIELDS = ["lead_stage", "tag", "steps_taken", "last_outcome"] as const;
 const CONDITION_OPS = ["eq", "neq", "gte", "lte", "contains"] as const;
 
+const CONDITION_FIELD_LABELS: Record<(typeof CONDITION_FIELDS)[number], string> = {
+  lead_stage: "Etapa atual do contato",
+  tag: "Tag do contato",
+  steps_taken: "Quantidade de etapas já executadas",
+  last_outcome: "Resultado da última ação",
+};
+
+const CONDITION_OPERATOR_LABELS: Record<(typeof CONDITION_OPS)[number], string> = {
+  eq: "é igual a",
+  neq: "é diferente de",
+  gte: "é maior ou igual a",
+  lte: "é menor ou igual a",
+  contains: "contém",
+};
+
 function ConditionForm({
   config,
   onChange,
@@ -268,7 +319,10 @@ function ConditionForm({
   const [error, setError] = useState<string | null>(null);
 
   const commit = (nextCombinator: "and" | "or", nextChecks: typeof checks) => {
-    const parsed = conditionConfigSchema.safeParse({ combinator: nextCombinator, checks: nextChecks });
+    const parsed = conditionConfigSchema.safeParse({
+      combinator: nextCombinator,
+      checks: nextChecks,
+    });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Configuração inválida.");
       return;
@@ -301,7 +355,11 @@ function ConditionForm({
 
       <div className="space-y-3">
         {checks.map((check, idx) => (
-          <div key={idx} className="space-y-2 rounded-sm border border-border p-2" data-testid={`condition-check-${idx}`}>
+          <div
+            key={idx}
+            className="space-y-2 rounded-sm border border-border p-2"
+            data-testid={`condition-check-${idx}`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-text-muted">Condição {idx + 1}</span>
               <Button
@@ -322,7 +380,9 @@ function ConditionForm({
             <Select
               value={check.field}
               onValueChange={(v) => {
-                const next = checks.map((c, i) => (i === idx ? { ...c, field: v as (typeof CONDITION_FIELDS)[number] } : c));
+                const next = checks.map((c, i) =>
+                  i === idx ? { ...c, field: v as (typeof CONDITION_FIELDS)[number] } : c,
+                );
                 setChecks(next);
                 commit(combinator, next);
               }}
@@ -333,7 +393,7 @@ function ConditionForm({
               <SelectContent>
                 {CONDITION_FIELDS.map((f) => (
                   <SelectItem key={f} value={f}>
-                    {f}
+                    {CONDITION_FIELD_LABELS[f]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -341,7 +401,9 @@ function ConditionForm({
             <Select
               value={check.op}
               onValueChange={(v) => {
-                const next = checks.map((c, i) => (i === idx ? { ...c, op: v as (typeof CONDITION_OPS)[number] } : c));
+                const next = checks.map((c, i) =>
+                  i === idx ? { ...c, op: v as (typeof CONDITION_OPS)[number] } : c,
+                );
                 setChecks(next);
                 commit(combinator, next);
               }}
@@ -352,21 +414,39 @@ function ConditionForm({
               <SelectContent>
                 {CONDITION_OPS.map((op) => (
                   <SelectItem key={op} value={op}>
-                    {op}
+                    {CONDITION_OPERATOR_LABELS[op]}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Input
               aria-label="Valor"
-              placeholder="Valor"
+              type={check.field === "steps_taken" ? "number" : "text"}
+              min={check.field === "steps_taken" ? 0 : undefined}
+              placeholder={
+                check.field === "lead_stage"
+                  ? "Ex.: Proposta enviada"
+                  : check.field === "tag"
+                    ? "Ex.: cliente-quente"
+                    : check.field === "steps_taken"
+                      ? "Ex.: 2"
+                      : "Ex.: respondeu"
+              }
               value={String(check.value)}
               onChange={(e) => {
-                const next = checks.map((c, i) => (i === idx ? { ...c, value: e.target.value } : c));
+                const value =
+                  check.field === "steps_taken" && e.target.value !== ""
+                    ? Number(e.target.value)
+                    : e.target.value;
+                const next = checks.map((c, i) => (i === idx ? { ...c, value } : c));
                 setChecks(next);
                 commit(combinator, next);
               }}
             />
+            <p className="text-xs text-text-muted">
+              {CONDITION_FIELD_LABELS[check.field]} {CONDITION_OPERATOR_LABELS[check.op]} o valor
+              informado.
+            </p>
           </div>
         ))}
       </div>
@@ -377,7 +457,7 @@ function ConditionForm({
         size="sm"
         disabled={checks.length >= 10}
         onClick={() => {
-          const next = [...checks, { field: "steps_taken" as const, op: "gte" as const, value: 0 }];
+          const next = [...checks, { field: "lead_stage" as const, op: "eq" as const, value: "" }];
           setChecks(next);
           commit(combinator, next);
         }}
@@ -404,7 +484,12 @@ function ClassifyForm({
   const [hint, setHint] = useState(config.hint ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  const commit = (next: { classesText: string; graceMin: number; target: "last_reply" | "summary"; hint: string }) => {
+  const commit = (next: {
+    classesText: string;
+    graceMin: number;
+    target: "last_reply" | "summary";
+    hint: string;
+  }) => {
     const classes = next.classesText
       .split(",")
       .map((c) => c.trim())
@@ -498,11 +583,15 @@ function ActionForm({
   onChange: (c: ConfigOf<"action">) => void;
 }) {
   const [mode, setMode] = useState(config.mode);
-  const [promptHint, setPromptHint] = useState(config.mode === "ai_message" ? config.prompt_hint : "");
+  const [promptHint, setPromptHint] = useState(
+    config.mode === "ai_message" ? config.prompt_hint : "",
+  );
   const [fallbackTemplateId, setFallbackTemplateId] = useState(
     config.mode === "ai_message" ? (config.fallback_template_id ?? "") : "",
   );
-  const [templateId, setTemplateId] = useState(config.mode === "template" ? config.template_id : "");
+  const [templateId, setTemplateId] = useState(
+    config.mode === "template" ? config.template_id : "",
+  );
   const [error, setError] = useState<string | null>(null);
 
   const commit = (next: {
@@ -516,7 +605,9 @@ function ActionForm({
         ? {
             mode: "ai_message" as const,
             prompt_hint: next.promptHint,
-            ...(next.fallbackTemplateId.trim() ? { fallback_template_id: next.fallbackTemplateId } : {}),
+            ...(next.fallbackTemplateId.trim()
+              ? { fallback_template_id: next.fallbackTemplateId }
+              : {}),
           }
         : { mode: "template" as const, template_id: next.templateId };
     const parsed = actionConfigSchema.safeParse(candidate);
@@ -596,7 +687,13 @@ function ActionForm({
 
 // ─── end ─────────────────────────────────────────────────────────────────
 
-function EndForm({ config, onChange }: { config: ConfigOf<"end">; onChange: (c: ConfigOf<"end">) => void }) {
+function EndForm({
+  config,
+  onChange,
+}: {
+  config: ConfigOf<"end">;
+  onChange: (c: ConfigOf<"end">) => void;
+}) {
   const [outcome, setOutcome] = useState(config.outcome);
   const [note, setNote] = useState(config.note ?? "");
   const [error, setError] = useState<string | null>(null);

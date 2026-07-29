@@ -203,6 +203,16 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
     },
     [remember, setNodes],
   );
+
+  const deleteSelectedNode = useCallback(() => {
+    if (!selectedNodeId) return;
+    remember();
+    setNodes((current) => current.filter((node) => node.id !== selectedNodeId));
+    setEdges((current) =>
+      current.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId),
+    );
+    setSelectedNodeId(null);
+  }, [remember, selectedNodeId, setEdges, setNodes]);
   const updateEdgeCondition = useCallback(
     (id: string, condition: FlowEdge["condition"]) => {
       remember();
@@ -349,6 +359,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
+            deleteKeyCode={null}
             fitView
           >
             <Background />
@@ -367,6 +378,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
               key={selectedNode.id}
               node={selectedNode}
               onChange={(patch) => updateNodeData(selectedNode.id, patch)}
+              onDelete={selectedNode.type === "trigger" ? undefined : deleteSelectedNode}
             />
           </aside>
         )}
