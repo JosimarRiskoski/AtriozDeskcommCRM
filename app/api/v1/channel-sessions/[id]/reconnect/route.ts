@@ -35,7 +35,7 @@ export async function POST(
   const supabase = await createClient();
   const { data: session } = await supabase
     .from("channel_sessions")
-    .select("id, waha_session_name")
+    .select("id, waha_session_name, status")
     .eq("organization_id", activeOrg.orgId)
     .eq("id", id)
     .maybeSingle();
@@ -52,7 +52,13 @@ export async function POST(
   }
 
   try {
-    await waha.stopSession(session.waha_session_name);
+    // WAHA's documented recovery path for FAILED sessions is logout + start.
+    // For other states, preserve the saved credentials and use stop + start.
+    if (session.status === "FAILED") {
+      await waha.logoutSession(session.waha_session_name);
+    } else {
+      await waha.stopSession(session.waha_session_name);
+    }
     const remote = (await waha.startSession(session.waha_session_name)) as { status?: string };
     const nextStatus = remote.status ?? "STARTING";
     await supabase
