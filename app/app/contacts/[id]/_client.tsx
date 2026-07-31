@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ShieldCheck, PencilSimple } from "@/lib/ui/icons";
+import { ShieldCheck, PencilSimple, Trash } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { BackNavigation } from "@/components/shell/BackNavigation";
 import { StartFollowupCard } from "@/components/contacts/StartFollowupCard";
+import { DeleteContactDialog } from "@/components/contacts/DeleteContactDialog";
 
 interface Props {
   contactId: string;
@@ -26,6 +27,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const { user, activeOrg } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
   const [anonOpen, setAnonOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (q.isLoading) {
     return (
@@ -49,6 +51,7 @@ export function ContactDetailClient({ contactId }: Props) {
     user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin);
   const canManageFollowups =
     user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager);
+  const canDelete = canManageFollowups;
 
   const displayName = contact.display_name?.trim() || contact.name?.trim() || "Sem nome";
 
@@ -97,12 +100,20 @@ export function ContactDetailClient({ contactId }: Props) {
             {contact.is_anonymized && <Badge variant="destructive">Anonimizado</Badge>}
           </div>
         </div>
-        {!contact.is_anonymized && (
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
-            <PencilSimple size={16} weight="bold" aria-hidden />
-            <span>Editar</span>
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {!contact.is_anonymized && (
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <PencilSimple size={16} weight="bold" aria-hidden />
+              <span>Editar</span>
+            </Button>
+          )}
+          {canDelete && (
+            <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+              <Trash size={16} weight="bold" aria-hidden />
+              <span>Excluir</span>
+            </Button>
+          )}
+        </div>
       </header>
 
       <Tabs defaultValue="overview">
@@ -223,6 +234,12 @@ export function ContactDetailClient({ contactId }: Props) {
 
       <EditContactDialog contact={contact} open={editOpen} onOpenChange={setEditOpen} />
       <AnonymizeDialog contactId={contactId} open={anonOpen} onOpenChange={setAnonOpen} />
+      <DeleteContactDialog
+        contactId={contactId}
+        contactName={displayName}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+      />
     </div>
   );
 }

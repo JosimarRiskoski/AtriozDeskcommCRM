@@ -148,3 +148,66 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
 
   return ok(updated, { requestId });
 }
+
+export async function DELETE(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
+  const requestId = randomUUID();
+  const { id } = await ctx.params;
+  if (!UUID_RX.test(id)) {
+    return fail("invalid_request", "id invÃ¡lido.", 400, { requestId });
+  }
+
+  const authz = await requireRole("manager", { requestId, resource: "followup_flows" });
+  if (!authz.ok) return authz.response;
+  const { user, org: activeOrg } = authz;
+  const supabase = await createClient();
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from("followup_flow_pointers")
+    .select("id,name,status")
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId)
+    .maybeSingle();
+  if (fetchErr) return fail("internal_error", fetchErr.message, 500, { requestId });
+  if (!existing) return fail("not_found", "Fluxo nÃ£o encontrado.", 404, { requestId });
+  if (existing.status === "active") {
+    return fail("conflict", "Desative o fluxo antes de excluÃ­-lo.", 409, { requestId });
+  }
+
+  const { data: enrollments, error: enrollmentErr } = await supabase
+    .from("followup_enrollments")
+    .select("id,status")
+    .eq("pointer_id", id)
+    .eq("organization_id", activeOrg.orgId);
+  if (enrollmentErr) return fail("internal_error", enrollmentErr.message, 500, { requestId });
+  const liveStatuses = new Set(["active", "waiting_reply", "paused_handoff"]);
+  if ((enrollments ?? []).some((row) => liveStatuses.has(row.status))) {
+    return fail(
+      "conflict",
+      "Este fluxo ainda possui follow-ups em andamento. Cancele-os antes de excluir.",
+      409,
+      { requestId },
+    );
+  }
+
+  const { data: deleted, error: deleteErr } = await supabase
+    .from("followup_flow_pointers")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId)
+    .select("id")
+    .maybeSingle();
+  if (deleteErr) return fail("internal_error", deleteErr.message, 500, { requestId });
+  if (!deleted) return fail("not_found", "Fluxo nÃ£o encontrado.", 404, { requestId });
+
+  void audit({
+    action: "followup_flow.deleted",
+    actorUserId: user.id,
+    organizationId: activeOrg.orgId,
+    resourceType: "followup_flow_pointer",
+    resourceId: id,
+    requestId,
+    metadata: { name: existing.name, previous_status: existing.status },
+  });
+
+  return ok({ id, deleted: true }, { requestId });
+}

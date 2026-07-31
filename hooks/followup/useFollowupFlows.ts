@@ -64,3 +64,23 @@ export function useCreateFollowupFlow() {
     },
   });
 }
+
+export function useDeleteFollowupFlow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ["followup", "flows", "delete"],
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/api/v1/ai/followup-flows/${id}`);
+      return id;
+    },
+    onSuccess: (id) => {
+      qc.setQueryData<FollowupFlowPointerRow[]>(followupFlowsListQueryKey, (prev) =>
+        prev?.filter((flow) => flow.id !== id),
+      );
+      toast.success("Fluxo excluÃ­do.");
+    },
+    onError: (err) => {
+      showApiError(err);
+    },
+  });
+}

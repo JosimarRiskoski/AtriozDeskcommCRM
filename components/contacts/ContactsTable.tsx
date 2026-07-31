@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatRelative } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -22,6 +22,8 @@ function displayName(c: Contact): string {
 }
 
 export function ContactsTable({ contacts }: Props) {
+  const router = useRouter();
+
   return (
     <Table>
       <TableHeader>
@@ -36,28 +38,37 @@ export function ContactsTable({ contacts }: Props) {
       </TableHeader>
       <TableBody>
         {contacts.map((c) => (
-          <TableRow key={c.id} className="cursor-pointer">
-            <TableCell className="font-medium">
-              <Link href={`/app/contacts/${c.id}`} className="hover:underline">
-                {displayName(c)}
-              </Link>
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              {c.email ?? "—"}
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              {c.phone_number ?? "—"}
-            </TableCell>
+          <TableRow
+            key={c.id}
+            className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            tabIndex={0}
+            role="link"
+            aria-label={`Abrir contato ${displayName(c)}`}
+            onClick={() => router.push(`/app/contacts/${c.id}`)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                router.push(`/app/contacts/${c.id}`);
+              }
+            }}
+          >
+            <TableCell className="font-medium">{displayName(c)}</TableCell>
+            <TableCell className="text-muted-foreground">{c.email ?? "—"}</TableCell>
+            <TableCell className="text-muted-foreground">{c.phone_number ?? "—"}</TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-1">
-                {c.tags.length === 0
-                  ? <span className="text-muted-foreground text-xs">—</span>
-                  : c.tags.map((t) => (
-                      <Badge key={t} variant="neutral">{t}</Badge>
-                    ))}
+                {c.tags.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">—</span>
+                ) : (
+                  c.tags.map((t) => (
+                    <Badge key={t} variant="neutral">
+                      {t}
+                    </Badge>
+                  ))
+                )}
               </div>
             </TableCell>
-            <TableCell className="text-muted-foreground text-sm">
+            <TableCell className="text-sm text-muted-foreground">
               {c.last_activity_at
                 ? formatRelative(new Date(c.last_activity_at), new Date(), { locale: ptBR })
                 : "—"}
@@ -66,9 +77,7 @@ export function ContactsTable({ contacts }: Props) {
               <div className="flex flex-wrap gap-1">
                 {c.is_anonymized && <Badge variant="destructive">Anonimizado</Badge>}
                 {c.is_blocked && <Badge variant="warning">Bloqueado</Badge>}
-                {!c.is_anonymized && !c.is_blocked && (
-                  <Badge variant="success">Ativo</Badge>
-                )}
+                {!c.is_anonymized && !c.is_blocked && <Badge variant="success">Ativo</Badge>}
               </div>
             </TableCell>
           </TableRow>

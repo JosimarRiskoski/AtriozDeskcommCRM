@@ -60,17 +60,18 @@ const INVALID_GRAPH: FlowGraph = {
 
 type Row = Record<string, unknown>;
 
-function makeDb(pointers: Row[], versions: Row[]) {
+function makeDb(pointers: Row[], versions: Row[], enrollments: Row[] = []) {
   const tables: Record<string, Row[]> = {
     followup_flow_pointers: pointers,
     followup_flow_versions: versions,
+    followup_enrollments: enrollments,
   };
 
   function builder(table: string) {
     const filters: Array<[string, unknown]> = [];
     let orderCol: string | null = null;
     let orderAsc = true;
-    let mode: "select" | "insert" | "update" = "select";
+    let mode: "select" | "insert" | "update" | "delete" = "select";
     let payload: Row | undefined;
 
     function matches(row: Row): boolean {
@@ -114,6 +115,11 @@ function makeDb(pointers: Row[], versions: Row[]) {
         tableRows.push(row);
         return { data: [row], error: null };
       }
+      if (mode === "delete") {
+        const deleted = tableRows.filter(matches);
+        tables[table] = tableRows.filter((row) => !matches(row));
+        return { data: deleted, error: null };
+      }
       // update
       const matched = tableRows.filter(matches);
       if (
@@ -147,6 +153,10 @@ function makeDb(pointers: Row[], versions: Row[]) {
       update(obj: Row) {
         mode = "update";
         payload = obj;
+        return b;
+      },
+      delete() {
+        mode = "delete";
         return b;
       },
       eq(col: string, val: unknown) {
@@ -450,6 +460,56 @@ describe("PATCH /api/v1/ai/followup-flows/:id", () => {
     const body = (await res.json()) as { data: Row };
     expect(body.data.name).toBe("nome-original");
     expect(vi.mocked(audit)).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /api/v1/ai/followup-flows/:id", () => {
+  const FLOW_ID = "33333333-3333-4333-8333-333333333333";
+  const pointer = (status = "draft"): Row => ({
+    id: FLOW_ID,
+    organization_id: ORG_ID,
+    name: "Fluxo de teste",
+    status,
+  });
+
+  it("manager exclui rascunho sem follow-up em andamento", async () => {
+    const rows = [pointer()];
+    const db = makeDb(rows, []);
+    session("manager", db);
+    const { DELETE } = await import("@/app/api/v1/ai/followup-flows/[id]/route");
+
+    const res = await DELETE(req("DELETE"), ctx(FLOW_ID));
+
+    expect(res.status).toBe(200);
+    const remaining = await db.from("followup_flow_pointers").select();
+    expect(remaining.data).toHaveLength(0);
+    expect(vi.mocked(audit)).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "followup_flow.deleted", resourceId: FLOW_ID }),
+    );
+  });
+
+  it("nÃ£o exclui fluxo ativo", async () => {
+    const db = makeDb([pointer("active")], []);
+    session("manager", db);
+    const { DELETE } = await import("@/app/api/v1/ai/followup-flows/[id]/route");
+
+    const res = await DELETE(req("DELETE"), ctx(FLOW_ID));
+
+    expect(res.status).toBe(409);
+  });
+
+  it("nÃ£o exclui fluxo com enrollment em andamento", async () => {
+    const db = makeDb(
+      [pointer("disabled")],
+      [],
+      [{ id: randomUUID(), organization_id: ORG_ID, pointer_id: FLOW_ID, status: "active" }],
+    );
+    session("manager", db);
+    const { DELETE } = await import("@/app/api/v1/ai/followup-flows/[id]/route");
+
+    const res = await DELETE(req("DELETE"), ctx(FLOW_ID));
+
+    expect(res.status).toBe(409);
   });
 });
 

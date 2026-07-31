@@ -13,6 +13,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { contactPatchSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
+import { audit } from "@/lib/audit";
 
 import { getContactHandler, patchContactHandler } from "../_handler";
 
@@ -106,4 +107,89 @@ export async function PATCH(
     }
     throw err;
   }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const requestId = randomUUID();
+  const { id } = await ctx.params;
+  const authz = await requireRole("manager", { requestId, resource: "contacts" });
+  if (!authz.ok) return authz.response;
+
+  const { user, org: activeOrg } = authz;
+  const supabase = await createClient();
+  const { data: contact, error: contactErr } = await supabase
+    .from("contacts")
+    .select("id,name,display_name,email,phone_number,is_anonymized")
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId)
+    .maybeSingle();
+
+  if (contactErr) return fail("internal_error", contactErr.message, 500, { requestId });
+  if (!contact) return fail("not_found", "Contato nÃ£o encontrado.", 404, { requestId });
+
+  const [
+    { count: conversationCount, error: conversationErr },
+    { count: messageCount, error: messageErr },
+  ] = await Promise.all([
+    supabase
+      .from("conversations")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", activeOrg.orgId)
+      .eq("contact_id", id),
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", activeOrg.orgId)
+      .eq("contact_id", id),
+  ]);
+
+  if (conversationErr || messageErr) {
+    return fail(
+      "internal_error",
+      conversationErr?.message ?? messageErr?.message ?? "contact_dependency_check_failed",
+      500,
+      { requestId },
+    );
+  }
+  if ((conversationCount ?? 0) > 0 || (messageCount ?? 0) > 0) {
+    return fail(
+      "contact_has_history",
+      "Este contato possui conversas ou mensagens. Para preservar o histÃ³rico, use Anonimizar contato na aba LGPD.",
+      409,
+      {
+        requestId,
+        details: { conversations: conversationCount ?? 0, messages: messageCount ?? 0 },
+      },
+    );
+  }
+
+  const { data: deleted, error: deleteErr } = await supabase
+    .from("contacts")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId)
+    .select("id")
+    .maybeSingle();
+  if (deleteErr) return fail("internal_error", deleteErr.message, 500, { requestId });
+  if (!deleted) return fail("not_found", "Contato nÃ£o encontrado.", 404, { requestId });
+
+  void audit({
+    action: "contact.deleted",
+    actorUserId: user.id,
+    organizationId: activeOrg.orgId,
+    resourceType: "contact",
+    resourceId: id,
+    requestId,
+    metadata: {
+      display_name: contact.display_name ?? contact.name ?? null,
+      had_email: Boolean(contact.email),
+      had_phone: Boolean(contact.phone_number),
+      was_anonymized: contact.is_anonymized,
+    },
+  });
+
+  return ok({ id, deleted: true }, { requestId });
 }
