@@ -1,5 +1,7 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 type Stage = { id: string; name: string; position: number };
@@ -31,6 +33,7 @@ export function CampaignsClient({
   pipelines: Pipeline[];
   sessions: Session[];
 }) {
+  const router = useRouter();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState<"csv" | "google_sheets">("csv");
@@ -141,6 +144,7 @@ export function CampaignsClient({
     else {
       toast.success("Campanha atualizada.");
       await load();
+      if (action === "start") router.push(`/app/campaigns/${id}`);
     }
   }
 
@@ -329,6 +333,9 @@ export function CampaignsClient({
               </p>
             </div>
             <div className="flex gap-2">
+              <Link href={`/app/campaigns/${c.id}`} className="rounded-md border px-3 py-2 text-sm">
+                Acompanhar
+              </Link>
               {c.status === "draft" && (
                 <button
                   onClick={() => action(c.id, "start")}

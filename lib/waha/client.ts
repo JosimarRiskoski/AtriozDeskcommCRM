@@ -115,7 +115,10 @@ export class WahaClient {
       },
       body: JSON.stringify({ session, chatId, text }),
     });
-    if (!res.ok) throw new Error(`waha_${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`waha_${res.status}: ${body.slice(0, 500)}`);
+    }
     return res.json();
   }
 
