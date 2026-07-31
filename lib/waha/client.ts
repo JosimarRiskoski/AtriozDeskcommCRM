@@ -122,6 +122,30 @@ export class WahaClient {
     return res.json();
   }
 
+  /**
+   * Confirma se o telefone existe no WhatsApp e devolve o chatId canônico
+   * escolhido pelo próprio WAHA (inclusive @lid no Brasil).
+   */
+  async checkNumberExists(
+    session: string,
+    phone: string,
+  ): Promise<{ numberExists: boolean; chatId: string | null }> {
+    const digits = phone.replace(/\D/g, "");
+    const query = new URLSearchParams({ phone: digits, session });
+    const res = await fetch(`${this.baseUrl}/api/contacts/check-exists?${query.toString()}`, {
+      headers: { "X-Api-Key": this.apiKey },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`waha_check_exists_${res.status}: ${body.slice(0, 500)}`);
+    }
+    const data = (await res.json()) as { numberExists?: boolean; chatId?: string | null };
+    return {
+      numberExists: data.numberExists === true,
+      chatId: typeof data.chatId === "string" && data.chatId.trim() ? data.chatId.trim() : null,
+    };
+  }
+
   /** Resolve um identificador privado `@lid` para o telefone da sessao. */
   async getPhoneByLid(session: string, lid: string): Promise<string | null> {
     const normalizedLid = lid.replace(/@.*$/, "");

@@ -20,6 +20,8 @@ export interface ResolveWahaChatIdInput {
   phoneNumber: string | null | undefined;
   /** `contacts.wa_identity` (migration 0027): 'phone:+E164' | 'lid:<digits>' | null. */
   waIdentity: string | null | undefined;
+  /** chatId canônico previamente confirmado pelo endpoint check-exists do WAHA. */
+  verifiedChatId?: string | null | undefined;
 }
 
 /**
@@ -31,6 +33,9 @@ export interface ResolveWahaChatIdInput {
  */
 export function resolveWahaChatId(input: ResolveWahaChatIdInput): string | null {
   if (input.isGroup && input.groupChatId) return input.groupChatId;
+  if (input.verifiedChatId && /@(c\.us|s\.whatsapp\.net|lid)$/.test(input.verifiedChatId)) {
+    return input.verifiedChatId;
+  }
   if (input.phoneNumber) return `${input.phoneNumber.replace(/\D/g, "")}@c.us`;
   if (input.waIdentity?.startsWith("lid:")) return `${input.waIdentity.slice(4)}@lid`;
   return null;

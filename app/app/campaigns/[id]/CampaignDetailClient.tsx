@@ -45,6 +45,7 @@ type Detail = {
     processing: number;
     sent: number;
     replied: number;
+    skipped: number;
     failed: number;
     finished: number;
     progress: number;

@@ -131,7 +131,7 @@ export async function sendMessageHandler(
   const { data: conv, error: convErr } = await supabase
     .from("conversations")
     .select(
-      "id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, contacts:contact_id(phone_number, wa_identity, is_blocked), channel_sessions:channel_session_id(waha_session_name, status)",
+      "id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, contacts:contact_id(phone_number, wa_identity, source_metadata, is_blocked), channel_sessions:channel_session_id(waha_session_name, status)",
     )
     .eq("id", input.conversation_id)
     .maybeSingle();
@@ -153,6 +153,7 @@ export async function sendMessageHandler(
     contacts: {
       phone_number: string | null;
       wa_identity: string | null;
+      source_metadata: Record<string, unknown> | null;
       is_blocked: boolean;
     } | null;
     channel_sessions: { waha_session_name: string; status: string } | null;
@@ -234,6 +235,10 @@ export async function sendMessageHandler(
     groupChatId: c.group_chat_id,
     phoneNumber: c.contacts?.phone_number,
     waIdentity: c.contacts?.wa_identity,
+    verifiedChatId:
+      typeof c.contacts?.source_metadata?.waha_chat_id === "string"
+        ? c.contacts.source_metadata.waha_chat_id
+        : null,
   });
 
   if (!waha) {
