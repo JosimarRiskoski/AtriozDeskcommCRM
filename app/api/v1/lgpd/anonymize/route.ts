@@ -93,7 +93,6 @@ export async function POST(req: NextRequest): Promise<Response> {
       name: null,
       display_name: `Contato Anonimizado #${shortId}`,
       email: null,
-      email_normalized: null,
       phone_number: null,
       cpf_encrypted: null,
       cpf_hash: null,
