@@ -85,6 +85,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
   const [newContactOpen, setNewContactOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const composerRef = useRef<ComposerHandle | null>(null);
 
   const filters: ConversationsFilters = useMemo(
@@ -149,7 +150,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       : null;
 
   return (
-    <div className="grid h-full min-h-0 w-full grid-cols-1 overflow-hidden md:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_minmax(320px,24vw)]">
+    <div className="relative grid h-full min-h-0 w-full grid-cols-1 overflow-hidden md:grid-cols-[300px_minmax(0,1fr)]">
       <div className="flex h-full min-h-0 flex-col border-r border-border">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-sm font-semibold">Conversas</span>
@@ -173,7 +174,11 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       <div className="flex h-full min-h-0 flex-col">
         {selectedConversation ? (
           <>
-            <ConversationHeader conversation={selectedConversation} />
+            <ConversationHeader
+              conversation={selectedConversation}
+              detailsOpen={detailsOpen}
+              onToggleDetails={() => setDetailsOpen((open) => !open)}
+            />
             <div className="min-h-0 flex-1 overflow-hidden">
               <ChatThread conversationId={selectedConversation.id} />
             </div>
@@ -197,9 +202,19 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         )}
       </div>
 
-      <div className="hidden h-full min-h-0 2xl:block">
-        <CRMSidePanel conversation={selectedConversation} />
-      </div>
+      {detailsOpen ? (
+        <aside className="absolute inset-y-0 right-0 z-20 flex w-[min(24rem,92vw)] min-w-[20rem] flex-col border-l border-border bg-background shadow-2xl">
+          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+            <span className="text-sm font-semibold">Detalhes do contato</span>
+            <Button size="sm" variant="ghost" onClick={() => setDetailsOpen(false)}>
+              Fechar
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <CRMSidePanel conversation={selectedConversation} />
+          </div>
+        </aside>
+      ) : null}
 
       <InboxKeyboardShortcuts
         visibleIds={visibleIds}

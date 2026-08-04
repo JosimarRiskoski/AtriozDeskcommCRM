@@ -27,6 +27,8 @@ import { ContinueConversationDialog } from "@/components/inbox/ContinueConversat
 
 interface Props {
   conversation: ConversationWithContact;
+  detailsOpen?: boolean;
+  onToggleDetails?: () => void;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -37,7 +39,7 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "Arquivada",
 };
 
-export function ConversationHeader({ conversation }: Props) {
+export function ConversationHeader({ conversation, detailsOpen = false, onToggleDetails }: Props) {
   const [renderedAt] = useState(() => Date.now());
   const { user } = useAuth();
   const claim = useClaimConversation();
@@ -233,6 +235,11 @@ export function ConversationHeader({ conversation }: Props) {
             </Link>
           </Button>
         )}
+        {onToggleDetails ? (
+          <Button size="sm" variant={detailsOpen ? "default" : "outline"} onClick={onToggleDetails}>
+            {detailsOpen ? "Fechar detalhes" : "Detalhes do contato"}
+          </Button>
+        ) : null}
       </div>
       <ReassignDialog
         conversationId={conversation.id}
