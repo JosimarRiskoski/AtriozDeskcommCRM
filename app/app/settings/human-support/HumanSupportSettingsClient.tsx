@@ -41,6 +41,8 @@ export function HumanSupportSettingsClient() {
   const [value, setValue] = useState<HumanSupportSettings>(DEFAULT_HUMAN_SUPPORT_SETTINGS);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [manualGroupId, setManualGroupId] = useState("");
+  const [manualGroupName, setManualGroupName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -69,13 +71,19 @@ export function HumanSupportSettingsClient() {
       );
       setValue(res.data);
       toast.success("Configuração de atendimento humano salva.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar a configuração.");
     } finally {
       setSaving(false);
     }
   };
   const sendGroupTest = async () => {
-    await apiClient.post("/api/v1/settings/human-support/test-group", {});
-    toast.success("Mensagem de teste enviada ao grupo.");
+    try {
+      await apiClient.post("/api/v1/settings/human-support/test-group", {});
+      toast.success("Mensagem de teste enviada ao grupo.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível enviar o teste.");
+    }
   };
   if (loading) return <p className="text-sm text-muted-foreground">Carregando configuração…</p>;
   const availableGroups = groups.filter(
@@ -127,7 +135,13 @@ export function HumanSupportSettingsClient() {
           <Toggle
             label="Avisar grupo WhatsApp"
             checked={value.notify_whatsapp_group}
-            onChange={(v) => set("notify_whatsapp_group", v)}
+            onChange={(v) => {
+              if (v && (!value.whatsapp_connection_id || !value.whatsapp_group_chat_id)) {
+                toast.error("Escolha a conexão e o grupo antes de ativar este aviso.");
+                return;
+              }
+              set("notify_whatsapp_group", v);
+            }}
           />
         </div>
         <Toggle
@@ -227,6 +241,52 @@ export function HumanSupportSettingsClient() {
             ))}
           </SelectField>
         </div>
+        {availableGroups.length === 0 ? (
+          <div className="space-y-3 rounded-md border border-dashed p-3">
+            <p className="text-sm font-medium">Ainda não há grupos encontrados nesta conexão.</p>
+            <p className="text-xs text-muted-foreground">
+              O CRM aprende os grupos quando recebe ou registra uma mensagem deles. Se você já
+              possui o identificador do grupo, pode cadastrá-lo abaixo para habilitar os avisos.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label htmlFor="manualGroupId">Identificador do grupo</Label>
+                <Input
+                  id="manualGroupId"
+                  placeholder="1234567890-123456789@g.us"
+                  value={manualGroupId}
+                  onChange={(event) => setManualGroupId(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="manualGroupName">Nome para exibir</Label>
+                <Input
+                  id="manualGroupName"
+                  placeholder="Gestores"
+                  value={manualGroupName}
+                  onChange={(event) => setManualGroupName(event.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!value.whatsapp_connection_id || !manualGroupId.trim()}
+              onClick={() => {
+                const groupId = manualGroupId.trim();
+                if (!/^\d+(?:-\d+)?@g\.us$/.test(groupId)) {
+                  toast.error("Use o identificador completo do grupo, terminado em @g.us.");
+                  return;
+                }
+                set("whatsapp_group_chat_id", groupId);
+                set("whatsapp_group_name", manualGroupName.trim() || groupId);
+                toast.success("Grupo preparado. Agora ative o aviso e salve a configuração.");
+              }}
+            >
+              Usar este grupo
+            </Button>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Toggle
             label="Handoffs"

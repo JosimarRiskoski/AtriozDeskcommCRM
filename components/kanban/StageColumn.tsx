@@ -7,6 +7,7 @@ import {
   archivePipelineStage,
   movePipelineStage,
   renamePipelineStage,
+  savePipelineStage,
 } from "@/app/actions/settings/managePipelines";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -70,11 +71,31 @@ export function StageColumn({
 }: StageColumnProps) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(stage.name);
+  const [stageColor, setStageColor] = useState(stage.color ?? "#3b82f6");
   const [savingName, startSavingName] = useTransition();
   const totalCents = leads.reduce((sum, l) => sum + (l.value_cents ?? 0), 0);
-  const accentStyle: CSSProperties | undefined = stage.color
-    ? { backgroundColor: stage.color }
-    : undefined;
+  const accentStyle: CSSProperties = { backgroundColor: stageColor };
+  const cardAccent = stageColor;
+
+  function saveColor(color: string) {
+    const previous = stageColor;
+    setStageColor(color);
+    startSavingName(async () => {
+      const result = await savePipelineStage(pipelineId, {
+        id: stage.id,
+        name: stage.name,
+        color,
+        requires_human: false,
+        is_won: stage.is_won,
+        is_lost: stage.is_lost,
+      });
+      if (result.ok) toast.success("Cor da etapa atualizada.");
+      else {
+        setStageColor(previous);
+        toast.error(result.error);
+      }
+    });
+  }
 
   function saveName() {
     const name = nameDraft.trim();
@@ -109,11 +130,17 @@ export function StageColumn({
       aria-labelledby={`kanban-stage-${stage.id}`}
     >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-        <span
-          className={cn("h-2 w-2 rounded-full", !stage.color && "bg-text-muted/40")}
-          style={accentStyle}
-          aria-hidden
-        />
+        <label className="relative h-4 w-4 shrink-0 cursor-pointer" title="Alterar cor da etapa">
+          <span className="pointer-events-none absolute inset-1 rounded-full" style={accentStyle} />
+          <input
+            type="color"
+            value={stageColor}
+            onChange={(event) => saveColor(event.target.value)}
+            disabled={savingName}
+            aria-label={`Alterar cor da etapa ${stage.name}`}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+        </label>
         {editingName ? (
           <Input
             value={nameDraft}
@@ -222,6 +249,7 @@ export function StageColumn({
                   canonicalTags,
                   valueLabel,
                 })}
+                stageColor={cardAccent}
                 lead={lead}
                 index={idx}
                 pipelineId={pipelineId}

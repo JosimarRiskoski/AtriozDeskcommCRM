@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { ApiTokensClient } from "./_components/ApiTokensClient";
+import { BackNavigation } from "@/components/shell/BackNavigation";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,8 @@ export default async function ApiTokensPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
+      <header className="space-y-3">
+        <BackNavigation fallbackHref="/app/settings" label="Voltar às configurações" />
         <h1 className="text-2xl font-semibold tracking-tight">API Tokens</h1>
         <p className="text-sm text-muted-foreground">
           Tokens server-to-server. Plaintext exibido <strong>uma única vez</strong> na criação.

@@ -54,12 +54,23 @@ const STATUS_VARIANT: Record<ReturnType<typeof credentialStatus>, "default" | "s
   inactive: "outline",
 };
 
-export function CredentialCard({ credential, canWrite, usageCount }: Props) {
+export function CredentialCard({ credential: originalCredential, canWrite, usageCount }: Props) {
   const router = useRouter();
   const qc = useQueryClient();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  const models = originalCredential.models_available ?? [];
+  const credential = {
+    ...originalCredential,
+    // A API devolve uma lista; renderizar a lista bruta no JSX a colava toda
+    // em uma única coluna. O cartão deve comunicar disponibilidade, não virar
+    // uma parede de nomes de modelos.
+    models_available:
+      models.length === 0
+        ? []
+        : [models.length === 1 ? (models[0] ?? "1 modelo disponível") : `${models.length} modelos disponíveis`],
+  };
   const status = credentialStatus(credential);
   const last4 = credential.api_key_last4 ?? "????";
   const inUse = usageCount > 0;
@@ -137,6 +148,11 @@ export function CredentialCard({ credential, canWrite, usageCount }: Props) {
           <dd className="font-mono">{usageCount}</dd>
         </div>
       </dl>
+      {models.length > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {models.length} modelos encontrados na última validação.
+        </p>
+      ) : null}
 
       {canWrite && (
         <div className="flex items-center justify-end gap-1 pt-1">

@@ -25,6 +25,7 @@ import { useFollowupFlows } from "@/hooks/followup/useFollowupFlows";
 import { useStartFollowupEnrollment } from "@/hooks/followup/useFollowupEnrollments";
 import type { PipelineRow } from "@/app/api/v1/pipelines/_handler";
 import type { BoardData } from "@/lib/kanban/types";
+import { StepProgress } from "@/components/ui/step-progress";
 
 interface FormShape {
   name?: string;
@@ -53,6 +54,7 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
   const router = useRouter();
   const create = useCreateContact();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -77,6 +79,11 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
     enabled: open,
     queryFn: async () => (await apiClient.get<{ data: PipelineRow[] }>("/api/v1/pipelines")).data,
   });
+  const knownTags = useQuery({
+    queryKey: ["contact-tag-vocabulary"],
+    enabled: open,
+    queryFn: async () => (await apiClient.get<{ data: string[] }>("/api/v1/contact-tags")).data,
+  });
   const createOpportunity = form.watch("createOpportunity") ?? false;
   const pipelineId =
     form.watch("pipelineId") ||
@@ -98,6 +105,18 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
   const activeFlows = (flows.data ?? []).filter(
     (flow) => flow.status === "active" && flow.active_version_id,
   );
+  const selectedTags = (form.watch("tagsRaw") ?? "")
+    .split(",")
+    .map((tag) => tag.trim().toLowerCase())
+    .filter(Boolean);
+  const hasIdentifier = Boolean(
+    form.watch("email")?.trim() || form.watch("phone_number")?.trim(),
+  );
+
+  function addKnownTag(tag: string) {
+    if (selectedTags.includes(tag)) return;
+    form.setValue("tagsRaw", [...selectedTags, tag].join(", "));
+  }
 
   async function onSubmit(values: FormShape) {
     setServerError(null);
@@ -171,6 +190,7 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
         },
       );
       form.reset();
+      setStep(0);
       onOpenChange(false);
     } catch (error) {
       if (!(error instanceof Error) || !error.message.includes("API")) {
@@ -182,14 +202,21 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setStep(0);
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Novo contato</DialogTitle>
           <DialogDescription>
             Preencha pelo menos um identificador (email ou telefone).
           </DialogDescription>
         </DialogHeader>
+        <StepProgress labels={["Contato", "Ações"]} current={step} />
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Nome</Label>
@@ -220,7 +247,7 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
               Consentimento registrado
             </label>
           </div>
-          <div className="space-y-3 rounded-md border p-3">
+          <div className={step === 1 ? "space-y-3 rounded-md border p-3" : "hidden"}>
             <label className="flex items-center gap-2 text-sm font-medium">
               <Switch
                 checked={createOpportunity}
@@ -250,7 +277,7 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
               </div>
             ) : null}
           </div>
-          <div className="space-y-3 rounded-md border p-3">
+          <div className={step === 1 ? "space-y-3 rounded-md border p-3" : "hidden"}>
             <label className="flex items-center gap-2 text-sm font-medium">
               <Switch
                 checked={startFollowup}
@@ -279,7 +306,7 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
               </div>
             ) : null}
           </div>
-          <div className="space-y-3 rounded-md border p-3">
+          <div className={step === 1 ? "space-y-3 rounded-md border p-3" : "hidden"}>
             <label className="flex items-center gap-2 text-sm font-medium">
               <Switch
                 checked={startConversation}
@@ -320,11 +347,11 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
               </>
             ) : null}
           </div>
-          <div className="space-y-2">
+          <div className={step === 0 ? "space-y-2" : "hidden"}>
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" {...form.register("email")} />
           </div>
-          <div className="space-y-2">
+          <div className={step === 0 ? "space-y-2" : "hidden"}>
             <Label htmlFor="phone_number">Telefone (E.164)</Label>
             <Input
               id="phone_number"
@@ -332,13 +359,30 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
               {...form.register("phone_number")}
             />
           </div>
-          <div className="space-y-2">
+          <div className={step === 0 ? "space-y-2" : "hidden"}>
             <Label htmlFor="cpf">CPF (opcional)</Label>
             <Input id="cpf" placeholder="00000000000" {...form.register("cpf")} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="tagsRaw">Tags (separadas por vírgula)</Label>
             <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
+            {(knownTags.data ?? []).length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {knownTags.data!
+                  .filter((tag) => !selectedTags.includes(tag))
+                  .slice(0, 12)
+                  .map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => addKnownTag(tag)}
+                      className="rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground hover:border-solid hover:text-foreground"
+                    >
+                      + {tag}
+                    </button>
+                  ))}
+              </div>
+            ) : null}
           </div>
           {serverError && <p className="text-sm text-error-fg">{serverError}</p>}
           <DialogFooter>
@@ -350,7 +394,17 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={create.isPending}>
+            {step === 1 ? (
+              <Button type="button" variant="outline" onClick={() => setStep(0)} disabled={create.isPending}>
+                Voltar
+              </Button>
+            ) : null}
+            {step === 0 ? (
+              <Button type="button" onClick={() => setStep(1)} disabled={!hasIdentifier}>
+                Continuar
+              </Button>
+            ) : null}
+            <Button type="submit" className={step === 0 ? "hidden" : undefined} disabled={create.isPending || step === 0}>
               {create.isPending ? "Criando…" : "Criar contato"}
             </Button>
           </DialogFooter>

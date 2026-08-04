@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -32,12 +32,18 @@ export function CaseList() {
     opened_for: "all",
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [now, setNow] = useState<number | null>(null);
   const { data, isLoading } = useCases(filters);
   const { data: membersResponse } = useTeamMembers();
   const { data: agents } = useAgentsList();
   const members = membersResponse?.data.filter((m) => m.can_receive_human_cases) ?? [];
   const update = <K extends keyof CaseFilters>(key: K, value: CaseFilters[K]) =>
     setFilters((current) => ({ ...current, [key]: value || undefined }));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -130,6 +136,7 @@ export function CaseList() {
                 <CaseRow
                   key={item.id}
                   item={item}
+                  now={now}
                   selected={item.id === selectedId}
                   onSelect={() => setSelectedId(item.id)}
                 />
@@ -172,10 +179,12 @@ function FilterSelect({
 
 function CaseRow({
   item,
+  now,
   selected,
   onSelect,
 }: {
   item: CaseListItem;
+  now: number | null;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -184,7 +193,9 @@ function CaseRow({
     locale: ptBR,
   });
   const overdue =
-    item.first_response_due_at && new Date(item.first_response_due_at).getTime() < Date.now();
+    now !== null &&
+    item.first_response_due_at &&
+    new Date(item.first_response_due_at).getTime() < now;
   return (
     <li>
       <button

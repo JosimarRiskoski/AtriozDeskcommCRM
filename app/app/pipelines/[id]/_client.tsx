@@ -40,7 +40,7 @@ export function PipelinePageClient({
   initialName: string;
   pipelines: Array<{ id: string; name: string; is_default: boolean }>;
 }) {
-  const { data, isLoading, error, pulses, realtimeStatus, seguranca } = useBoard(pipelineId);
+  const { data, isLoading, error, pulses, realtimeStatus, seguranca, refetch } = useBoard(pipelineId);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -105,7 +105,10 @@ export function PipelinePageClient({
                   is_won: false,
                   is_lost: false,
                 });
-                if (result.ok) toast.success("Etapa criada. Clique no nome para editar.");
+                if (result.ok) {
+                  await refetch();
+                  toast.success("Etapa criada. Clique no nome para editar.");
+                }
                 else toast.error(result.error);
               })
             }

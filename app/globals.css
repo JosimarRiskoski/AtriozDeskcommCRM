@@ -362,3 +362,9 @@
     border-color: var(--color-accent);
   }
 }
+
+/* A navegação continua acessível em notebooks com pouca altura. */
+aside > nav[aria-label] {
+  min-height: 0;
+  overflow-y: auto;
+}

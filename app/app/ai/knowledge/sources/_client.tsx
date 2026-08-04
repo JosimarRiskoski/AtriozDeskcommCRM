@@ -1,5 +1,5 @@
 "use client";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
@@ -13,6 +13,7 @@ import {
   KnowledgeSourceCard,
   type KnowledgeSourceType,
 } from "@/components/ai/KnowledgeSourceCard";
+import { ConfigureKnowledgeSourceDialog } from "./ConfigureKnowledgeSourceDialog";
 
 interface Props {
   agentId: string;
@@ -31,6 +32,7 @@ function canonicalType(t: string): KnowledgeSourceType | "other" {
 
 export function KnowledgeSourcesClient({ agentId, initialSources }: Props) {
   const qc = useQueryClient();
+  const [configuring, setConfiguring] = useState<KnowledgeSourceType | null>(null);
   const { data: sources } = useKnowledgeSources(agentId, { initialData: initialSources });
   const reindex = useReindexSource(agentId);
 
@@ -69,8 +71,12 @@ export function KnowledgeSourcesClient({ agentId, initialSources }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      {SLOTS.map((slot) => {
+    <>
+      <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+        As fontes não dependem de a IA estar respondendo neste momento. Configure, salve e depois reindexe a fonte para o agente poder consultá-la.
+      </p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {SLOTS.map((slot) => {
         const source = bySlot[slot];
         const isReindexing =
           reindex.isPending && reindex.variables === source?.id;
@@ -81,9 +87,20 @@ export function KnowledgeSourcesClient({ agentId, initialSources }: Props) {
             source={source ?? null}
             isReindexing={isReindexing}
             onReindex={source ? () => reindex.mutate(source.id) : undefined}
+            onConfigure={!source ? () => setConfiguring(slot) : undefined}
           />
         );
-      })}
-    </div>
+        })}
+      </div>
+      <ConfigureKnowledgeSourceDialog
+        open={configuring !== null}
+        type={configuring}
+        agentId={agentId}
+        onOpenChange={(open) => {
+          if (!open) setConfiguring(null);
+        }}
+        onCreated={onChange}
+      />
+    </>
   );
 }

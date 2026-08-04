@@ -102,6 +102,10 @@ export async function listContactsHandler(
   }
   if (q.tag) query = query.contains("tags", [q.tag]);
   if (q.source) query = query.eq("source", q.source);
+  // Anonimizados só entram quando o operador pedir explicitamente. Eles não
+  // podem voltar a ser usados nem contatados, portanto escondê-los por padrão
+  // evita que pareçam clientes ativos em uma lista operacional.
+  if (!q.include_anonymized) query = query.eq("is_anonymized", false);
 
   if (q.cursor) {
     const c = decodeCursor(q.cursor);

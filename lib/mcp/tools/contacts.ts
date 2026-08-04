@@ -59,6 +59,7 @@ export const crmSearchContacts: McpToolDefinition<typeof searchInputShape> = {
         search: input.query,
         limit: input.limit,
         cursor: input.cursor,
+        include_anonymized: false,
       },
     );
     return {

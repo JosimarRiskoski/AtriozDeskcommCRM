@@ -154,14 +154,14 @@ export function BulkActionBar({ selectedIds, stages, pipelineId, onClear }: Bulk
 
   return (
     <>
-      <div className="sticky bottom-4 z-30 mx-auto flex w-fit items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 shadow-md">
+      <div className="sticky bottom-4 z-30 mx-auto flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 shadow-md">
         <span className="text-sm font-medium">
           {selectedIds.length} selecionado{selectedIds.length > 1 ? "s" : ""}
         </span>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="outline" disabled={bulk.isPending}>
+            <Button size="sm" variant="outline" disabled={bulk.isPending} title="Mover os selecionados para outra etapa">
               Mover para…
             </Button>
           </DropdownMenuTrigger>
@@ -178,7 +178,7 @@ export function BulkActionBar({ selectedIds, stages, pipelineId, onClear }: Bulk
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="outline" disabled={bulk.isPending}>
+            <Button size="sm" variant="outline" disabled={bulk.isPending} title="Atribuir responsável aos selecionados">
               Atribuir a…
             </Button>
           </DropdownMenuTrigger>
@@ -190,7 +190,7 @@ export function BulkActionBar({ selectedIds, stages, pipelineId, onClear }: Bulk
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="outline" disabled={bulk.isPending}>
+            <Button size="sm" variant="outline" disabled={bulk.isPending} title="Adicionar tag aos selecionados">
               Tag…
             </Button>
           </DropdownMenuTrigger>
@@ -218,6 +218,7 @@ export function BulkActionBar({ selectedIds, stages, pipelineId, onClear }: Bulk
         <Button
           size="sm"
           variant="outline"
+          title="Iniciar follow-up para os selecionados"
           onClick={() => {
             setFollowupPreview(null);
             setFollowupOpen(true);
@@ -229,13 +230,14 @@ export function BulkActionBar({ selectedIds, stages, pipelineId, onClear }: Bulk
         <Button
           size="sm"
           variant="destructive"
+          title="Excluir os leads selecionados"
           onClick={() => setConfirmDelete(true)}
           disabled={bulk.isPending}
         >
           Excluir
         </Button>
 
-        <Button size="sm" variant="ghost" onClick={onClear}>
+        <Button size="sm" variant="ghost" onClick={onClear} title="Cancelar seleção">
           Cancelar
         </Button>
       </div>

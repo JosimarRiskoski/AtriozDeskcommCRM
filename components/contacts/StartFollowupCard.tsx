@@ -114,11 +114,12 @@ export function StartFollowupCard({
         <div className={compact ? "grid gap-2" : "grid gap-3 md:grid-cols-[1fr_auto] md:items-end"}>
           <div className="space-y-2">
             <Label htmlFor="contact-followup-flow">Fluxo publicado</Label>
-            <Select value={flowId} onValueChange={setFlowId}>
+            <Select value={flowId || "none"} onValueChange={(value) => setFlowId(value === "none" ? "" : value)}>
               <SelectTrigger id="contact-followup-flow">
                 <SelectValue placeholder="Escolha um fluxo" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="none">Sem follow-up</SelectItem>
                 {activeFlows.map((flow) => (
                   <SelectItem key={flow.id} value={flow.id}>
                     {flow.name}

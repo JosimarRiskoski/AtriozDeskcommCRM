@@ -1,6 +1,6 @@
 "use client";
 import { Draggable } from "@hello-pangea/dnd";
-import type { MouseEvent } from "react";
+import type { CSSProperties, MouseEvent } from "react";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
 import { resolveCardState, stageAgeLabel, type CardInput } from "@/lib/kanban/card-state";
@@ -25,6 +25,7 @@ interface KanbanCardProps {
    * o segundo evento dentro da janela passar despercebido.
    */
   pulseCount?: number;
+  stageColor?: string;
   onSelect?: (leadId: string, additive: boolean) => void;
   /** Abrir o dossiê. Separado de `onSelect`: são gestos e intenções diferentes. */
   onOpen?: (leadId: string) => void;
@@ -62,6 +63,7 @@ export function KanbanCard({
   pipelineId,
   isSelected,
   pulseCount = 0,
+  stageColor,
   onSelect,
   onOpen,
 }: KanbanCardProps) {
@@ -98,12 +100,13 @@ export function KanbanCard({
           // Tags saem do card (Lei A): ficam a um hover, sem ocupar altura.
           title={card.tags.length > 0 ? `Tags: ${card.tags.join(", ")}` : undefined}
           className={cn(
-            "group relative overflow-hidden rounded-md border border-border bg-surface",
+            "group relative overflow-hidden rounded-md border border-border border-l-[3px] bg-surface",
             "py-2.5 pl-3 pr-3 shadow-xs transition-colors",
             "hover:border-border-strong",
             snapshot.isDragging && "ring-accent/40 rotate-1 shadow-md ring-1",
             isSelected && "ring-2 ring-accent",
           )}
+          style={stageColor ? ({ borderLeftColor: stageColor } satisfies CSSProperties) : undefined}
         >
           {/* key = contador: cada evento remoto monta um overlay NOVO, e é isso
               que reinicia a animação. Fica no elemento interno — pôr no wrapper

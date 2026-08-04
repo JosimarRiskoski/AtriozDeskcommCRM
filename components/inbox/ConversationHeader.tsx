@@ -76,8 +76,8 @@ export function ConversationHeader({ conversation }: Props) {
   );
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-4 py-3">
-      <div className="min-w-0">
+    <div className="flex flex-col gap-2 border-b border-border bg-background px-4 py-3">
+      <div className="order-2 min-w-0">
         <div className="flex items-center gap-2">
           <h2 className="truncate text-sm font-semibold">{displayName}</h2>
           <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
@@ -106,7 +106,7 @@ export function ConversationHeader({ conversation }: Props) {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="order-1 flex flex-wrap items-center gap-1.5">
         {channelUnavailable && !c?.is_blocked ? (
           <Button size="sm" variant="outline" onClick={() => setContinueDialogOpen(true)}>
             Continuar em outro número
@@ -131,7 +131,7 @@ export function ConversationHeader({ conversation }: Props) {
                   : "IA seguindo regra geral"}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
+          <DropdownMenuContent align="end" className="w-80 p-1.5">
             <DropdownMenuLabel>
               <span className="block">IA neste contato</span>
               <span className="text-xs font-normal text-muted-foreground">
@@ -139,7 +139,7 @@ export function ConversationHeader({ conversation }: Props) {
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => aiControl.setMode.mutate("inherit")}>
+            <DropdownMenuItem className="items-start py-2.5" onSelect={() => aiControl.setMode.mutate("inherit")}>
               <span>
                 <span className="block">Seguir configuração geral</span>
                 <span className="text-xs text-muted-foreground">
@@ -147,7 +147,7 @@ export function ConversationHeader({ conversation }: Props) {
                 </span>
               </span>
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => aiControl.setMode.mutate("force_active")}>
+            <DropdownMenuItem className="items-start py-2.5" onSelect={() => aiControl.setMode.mutate("force_active")}>
               <Play size={14} aria-hidden />
               <span>
                 <span className="block">
@@ -158,7 +158,7 @@ export function ConversationHeader({ conversation }: Props) {
                 </span>
               </span>
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => aiControl.setMode.mutate("force_paused")}>
+            <DropdownMenuItem className="items-start py-2.5" onSelect={() => aiControl.setMode.mutate("force_paused")}>
               <Pause size={14} aria-hidden />
               <span>
                 <span className="block">Pausar IA neste contato</span>

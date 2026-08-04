@@ -116,11 +116,15 @@ function stageFlags(name: string, index: number, total: number) {
   const normalized = slugify(name);
   const isLost = /perdido|nao-qualificado|cancelado/.test(normalized);
   const isWon = !isLost && /fechado|concluido|resolvido/.test(normalized) && index >= total - 2;
-  const hints = ["new", "qualifying", "qualified", "proposal", "negotiation"] as const;
   return {
     is_lost: isLost,
     is_won: isWon,
-    agent_stage_hint: isLost ? "lost" : isWon ? "won" : hints[Math.min(index, hints.length - 1)],
+    // Os nomes de um modelo de funil não são uma decisão sobre o vocabulário
+    // interno da IA. Só os resultados finais têm equivalência inequívoca.
+    // Antes, por exemplo, "Fatura recebida" recebia o hint "qualified" e a
+    // última etapa não perdida recebia "negotiation". Quando uma delas era
+    // marcada como ganha/perdida, o CHECK do banco rejeitava a criação.
+    agent_stage_hint: isLost ? "lost" : isWon ? "won" : null,
   };
 }
 

@@ -1,6 +1,7 @@
 import { requireAuth, isMfaEnrolled } from "@/lib/auth/server";
 import { Card } from "@/components/ui/card";
 import { SecurityClient } from "./_client";
+import { BackNavigation } from "@/components/shell/BackNavigation";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,8 @@ export default async function SecurityPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
+      <header className="space-y-3">
+        <BackNavigation fallbackHref="/app/settings" label="Voltar às configurações" />
         <h1 className="text-2xl font-semibold tracking-tight">Segurança</h1>
         <p className="text-sm text-muted-foreground">MFA, recovery codes e sessões.</p>
       </header>

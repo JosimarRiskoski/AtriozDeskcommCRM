@@ -52,7 +52,8 @@ export async function GET(_req: NextRequest): Promise<Response> {
       admin
         .from("channel_sessions")
         .select("id, status, last_health_check_at, status_reason")
-        .eq("organization_id", orgId),
+        .eq("organization_id", orgId)
+        .is("archived_at", null),
       admin
         .from("ai_provider_credentials")
         .select("id, provider, is_active, validated_at, validation_error")

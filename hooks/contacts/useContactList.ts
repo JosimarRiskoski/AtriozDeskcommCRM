@@ -13,6 +13,7 @@ export interface ContactListFilters {
   search?: string;
   tag?: string;
   source?: string;
+  includeAnonymized?: boolean;
 }
 
 export function useContactList(filters: ContactListFilters) {
@@ -24,6 +25,7 @@ export function useContactList(filters: ContactListFilters) {
       if (filters.search) qs.set("search", filters.search);
       if (filters.tag) qs.set("tag", filters.tag);
       if (filters.source) qs.set("source", filters.source);
+      if (filters.includeAnonymized) qs.set("include_anonymized", "true");
       if (pageParam) qs.set("cursor", pageParam);
       qs.set("limit", "50");
       try {

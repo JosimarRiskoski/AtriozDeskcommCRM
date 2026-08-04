@@ -108,7 +108,7 @@ export function LeadDossier({
             onClick={() => campos.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
             className="ml-auto text-text-muted underline-offset-2 hover:text-text hover:underline"
           >
-            Editar campos
+            Editar dados do negócio
           </button>
         </div>
 

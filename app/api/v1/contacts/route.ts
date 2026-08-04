@@ -39,6 +39,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     search: url.searchParams.get("search") ?? undefined,
     tag: url.searchParams.get("tag") ?? undefined,
     source: url.searchParams.get("source") ?? undefined,
+    include_anonymized: url.searchParams.get("include_anonymized") ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,
   });

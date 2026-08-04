@@ -30,7 +30,8 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { createClient } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/require-role";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -47,31 +48,29 @@ export async function GET(
   const requestId = randomUUID();
   const { id: contactId } = await ctx.params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return fail("unauthenticated", "Auth required.", 401, { requestId });
-  }
+  const authz = await requireRole("agent", { requestId, resource: "contacts" });
+  if (!authz.ok) return authz.response;
+  const supabase = createAdminClient();
 
   const [leads, orders, activities] = await Promise.all([
     supabase
       .from("crm_leads")
       .select(LEAD_COLS)
+      .eq("organization_id", authz.org.orgId)
       .eq("contact_id", contactId)
       .order("updated_at", { ascending: false })
       .limit(3),
     supabase
       .from("orders")
       .select(ORDER_COLS)
+      .eq("organization_id", authz.org.orgId)
       .eq("contact_id", contactId)
       .order("created_at", { ascending: false })
       .limit(3),
     supabase
       .from("crm_lead_activities")
       .select(ACTIVITY_COLS)
+      .eq("organization_id", authz.org.orgId)
       .eq("contact_id", contactId)
       .order("performed_at", { ascending: false })
       .limit(5),

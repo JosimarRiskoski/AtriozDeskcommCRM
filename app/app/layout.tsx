@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { IMPERSONATE_COOKIE_NAME, verifyImpersonateCookie } from "@/lib/impersonate/cookie";
 import { ImpersonateBanner, type ImpersonatingInfo } from "@/components/app/ImpersonateBanner";
 import { OrganizationAppearanceSync } from "@/components/theme/organization-appearance-sync";
+import { OrganizationAppearanceScript } from "@/components/theme/organization-appearance-script";
 import { DEFAULT_ORGANIZATION_PALETTE, readOrganizationPalette } from "@/lib/appearance";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -70,6 +71,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <AuthProvider user={user} activeOrg={activeOrg}>
+      <OrganizationAppearanceScript palette={organizationPalette} />
       <OrganizationAppearanceSync palette={organizationPalette} />
       <ImpersonateBanner impersonating={impersonating} />
       {needsMfaGate ? (

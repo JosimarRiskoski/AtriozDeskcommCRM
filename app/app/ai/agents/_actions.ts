@@ -151,7 +151,12 @@ export async function archiveAgentAction(id: string): Promise<ActionResult> {
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
   if (!existing) return { ok: false, error: "not_found" };
-  if (existing.is_default) return { ok: false, error: "cannot_archive_default" };
+  if (existing.is_default)
+    return {
+      ok: false,
+      error: "cannot_archive_default",
+      message: "Este é o agente padrão. Defina outro agente como padrão antes de arquivá-lo.",
+    };
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (existing.kind === "mcp_agent") {

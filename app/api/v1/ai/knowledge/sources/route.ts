@@ -77,7 +77,7 @@ export async function GET(_req: NextRequest): Promise<Response> {
     return fail("internal_error", "Erro ao listar fontes de conhecimento.", 500, { requestId });
   }
 
-  return ok({ data: data ?? [] }, { requestId });
+  return ok(data ?? [], { requestId });
 }
 
 // ---------------------------------------------------------------------------

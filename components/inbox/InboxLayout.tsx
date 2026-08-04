@@ -149,7 +149,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       : null;
 
   return (
-    <div className="grid h-full min-h-0 w-full grid-cols-1 overflow-hidden md:grid-cols-[300px_1fr] xl:grid-cols-[300px_minmax(0,1fr)_minmax(320px,24vw)]">
+    <div className="grid h-full min-h-0 w-full grid-cols-1 overflow-hidden md:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_minmax(320px,24vw)]">
       <div className="flex h-full min-h-0 flex-col border-r border-border">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-sm font-semibold">Conversas</span>
@@ -197,7 +197,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         )}
       </div>
 
-      <div className="hidden h-full min-h-0 xl:block">
+      <div className="hidden h-full min-h-0 2xl:block">
         <CRMSidePanel conversation={selectedConversation} />
       </div>
 

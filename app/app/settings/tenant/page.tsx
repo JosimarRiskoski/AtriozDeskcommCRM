@@ -4,6 +4,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import { TenantForm } from "./_form";
+import { BackNavigation } from "@/components/shell/BackNavigation";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,8 @@ export default async function TenantSettingsPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
+      <header className="space-y-3">
+        <BackNavigation fallbackHref="/app/settings" label="Voltar às configurações" />
         <h1 className="text-2xl font-semibold tracking-tight">Organização</h1>
         <p className="text-sm text-muted-foreground">
           Dados da empresa, retenção de mídia, DPO. Admin only.

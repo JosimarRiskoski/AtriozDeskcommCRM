@@ -233,11 +233,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             }}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder={
+            data-legacy-placeholder={
               mode === "note"
                 ? "Escreva uma nota interna… (só o time vê)"
                 : "Escreva uma mensagem… (Enter envia, Shift+Enter quebra linha)"
             }
+            placeholder={mode === "note" ? "Nota interna" : "Escreva uma mensagem"}
             className={cn(
               "max-h-40 min-h-9 flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm",
               "placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring",

@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth/server";
 import { ProfileForm } from "./_form";
+import { BackNavigation } from "@/components/shell/BackNavigation";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,8 @@ export default async function ProfilePage() {
   // We pass safe defaults that the form re-syncs on submit.
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
+      <header className="space-y-3">
+        <BackNavigation fallbackHref="/app/settings" label="Voltar às configurações" />
         <h1 className="text-2xl font-semibold tracking-tight">Perfil</h1>
         <p className="text-sm text-muted-foreground">
           Informações pessoais. Email só pode ser trocado em breve.

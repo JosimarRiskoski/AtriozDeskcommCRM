@@ -30,6 +30,7 @@ export function ContactsListClient() {
   const [search, setSearch] = useState("");
   const [tag, setTag] = useState<string | undefined>(undefined);
   const [source, setSource] = useState<string | undefined>(undefined);
+  const [includeAnonymized, setIncludeAnonymized] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   // Debounce search 250ms
@@ -38,7 +39,10 @@ export function ContactsListClient() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const filters = useMemo(() => ({ search, tag, source }), [search, tag, source]);
+  const filters = useMemo(
+    () => ({ search, tag, source, includeAnonymized }),
+    [search, tag, source, includeAnonymized],
+  );
   const q = useContactList(filters);
 
   const allContacts = useMemo(
@@ -116,7 +120,15 @@ export function ContactsListClient() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {(search || tag || source) && (
+        <Button
+          variant={includeAnonymized ? "default" : "outline"}
+          size="sm"
+          onClick={() => setIncludeAnonymized((current) => !current)}
+        >
+          {includeAnonymized ? "Incluindo anonimizados" : "Ver anonimizados"}
+        </Button>
+
+        {(search || tag || source || includeAnonymized) && (
           <Button
             variant="ghost"
             size="sm"
@@ -125,6 +137,7 @@ export function ContactsListClient() {
               setSearch("");
               setTag(undefined);
               setSource(undefined);
+              setIncludeAnonymized(false);
             }}
           >
             Limpar filtros

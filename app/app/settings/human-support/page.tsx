@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { HumanSupportSettingsClient } from "./HumanSupportSettingsClient";
+import { BackNavigation } from "@/components/shell/BackNavigation";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,8 @@ export default async function HumanSupportSettingsPage() {
   if (!org || ROLE_RANK[org.role] < ROLE_RANK.admin) redirect("/app/settings");
   return (
     <div className="space-y-6 p-6">
-      <header>
+      <header className="space-y-3">
+        <BackNavigation fallbackHref="/app/settings" label="Voltar às configurações" />
         <h1 className="text-2xl font-semibold">Atendimento humano</h1>
         <p className="text-sm text-muted-foreground">
           Defina responsáveis, prazos, motivos de transferência e onde os gestores serão avisados.

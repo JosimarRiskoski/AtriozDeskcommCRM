@@ -12,6 +12,7 @@ interface Props {
   source?: SourceRow | null;
   type: KnowledgeSourceType;
   onReindex?: () => void;
+  onConfigure?: () => void;
   isReindexing?: boolean;
 }
 
@@ -56,7 +57,7 @@ function formatRelative(iso: string | null): string {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
-export function KnowledgeSourceCard({ source, type, onReindex, isReindexing }: Props) {
+export function KnowledgeSourceCard({ source, type, onReindex, onConfigure, isReindexing }: Props) {
   const meta = TYPE_META[type];
   const Icon = meta.Icon;
 
@@ -78,8 +79,8 @@ export function KnowledgeSourceCard({ source, type, onReindex, isReindexing }: P
           <Button
             variant="secondary"
             size="sm"
-            disabled
-            onClick={() => toast.info("Em breve.")}
+            disabled={!onConfigure}
+            onClick={onConfigure}
           >
             Configurar {meta.label}
           </Button>
