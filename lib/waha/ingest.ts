@@ -12,10 +12,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { audit } from "@/lib/audit";
+import { findActiveContactByPhone } from "@/lib/contacts/find-by-phone";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ackToStatus } from "@/lib/types/messaging";
 import { getWahaClient } from "@/lib/waha/client";
+import { parseChatId, type ChatIdentity } from "@/lib/waha/identity";
+export { parseChatId } from "@/lib/waha/identity";
 import { bareWaMessageId } from "@/lib/waha/message-id";
+import { isExplicitStopRequest } from "@/lib/waha/stop-detection";
+import { handleManagerGroupCommand } from "@/lib/human-support/group-commands";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -84,34 +89,115 @@ export function outboundChatIdOf(p: WahaPayload): string {
   return "";
 }
 
-export type ChatIdentity =
-  | { kind: "phone"; phone: string; lid: null }
-  | { kind: "lid"; phone: null; lid: string }
-  | { kind: "resolved"; phone: string; lid: string }
-  | { kind: "group"; phone: null; lid: null };
-
-/**
- * Resolve um chatId WAHA em identidade canônica:
- *  - `{number}@c.us` | `@s.whatsapp.net` -> phone E.164 ("+55...")
- *  - `{lid}@lid` -> lid (somente dígitos; número protegido pelo WhatsApp)
- *  - `@g.us` | formato desconhecido -> group (skip binding CRM)
- */
-export function parseChatId(chatId: string): ChatIdentity {
-  if (chatId.endsWith("@g.us")) return { kind: "group", phone: null, lid: null };
-  if (chatId.endsWith("@lid")) {
-    return { kind: "lid", phone: null, lid: chatId.replace(/@.*$/, "") };
+async function preservePendingIdentity(
+  admin: Admin,
+  session: Session,
+  payload: WahaPayload,
+  chatId: string,
+  lid: string,
+  requestId: string,
+): Promise<void> {
+  if (!payload.id) return;
+  const { error } = await admin.from("whatsapp_inbound_pending").upsert(
+    {
+      organization_id: session.organization_id,
+      channel_session_id: session.id,
+      external_id: payload.id,
+      chat_id: chatId,
+      lid,
+      payload,
+      status: "pending",
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "organization_id,channel_session_id,external_id", ignoreDuplicates: true },
+  );
+  if (error) {
+    console.error("[waha.ingest] nao foi possivel preservar mensagem @lid", error.message);
+    return;
   }
-  if (chatId.endsWith("@c.us") || chatId.endsWith("@s.whatsapp.net")) {
-    const digits = chatId.replace(/@.*$/, "").replace(/^\+/, "");
-    return { kind: "phone", phone: "+" + digits, lid: null };
-  }
-  return { kind: "group", phone: null, lid: null };
+  await audit({
+    action: "message.identity_pending",
+    organizationId: session.organization_id,
+    resourceType: "message",
+    requestId,
+    metadata: { external_id: payload.id, channel_session_id: session.id, lid },
+  });
 }
 
-async function resolveLidIdentity(
+async function reconcilePendingIdentity(
+  admin: Admin,
   session: Session,
-  parsed: ChatIdentity,
-): Promise<ChatIdentity> {
+  lid: string,
+  requestId: string,
+): Promise<void> {
+  const { data: pending, error } = await admin
+    .from("whatsapp_inbound_pending")
+    .select("id,external_id,payload,attempts")
+    .eq("organization_id", session.organization_id)
+    .eq("channel_session_id", session.id)
+    .eq("lid", lid)
+    .in("status", ["pending", "failed"])
+    .order("created_at", { ascending: true })
+    .limit(50);
+  if (error || !pending?.length) return;
+
+  for (const item of pending) {
+    await admin
+      .from("whatsapp_inbound_pending")
+      .update({
+        status: "reconciling",
+        attempts: Number(item.attempts ?? 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", item.id)
+      .in("status", ["pending", "failed"]);
+
+    try {
+      await handleInbound(admin, session, item.payload as unknown as WahaPayload, requestId, true);
+      const { data: reconciledMessage } = await admin
+        .from("messages")
+        .select("contact_id,conversation_id")
+        .eq("organization_id", session.organization_id)
+        .eq("external_id", item.external_id)
+        .maybeSingle();
+      if (!reconciledMessage) throw new Error("mensagem ainda nao reconciliada");
+
+      await admin
+        .from("whatsapp_inbound_pending")
+        .update({
+          status: "reconciled",
+          reconciled_contact_id: reconciledMessage.contact_id,
+          reconciled_conversation_id: reconciledMessage.conversation_id,
+          reconciled_at: new Date().toISOString(),
+          last_error: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", item.id);
+      await audit({
+        action: "message.identity_reconciled",
+        organizationId: session.organization_id,
+        resourceType: "message",
+        resourceId: item.external_id,
+        requestId,
+        metadata: { pending_id: item.id, lid },
+      });
+    } catch (reconcileError) {
+      await admin
+        .from("whatsapp_inbound_pending")
+        .update({
+          status: "failed",
+          last_error:
+            reconcileError instanceof Error
+              ? reconcileError.message.slice(0, 500)
+              : "erro desconhecido",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", item.id);
+    }
+  }
+}
+
+async function resolveLidIdentity(session: Session, parsed: ChatIdentity): Promise<ChatIdentity> {
   if (parsed.kind !== "lid" || !session.waha_session_name) return parsed;
   const client = getWahaClient();
   if (!client) return parsed;
@@ -129,8 +215,6 @@ async function resolveLidIdentity(
     return parsed;
   }
 }
-
-const STOP_RX = /\b(STOP|PARAR|SAIR|UNSUBSCRIBE)\b/i;
 
 export function verifyHmacSha512(
   rawBody: string,
@@ -243,12 +327,24 @@ async function upsertContact(
   notifyName: string | null,
 ): Promise<string | null> {
   if (parsed.kind === "group") return null;
+  const phone = parsed.kind === "phone" || parsed.kind === "resolved" ? parsed.phone : null;
+  if (phone) {
+    const identity = await findActiveContactByPhone(admin, orgId, phone);
+    if (identity.kind === "ambiguous") {
+      console.error("[waha.ingest] identidade de telefone ambigua", {
+        organization_id: orgId,
+        contact_ids: identity.contactIds,
+      });
+      return null;
+    }
+    if (identity.kind === "found") return identity.contactId;
+  }
   const { data, error } = await admin.rpc(
     "fn_upsert_wa_contact" as never,
     {
       p_org: orgId,
       p_kind: parsed.kind,
-      p_phone: parsed.kind === "phone" || parsed.kind === "resolved" ? parsed.phone : null,
+      p_phone: phone,
       p_lid: parsed.kind === "lid" || parsed.kind === "resolved" ? parsed.lid : null,
       p_chat_id: chatId,
       p_notify: notifyName,
@@ -354,13 +450,31 @@ async function handleInbound(
   session: Session,
   p: WahaPayload,
   requestId: string,
+  reconciling = false,
 ): Promise<void> {
   const chatId = p.from ?? "";
   const parsed = await resolveLidIdentity(session, parseChatId(chatId));
-  if (parsed.kind === "group") return; // grupos não fazem binding CRM
+  if (parsed.kind === "group") {
+    await handleManagerGroupCommand({
+      admin,
+      organizationId: session.organization_id,
+      sessionId: session.id,
+      sessionName: session.waha_session_name,
+      groupChatId: chatId,
+      senderChatId: p.author ?? p.participant,
+      body: p.body,
+      externalId: p.id,
+      requestId,
+    });
+    return; // grupos nunca fazem binding CRM nem entram no Inbox comercial
+  }
   if (!p.id || !chatId) return;
   // WAHA emite eventos vazios p/ status/read-receipt/presence — não viram mensagem.
   if (!p.body && !mediaUrlOf(p) && !p.hasMedia) return;
+  if (parsed.kind === "lid") {
+    await preservePendingIdentity(admin, session, p, chatId, parsed.lid, requestId);
+    return;
+  }
 
   const contactId = await upsertContact(
     admin,
@@ -377,6 +491,10 @@ async function handleInbound(
     session.id,
   );
   if (!conversationId) return;
+
+  if (!reconciling && parsed.kind === "resolved") {
+    await reconcilePendingIdentity(admin, session, parsed.lid, requestId);
+  }
 
   const now = new Date().toISOString();
   const { data: insertedMessage, error: insertErr } = await admin
@@ -435,11 +553,23 @@ async function handleInbound(
     } as never,
   );
 
-  if (p.body && STOP_RX.test(p.body)) {
-    await admin
-      .from("contacts")
-      .update({ is_blocked: true, blocked_reason: "stop_keyword", blocked_at: now })
-      .eq("id", contactId);
+  if (p.body && isExplicitStopRequest(p.body)) {
+    const { error: blockError } = await admin.rpc(
+      "fn_set_contact_communication_status" as never,
+      {
+        p_contact: contactId,
+        p_blocked: true,
+        p_reason: "Pedido explícito para interromper mensagens",
+        p_source: "whatsapp_stop_keyword",
+      } as never,
+    );
+    if (blockError) {
+      console.error("[waha.ingest] central opt-out failed", blockError.message);
+      await admin
+        .from("contacts")
+        .update({ is_blocked: true, blocked_reason: "stop_keyword", blocked_at: now })
+        .eq("id", contactId);
+    }
     await audit({
       action: "contact.blocked",
       organizationId: session.organization_id,

@@ -52,7 +52,8 @@ function importaComAmbienteLimpo(modulo: string): { ok: boolean; erro: string } 
     HOME: process.env.HOME ?? "",
   } as unknown as NodeJS.ProcessEnv;
   try {
-    const saida = execFileSync("npx", ["tsx", "--eval", script], {
+    const tsxCli = join(RAIZ, "node_modules", "tsx", "dist", "cli.mjs");
+    const saida = execFileSync(process.execPath, [tsxCli, "--eval", script], {
       cwd: RAIZ,
       env: limpo,
       encoding: "utf8",

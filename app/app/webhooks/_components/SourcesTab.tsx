@@ -58,7 +58,11 @@ export function SourcesTab() {
           onCreated={setSelected}
         />
         {selected ? (
-          <SourceDetail source={selected} open={!!selected} onOpenChange={() => setSelected(null)} />
+          <SourceDetail
+            source={selected}
+            open={!!selected}
+            onOpenChange={() => setSelected(null)}
+          />
         ) : null}
       </div>
     );
@@ -85,6 +89,14 @@ export function SourcesTab() {
                   {s.is_active ? "Ativa" : "Pausada"}
                 </Badge>
               </div>
+              <p className="text-xs font-medium text-accent">
+                {s.provider_type === "3c"
+                  ? "3C"
+                  : s.provider_type === "paid_traffic"
+                    ? "Tráfego pago"
+                    : "Integração genérica"}
+                {s.create_opportunity ? " · cria oportunidade" : " · cria somente contato"}
+              </p>
               <p className="text-xs text-muted-foreground">
                 {lastReceivedLabel(s.last_received_at)}
               </p>

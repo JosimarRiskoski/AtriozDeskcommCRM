@@ -22,6 +22,8 @@ import {
 import { useUser } from "@/hooks/auth/AuthProvider";
 import { useBulkAction } from "@/hooks/kanban/useBulkAction";
 import type { Stage } from "@/lib/kanban/types";
+import { useFollowupFlows } from "@/hooks/followup/useFollowupFlows";
+import { apiClient } from "@/lib/api/client";
 
 interface BulkActionBarProps {
   selectedIds: string[];
@@ -30,16 +32,25 @@ interface BulkActionBarProps {
   onClear: () => void;
 }
 
-export function BulkActionBar({
-  selectedIds,
-  stages,
-  pipelineId,
-  onClear,
-}: BulkActionBarProps) {
+export function BulkActionBar({ selectedIds, stages, pipelineId, onClear }: BulkActionBarProps) {
   const user = useUser();
   const bulk = useBulkAction(pipelineId);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  const [followupOpen, setFollowupOpen] = useState(false);
+  const [followupFlowId, setFollowupFlowId] = useState("");
+  const [followupBusy, setFollowupBusy] = useState(false);
+  const [followupPreview, setFollowupPreview] = useState<null | {
+    selected: number;
+    eligible: number;
+    excluded: number;
+    excluded_by_reason: Array<{ reason: string; count: number }>;
+  }>(null);
+  const flows = useFollowupFlows();
+  const activeFlows = (flows.data ?? []).filter(
+    (flow) => flow.status === "active" && flow.active_version_id,
+  );
+  const selectedFollowupFlow = activeFlows.find((flow) => flow.id === followupFlowId) ?? null;
 
   // Esc to clear selection
   useEffect(() => {
@@ -111,6 +122,36 @@ export function BulkActionBar({
     );
   };
 
+  async function previewFollowup(confirm: boolean) {
+    if (!followupFlowId) return;
+    setFollowupBusy(true);
+    try {
+      const response = await apiClient.post<{
+        data: {
+          selected: number;
+          eligible: number;
+          excluded: number;
+          excluded_by_reason: Array<{ reason: string; count: number }>;
+          created?: number;
+        };
+      }>("/api/v1/ai/followups/enrollments/bulk", {
+        pointer_id: followupFlowId,
+        lead_ids: selectedIds,
+        confirm,
+      });
+      setFollowupPreview(response.data);
+      if (confirm) {
+        toast.success(`${response.data.created ?? 0} follow-up(s) iniciado(s).`);
+        setFollowupOpen(false);
+        onClear();
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao preparar os follow-ups.");
+    } finally {
+      setFollowupBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="sticky bottom-4 z-30 mx-auto flex w-fit items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 shadow-md">
@@ -143,9 +184,7 @@ export function BulkActionBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem onClick={() => runAssign(user.id)}>Eu</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runAssign(null)}>
-              Remover responsável
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => runAssign(null)}>Remover responsável</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -178,6 +217,17 @@ export function BulkActionBar({
 
         <Button
           size="sm"
+          variant="outline"
+          onClick={() => {
+            setFollowupPreview(null);
+            setFollowupOpen(true);
+          }}
+        >
+          Iniciar follow-up
+        </Button>
+
+        <Button
+          size="sm"
           variant="destructive"
           onClick={() => setConfirmDelete(true)}
           disabled={bulk.isPending}
@@ -205,6 +255,88 @@ export function BulkActionBar({
             <Button variant="destructive" onClick={runDelete} disabled={bulk.isPending}>
               Excluir
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={followupOpen} onOpenChange={setFollowupOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Follow-up coletivo</DialogTitle>
+            <DialogDescription>
+              Primeiro validamos bloqueios, telefone e follow-ups existentes. Nenhuma mensagem é
+              enviada nesta confirmação.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="grid gap-1 text-sm">
+              Fluxo publicado
+              <select
+                className="h-10 rounded-md border bg-background px-3"
+                value={followupFlowId}
+                onChange={(event) => {
+                  setFollowupFlowId(event.target.value);
+                  setFollowupPreview(null);
+                }}
+              >
+                <option value="">Escolha um fluxo</option>
+                {activeFlows.map((flow) => (
+                  <option key={flow.id} value={flow.id}>
+                    {flow.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedFollowupFlow ? (
+              <div className="bg-muted/30 rounded-md border p-3 text-xs text-muted-foreground">
+                <p>
+                  <b className="text-foreground">Objetivo:</b>{" "}
+                  {selectedFollowupFlow.objective ?? selectedFollowupFlow.name}
+                </p>
+                <p>
+                  {selectedFollowupFlow.steps_count ?? 0} mensagem(ns) · duração{" "}
+                  {selectedFollowupFlow.duration_minutes ?? 0} min · primeiro envio em{" "}
+                  {selectedFollowupFlow.next_send_minutes ?? 0} min
+                </p>
+                <p>
+                  Agente: {selectedFollowupFlow.agent_name ?? "regra automática"} · conexão:{" "}
+                  {selectedFollowupFlow.channel_name ?? "conexão de cada conversa"} · cancelar se
+                  responder: {selectedFollowupFlow.cancel_on_reply === false ? "não" : "sim"}
+                </p>
+              </div>
+            ) : null}
+            {followupPreview ? (
+              <div className="rounded-md border p-3 text-sm">
+                <p>
+                  <b>{followupPreview.selected}</b> selecionados · <b>{followupPreview.eligible}</b>{" "}
+                  elegíveis · <b>{followupPreview.excluded}</b> excluídos
+                </p>
+                {followupPreview.excluded_by_reason.map((item) => (
+                  <p key={item.reason} className="mt-1 text-xs text-muted-foreground">
+                    {item.count} · {item.reason}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFollowupOpen(false)}>
+              Cancelar
+            </Button>
+            {!followupPreview ? (
+              <Button
+                disabled={!followupFlowId || followupBusy}
+                onClick={() => previewFollowup(false)}
+              >
+                Validar seleção
+              </Button>
+            ) : (
+              <Button
+                disabled={followupPreview.eligible === 0 || followupBusy}
+                onClick={() => previewFollowup(true)}
+              >
+                Confirmar {followupPreview.eligible} contato(s)
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

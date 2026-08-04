@@ -19,6 +19,9 @@ import { RetentionNotice } from "./RetentionNotice";
 import { CRMSidePanel } from "./CRMSidePanel";
 import { InboxKeyboardShortcuts } from "./InboxKeyboardShortcuts";
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
+import { NewContactDialog } from "@/components/contacts/NewContactDialog";
+import { Button } from "@/components/ui/button";
+import { Plus } from "@/lib/ui/icons";
 
 function tabToFilter(tab: InboxFiltersValue["tab"]): Partial<ConversationsFilters> {
   switch (tab) {
@@ -81,6 +84,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [newContactOpen, setNewContactOpen] = useState(false);
   const composerRef = useRef<ComposerHandle | null>(null);
 
   const filters: ConversationsFilters = useMemo(
@@ -137,7 +141,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   }, [close, selectedConversation]);
 
   const blockedReason = selectedConversation?.contacts?.is_blocked
-    ? "Contato bloqueado — envio de mensagens desabilitado."
+    ? selectedConversation.contacts.blocked_reason === "stop_keyword"
+      ? "Envios bloqueados pelo CRM após identificar um pedido de parada. Confira o contato antes de reativar."
+      : `Envios bloqueados no CRM${selectedConversation.contacts.blocked_reason ? `: ${selectedConversation.contacts.blocked_reason}` : "."}`
     : selectedConversation?.contacts?.is_anonymized
       ? "Contato anonimizado — não é possível enviar mensagens."
       : null;
@@ -145,6 +151,12 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   return (
     <div className="grid h-full min-h-0 w-full grid-cols-1 overflow-hidden md:grid-cols-[300px_1fr] xl:grid-cols-[300px_minmax(0,1fr)_minmax(320px,24vw)]">
       <div className="flex h-full min-h-0 flex-col border-r border-border">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <span className="text-sm font-semibold">Conversas</span>
+          <Button size="sm" variant="outline" onClick={() => setNewContactOpen(true)}>
+            <Plus size={15} /> Novo contato/conversa
+          </Button>
+        </div>
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <ConversationList
@@ -197,6 +209,14 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         onClaim={handleClaim}
         onClose={handleClose}
         onToggleHelp={() => setHelpOpen((v) => !v)}
+      />
+      <NewContactDialog
+        open={newContactOpen}
+        onOpenChange={setNewContactOpen}
+        onConversationStarted={(conversationId) => {
+          setSelectedId(conversationId);
+          router.push(`/app/inbox/${conversationId}`);
+        }}
       />
       <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>

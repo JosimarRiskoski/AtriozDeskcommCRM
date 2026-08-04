@@ -10,6 +10,7 @@ export default async function MetricsPage() {
   const activeOrg = await resolveActiveOrg(user);
   // spec 13 §6.1: agent vê as próprias (RLS); a comparação por atendente é manager+.
   const canCompare = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
+  const canConfigureCost = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin;
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
@@ -22,7 +23,11 @@ export default async function MetricsPage() {
         </p>
       </header>
 
-      <MetricsClient canCompare={canCompare} currentUserId={user.id} />
+      <MetricsClient
+        canCompare={canCompare}
+        canConfigureCost={canConfigureCost}
+        currentUserId={user.id}
+      />
     </div>
   );
 }

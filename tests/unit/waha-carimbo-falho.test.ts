@@ -30,12 +30,17 @@ function adminQueFalhaEm(rpcQueFalha: string): {
       select: () => ({ maybeSingle: async () => ({ data: { id: "msg-1" }, error: null }) }),
     }),
     update: () => ({ eq: async () => ({ error: null }) }),
-    select: () => ({
-      eq: () => ({
+    select: () => {
+      const chain = {
+        eq: () => chain,
+        in: () => chain,
+        is: () => chain,
+        order: () => chain,
+        limit: async () => ({ data: [], error: null }),
         maybeSingle: async () => ({ data: null, error: null }),
-        order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
-      }),
-    }),
+      };
+      return chain;
+    },
   };
   const admin = {
     from: () => retornoDeTabela,

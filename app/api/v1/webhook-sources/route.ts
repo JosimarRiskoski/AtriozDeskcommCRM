@@ -37,10 +37,12 @@ export async function GET(): Promise<Response> {
     .eq("organization_id", activeOrg.orgId)
     .order("created_at", { ascending: false });
   if (error) return fail("internal_error", error.message, 500, { requestId });
-  const masked = (data ?? []).map(({ secret_encrypted, ...rest }) => ({
-    ...rest,
-    has_secret: secret_encrypted !== null,
-  }));
+  const masked = (data ?? []).map(
+    ({ secret_encrypted, previous_secret_encrypted: _previous, ...rest }) => ({
+      ...rest,
+      has_secret: secret_encrypted !== null,
+    }),
+  );
   return ok(masked, { requestId });
 }
 
@@ -82,6 +84,72 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
   }
 
+  const admin = createAdminClient();
+  const references = await Promise.all([
+    parsed.data.default_pipeline_id
+      ? admin
+          .from("crm_pipelines")
+          .select("id")
+          .eq("id", parsed.data.default_pipeline_id)
+          .eq("organization_id", activeOrg.orgId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    parsed.data.default_stage_id
+      ? admin
+          .from("crm_stages")
+          .select("id,pipeline_id")
+          .eq("id", parsed.data.default_stage_id)
+          .eq("organization_id", activeOrg.orgId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    parsed.data.default_channel_session_id
+      ? admin
+          .from("channel_sessions")
+          .select("id,status")
+          .eq("id", parsed.data.default_channel_session_id)
+          .eq("organization_id", activeOrg.orgId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    parsed.data.default_agent_id
+      ? admin
+          .from("ai_agents")
+          .select("id")
+          .eq("id", parsed.data.default_agent_id)
+          .eq("organization_id", activeOrg.orgId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    parsed.data.followup_flow_id
+      ? admin
+          .from("followup_flow_pointers")
+          .select("id,status")
+          .eq("id", parsed.data.followup_flow_id)
+          .eq("organization_id", activeOrg.orgId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const [pipelineRef, stageRef, sessionRef, agentRef, flowRef] = references.map(
+    (result) => result.data as Record<string, unknown> | null,
+  );
+  if (parsed.data.default_pipeline_id && !pipelineRef)
+    return fail("validation_failed", "Funil inválido para esta organização.", 422, { requestId });
+  if (
+    parsed.data.default_stage_id &&
+    (!stageRef || stageRef.pipeline_id !== parsed.data.default_pipeline_id)
+  )
+    return fail("validation_failed", "A etapa não pertence ao funil escolhido.", 422, {
+      requestId,
+    });
+  if (parsed.data.default_channel_session_id && (!sessionRef || sessionRef.status !== "WORKING"))
+    return fail("validation_failed", "A conexão precisa estar ativa nesta organização.", 422, {
+      requestId,
+    });
+  if (parsed.data.default_agent_id && !agentRef)
+    return fail("validation_failed", "Agente inválido para esta organização.", 422, { requestId });
+  if (parsed.data.followup_flow_id && (!flowRef || flowRef.status !== "active"))
+    return fail("validation_failed", "A cadência precisa estar publicada nesta organização.", 422, {
+      requestId,
+    });
+
   const supabase = await createClient();
   const { data: created, error: insErr } = await supabase
     .from("webhook_sources")
@@ -89,19 +157,29 @@ export async function POST(req: NextRequest): Promise<Response> {
       organization_id: activeOrg.orgId,
       created_by_user_id: user.id,
       name: parsed.data.name,
+      provider_type: parsed.data.provider_type,
       source_code: parsed.data.source_code,
       require_external_id: parsed.data.require_external_id,
+      create_opportunity: parsed.data.create_opportunity,
       path_token: pathToken,
       secret_encrypted: secretEncrypted,
       default_pipeline_id: parsed.data.default_pipeline_id,
       default_stage_id: parsed.data.default_stage_id,
+      default_channel_session_id: parsed.data.default_channel_session_id ?? null,
+      default_agent_id: parsed.data.default_agent_id ?? null,
+      activate_ai: parsed.data.activate_ai,
+      followup_flow_id: parsed.data.followup_flow_id ?? null,
+      automation_enabled: false,
+      automation_external_state_field: parsed.data.automation_external_state_field ?? null,
       field_map: parsed.data.field_map ?? {},
       redirect_to: parsed.data.redirect_to ?? null,
     })
     .select("*")
     .single();
   if (insErr || !created) {
-    return fail("internal_error", insErr?.message ?? "webhook_source_insert_failed", 500, { requestId });
+    return fail("internal_error", insErr?.message ?? "webhook_source_insert_failed", 500, {
+      requestId,
+    });
   }
 
   void audit({
@@ -114,6 +192,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     metadata: { name: parsed.data.name },
   });
 
-  const { secret_encrypted: _enc, ...createdPublic } = created as Record<string, unknown>;
+  const {
+    secret_encrypted: _enc,
+    previous_secret_encrypted: _previous,
+    ...createdPublic
+  } = created as Record<string, unknown>;
   return ok({ ...createdPublic, has_secret: secretEncrypted !== null }, { requestId, status: 201 });
 }

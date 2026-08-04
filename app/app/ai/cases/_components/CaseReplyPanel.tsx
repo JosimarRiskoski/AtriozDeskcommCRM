@@ -22,7 +22,7 @@ export function CaseReplyPanel({ caseId, status }: { caseId: string; status: Cas
   const [body, setBody] = useState("");
   const reply = useReplyCase();
 
-  const disabled = status !== "awaiting_human";
+  const disabled = status !== "awaiting_human" && status !== "escalated";
   const disabledReason = CASE_REPLY_DISABLED_REASON[status];
   const canSubmit = !disabled && action !== null && body.trim().length > 0 && !reply.isPending;
 
@@ -47,24 +47,28 @@ export function CaseReplyPanel({ caseId, status }: { caseId: string; status: Cas
       {disabled ? <p className="text-xs text-muted-foreground">{disabledReason}</p> : null}
 
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="O que você quer fazer?">
-        {CASE_ACTIONS.map((opt) => (
-          <button
-            key={opt.action}
-            type="button"
-            role="radio"
-            disabled={disabled}
-            aria-checked={action === opt.action}
-            onClick={() => setAction(opt.action)}
-            className={cn(
-              "rounded-sm border p-3 text-left transition-colors",
-              action === opt.action ? "border-accent bg-accent-soft" : "border-border hover:border-border-strong",
-              disabled && "cursor-not-allowed opacity-55",
-            )}
-          >
-            <p className="text-sm font-medium">{opt.label}</p>
-            <p className="text-xs text-muted-foreground">{opt.help}</p>
-          </button>
-        ))}
+        {CASE_ACTIONS.filter((opt) => status !== "escalated" || opt.action !== "escalate").map(
+          (opt) => (
+            <button
+              key={opt.action}
+              type="button"
+              role="radio"
+              disabled={disabled}
+              aria-checked={action === opt.action}
+              onClick={() => setAction(opt.action)}
+              className={cn(
+                "rounded-sm border p-3 text-left transition-colors",
+                action === opt.action
+                  ? "border-accent bg-accent-soft"
+                  : "border-border hover:border-border-strong",
+                disabled && "cursor-not-allowed opacity-55",
+              )}
+            >
+              <p className="text-sm font-medium">{opt.label}</p>
+              <p className="text-xs text-muted-foreground">{opt.help}</p>
+            </button>
+          ),
+        )}
       </div>
 
       <Textarea

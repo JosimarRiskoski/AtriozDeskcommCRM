@@ -12,17 +12,14 @@ import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
 import { hashCpf, encryptCpfSql } from "@/lib/contacts/cpf";
+import { findActiveContactByPhone } from "@/lib/contacts/find-by-phone";
 import type { Contact } from "@/lib/types/contacts";
-import type {
-  ContactCreate,
-  ContactPatch,
-  ContactListQuery,
-} from "@/lib/schemas";
+import type { ContactCreate, ContactPatch, ContactListQuery } from "@/lib/schemas";
 
 type SB = SupabaseClient;
 
 const SELECT_COLS =
-  "id, organization_id, name, display_name, email, email_normalized, phone_number, company, city, state, custom_fields, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at";
+  "id, organization_id, name, display_name, email, email_normalized, phone_number, company, city, state, custom_fields, cpf_hash, birthdate, is_blocked, blocked_reason, blocked_at, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at";
 
 const ROLE_RANK: Record<string, number> = {
   viewer: 1,
@@ -97,11 +94,7 @@ export async function listContactsHandler(
   if (q.search) {
     const s = q.search.trim();
     const digits = s.replace(/\D/g, "");
-    const orParts = [
-      `name.ilike.%${s}%`,
-      `email.ilike.%${s}%`,
-      `phone_number.ilike.%${s}%`,
-    ];
+    const orParts = [`name.ilike.%${s}%`, `email.ilike.%${s}%`, `phone_number.ilike.%${s}%`];
     if (digits.length === 11) {
       orParts.push(`cpf_hash.eq.${hashCpf(digits)}`);
     }
@@ -232,7 +225,7 @@ export async function getContactHandler(
 
 export interface CreateContactResult {
   contact: Contact;
-  action: "created";
+  action: "created" | "existing";
 }
 
 export async function createContactHandler(
@@ -241,6 +234,27 @@ export async function createContactHandler(
   input: ContactCreate,
 ): Promise<CreateContactResult> {
   const a = actorAuditPayload(ctx.actor);
+  if (input.phone_number) {
+    const identity = await findActiveContactByPhone(supabase, ctx.organization_id, input.phone_number);
+    if (identity.kind === "found") {
+      const { data: existing } = await supabase
+        .from("contacts")
+        .select(SELECT_COLS)
+        .eq("organization_id", ctx.organization_id)
+        .eq("id", identity.contactId)
+        .single();
+      if (existing) return { contact: existing as Contact, action: "existing" };
+    }
+    if (identity.kind === "ambiguous") {
+      throw new ApiError(
+        409,
+        "contact_identity_ambiguous",
+        undefined,
+        ctx.requestId,
+        "Existem contatos que podem representar o mesmo telefone. Revise a duplicidade antes de cadastrar.",
+      );
+    }
+  }
   const insertRow: Record<string, unknown> = {
     organization_id: ctx.organization_id,
     created_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
@@ -267,6 +281,18 @@ export async function createContactHandler(
     .select(SELECT_COLS)
     .single();
 
+  if (insErr?.code === "23505") {
+    let existingQuery = supabase
+      .from("contacts")
+      .select(SELECT_COLS)
+      .eq("organization_id", ctx.organization_id);
+    if (input.phone_number) existingQuery = existingQuery.eq("phone_number", input.phone_number);
+    else if (input.email)
+      existingQuery = existingQuery.eq("email_normalized", input.email.trim().toLowerCase());
+    else if (input.cpf) existingQuery = existingQuery.eq("cpf_hash", hashCpf(input.cpf));
+    const { data: existing } = await existingQuery.is("is_merged_into", null).maybeSingle();
+    if (existing) return { contact: existing as Contact, action: "existing" };
+  }
   if (insErr) {
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, insErr.message);
   }

@@ -6,8 +6,24 @@ import { z } from "zod";
  * nome do perfil quando a sessão fica WORKING.
  */
 export const createChannelSchema = z.object({
-  display_name: z.string().trim().min(1).max(80).optional(),
+  display_name: z.string().trim().min(2).max(80),
+  purpose: z.string().trim().max(120).optional(),
+  is_default: z.boolean().optional().default(false),
 });
+
+export const updateChannelSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("update"),
+    display_name: z.string().trim().min(2).max(80),
+    purpose: z.string().trim().max(120).nullable().optional(),
+    is_default: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal("archive"),
+    reason: z.string().trim().min(3).max(300),
+  }),
+  z.object({ action: z.literal("restore") }),
+]);
 
 export type CreateChannelInput = z.infer<typeof createChannelSchema>;
 

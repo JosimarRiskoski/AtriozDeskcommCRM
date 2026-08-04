@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 
-import { loadPublishedAgentConfig } from "./agent-config";
+import {
+  loadPublishedAgentConfig,
+  matchesHandoffKeyword,
+  renderAgentControlPolicy,
+} from "./agent-config";
 
 const baseRow = {
   agent_id: "a1",
@@ -54,5 +58,71 @@ describe("loadPublishedAgentConfig — campos de RAG", () => {
       "cs1",
     );
     expect(cfg?.activeKbVersionId).toBeNull();
+  });
+});
+
+describe("controles compreensíveis do agente", () => {
+  it("carrega limites, fontes e assuntos do config publicado", async () => {
+    const cfg = await loadPublishedAgentConfig(
+      poolWith({
+        ...baseRow,
+        config: {
+          knowledge_base_enabled: false,
+          external_internet_allowed: false,
+          forbidden_topics: ["aconselhamento jurídico"],
+          human_required_topics: ["documento pessoal", "fatura de energia"],
+          fixed_responses: [{ topic: "preço", response: "Consulte a proposta." }],
+          fallback_message: "Não encontrei.",
+          daily_budget_cents: 500,
+          monthly_budget_cents: 5000,
+        },
+      }),
+      "org1",
+      "cs1",
+    );
+    expect(cfg).toMatchObject({
+      knowledgeBaseEnabled: false,
+      externalInternetAllowed: false,
+      forbiddenTopics: ["aconselhamento jurídico"],
+      humanRequiredTopics: ["documento pessoal", "fatura de energia"],
+      dailyBudgetCents: 500,
+      monthlyBudgetCents: 5000,
+    });
+    expect(renderAgentControlPolicy(cfg!)).toContain("Consulte a proposta.");
+    expect(renderAgentControlPolicy(cfg!)).toContain("Não encontrei.");
+  });
+
+  it("identifica assunto obrigatório de humano sem diferenciar maiúsculas", () => {
+    expect(matchesHandoffKeyword("Segue minha FATURA DE ENERGIA", ["fatura de energia"])).toBe(
+      true,
+    );
+  });
+});
+
+describe("seleção de agente por conversa", () => {
+  it("consulta escolha manual e regras automáticas e registra mudança efetiva", async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            ...baseRow,
+            selection_mode: "origin",
+            selection_reason: "Regra automática: Tráfego pago",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+    await loadPublishedAgentConfig({ query } as unknown as pg.Pool, "org1", "cs1", "conv1");
+    expect(query.mock.calls[0]?.[0]).toContain("ai_agent_assignment_rules");
+    expect(query.mock.calls[0]?.[1]).toEqual(["org1", "cs1", "conv1"]);
+    expect(query.mock.calls[1]?.[0]).toContain("conversation_agent_events");
+    expect(query.mock.calls[1]?.[1]).toEqual([
+      "org1",
+      "conv1",
+      "a1",
+      "origin",
+      "Regra automática: Tráfego pago",
+    ]);
   });
 });

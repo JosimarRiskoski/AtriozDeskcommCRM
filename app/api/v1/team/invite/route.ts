@@ -182,6 +182,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         organization_id: activeOrg.orgId,
         email,
         role: inv.role,
+        can_receive_human_cases: inv.can_receive_human_cases,
         status: result.ok ? "pending" : "failed",
         invited_by: authUser.id,
         expires_at: expiresAt.toISOString(),

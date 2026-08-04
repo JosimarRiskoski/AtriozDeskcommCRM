@@ -72,9 +72,7 @@ async function withOwnerAgents(
     published_version_id: string | null;
   }>;
 
-  const publishedIds = agentRows
-    .map((a) => a.published_version_id)
-    .filter((v): v is string => !!v);
+  const publishedIds = agentRows.map((a) => a.published_version_id).filter((v): v is string => !!v);
   const versionById = new Map<string, number>();
   if (publishedIds.length > 0) {
     const { data: versions, error: versionsErr } = await supabase
@@ -146,9 +144,7 @@ async function avisaAmbiguas(
       "ref_id",
       ambiguas.map((a) => a.contact_id),
     );
-  const abertos = new Set(
-    ((jaAbertos ?? []) as Array<{ ref_id: string }>).map((r) => r.ref_id),
-  );
+  const abertos = new Set(((jaAbertos ?? []) as Array<{ ref_id: string }>).map((r) => r.ref_id));
 
   const novos = ambiguas
     .filter((a) => !abertos.has(a.contact_id))
@@ -230,15 +226,58 @@ async function withScores(
   };
 }
 
+async function withFollowups(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  leads: Lead[],
+): Promise<{ leads: Lead[]; error: string | null }> {
+  const contactIds = [...new Set(leads.map((lead) => lead.contact_id).filter(Boolean))] as string[];
+  if (contactIds.length === 0) return { leads, error: null };
+  const { data, error } = await supabase
+    .from("followup_enrollments")
+    .select(
+      "id,contact_id,status,next_eval_at,followup_flow_pointers:pointer_id(name,trigger_config),ai_agents:agent_id(name)",
+    )
+    .eq("organization_id", organizationId)
+    .in("contact_id", contactIds)
+    .in("status", ["active", "waiting_reply", "paused_handoff"]);
+  if (error) return { leads, error: error.message };
+  const byContact = new Map<string, NonNullable<Lead["followup"]>>();
+  for (const raw of data ?? []) {
+    const row = raw as unknown as {
+      id: string;
+      contact_id: string;
+      status: string;
+      next_eval_at: string | null;
+      followup_flow_pointers: { name: string; trigger_config: Record<string, unknown> } | null;
+      ai_agents: { name: string } | null;
+    };
+    if (byContact.has(row.contact_id)) continue;
+    byContact.set(row.contact_id, {
+      enrollment_id: row.id,
+      flow_name: row.followup_flow_pointers?.name ?? "Follow-up",
+      agent_name: row.ai_agents?.name ?? null,
+      status: row.status,
+      next_eval_at: row.next_eval_at,
+      cancel_on_reply: row.followup_flow_pointers?.trigger_config?.cancel_on_reply !== false,
+    });
+  }
+  return {
+    leads: leads.map((lead) => ({
+      ...lead,
+      followup: lead.contact_id ? (byContact.get(lead.contact_id) ?? null) : null,
+    })),
+    error: null,
+  };
+}
+
 async function withNextActions(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   leads: Lead[],
   defaultPipelineId: string | null,
 ): Promise<{ leads: Lead[]; error: string | null }> {
-  const contactIds = [
-    ...new Set(leads.map((l) => l.contact_id).filter((c): c is string => !!c)),
-  ];
+  const contactIds = [...new Set(leads.map((l) => l.contact_id).filter((c): c is string => !!c))];
   if (contactIds.length === 0) return { leads, error: null };
 
   const [{ data: estados, error: estadosErr }, { data: candidatos, error: candErr }] =
@@ -360,10 +399,18 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail("internal_error", leadsComScore.error, 500, { requestId });
   }
 
+  const leadsComFollowup = await withFollowups(
+    supabase,
+    (pipeline as Pipeline).organization_id,
+    leadsComScore.leads,
+  );
+  if (leadsComFollowup.error)
+    return fail("internal_error", leadsComFollowup.error, 500, { requestId });
+
   const board: BoardData = {
     pipeline: pipeline as Pipeline,
     stages: (stages ?? []) as Stage[],
-    leads: leadsComScore.leads,
+    leads: leadsComFollowup.leads,
   };
 
   return ok(board, { requestId });

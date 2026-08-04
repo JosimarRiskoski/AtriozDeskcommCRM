@@ -17,6 +17,7 @@ import {
   movePipeline,
   movePipelineStage,
   savePipelineStage,
+  setDefaultPipeline,
   updatePipelineIdentity,
 } from "@/app/actions/settings/managePipelines";
 import type { PipelineConfigPatch } from "@/lib/schemas/settings";
@@ -50,6 +51,7 @@ interface CustomFieldDef {
   label: string;
   type: string;
   required?: boolean;
+  visibility?: "human_only" | "ai_allowed" | "commercial";
   options?: Array<{ value: string; label: string }>;
 }
 
@@ -98,15 +100,26 @@ export function PipelinesClient({ pipelines }: { pipelines: PipelineRow[] }) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [preset, setPreset] = useState<
-    "vendas" | "imobiliaria" | "energia" | "servicos" | "suporte"
-  >("vendas");
+    "reuniao" | "vendas" | "imobiliaria" | "energia" | "servicos" | "suporte"
+  >("reuniao");
+  const [isDefault, setIsDefault] = useState(false);
   const [pending, startTransition] = useTransition();
   function submit() {
+    const currentDefault = pipelines.find((pipeline) => pipeline.is_default);
+    if (
+      isDefault &&
+      currentDefault &&
+      !window.confirm(
+        `“${currentDefault.name}” deixará de ser o funil principal. Deseja continuar?`,
+      )
+    )
+      return;
     startTransition(async () => {
-      const result = await createPipeline({ name, preset });
+      const result = await createPipeline({ name, preset, isDefault });
       if (result.ok) {
         toast.success("Funil criado com etapas prontas.");
         setName("");
+        setIsDefault(false);
         setCreating(false);
         window.location.reload();
       } else toast.error(result.error);
@@ -120,7 +133,7 @@ export function PipelinesClient({ pipelines }: { pipelines: PipelineRow[] }) {
         </Button>
       </div>
       {creating ? (
-        <Card className="grid gap-4 p-5 md:grid-cols-[1fr_260px_auto] md:items-end">
+        <Card className="grid gap-4 p-5 md:grid-cols-[1fr_260px_180px_auto] md:items-end">
           <div className="space-y-1">
             <Label>Nome do novo funil</Label>
             <Input
@@ -136,6 +149,7 @@ export function PipelinesClient({ pipelines }: { pipelines: PipelineRow[] }) {
               value={preset}
               onChange={(e) => setPreset(e.target.value as typeof preset)}
             >
+              <option value="reuniao">Comercial da reunião</option>
               <option value="vendas">Vendas</option>
               <option value="imobiliaria">Imobiliária</option>
               <option value="energia">Energia compartilhada</option>
@@ -143,6 +157,9 @@ export function PipelinesClient({ pipelines }: { pipelines: PipelineRow[] }) {
               <option value="suporte">Suporte</option>
             </select>
           </div>
+          <label className="flex h-10 items-center gap-2 text-sm">
+            <Switch checked={isDefault} onCheckedChange={setIsDefault} /> Funil principal
+          </label>
           <Button onClick={submit} disabled={pending || name.trim().length < 2}>
             {pending ? "Criando…" : "Criar funil"}
           </Button>
@@ -183,6 +200,11 @@ function PipelineEditor({
   const [reasons, setReasons] = useState(readLostReasons(pipeline.settings));
   const [reasonDraft, setReasonDraft] = useState("");
   const [fields, setFields] = useState(readFields(pipeline.settings));
+  const [valueLabel, setValueLabel] = useState(
+    typeof pipeline.settings?.value_label === "string"
+      ? pipeline.settings.value_label
+      : "Valor previsto",
+  );
   const [isPending, startTransition] = useTransition();
 
   function saveConfiguration() {
@@ -190,6 +212,7 @@ function PipelineEditor({
       vocabulary: { lead, deal, won, lost },
       fields: fields as PipelineConfigPatch["fields"],
       lost_reasons: reasons,
+      value_label: valueLabel,
     };
     startTransition(async () => {
       const [identity, config] = await Promise.all([
@@ -204,7 +227,13 @@ function PipelineEditor({
   function addField() {
     setFields((items) => [
       ...items,
-      { key: `campo_${items.length + 1}`, label: "Novo campo", type: "text", required: false },
+      {
+        key: `campo_${items.length + 1}`,
+        label: "Novo campo",
+        type: "text",
+        required: false,
+        visibility: "commercial",
+      },
     ]);
   }
   function updateField(index: number, patch: Partial<CustomFieldDef>) {
@@ -233,6 +262,17 @@ function PipelineEditor({
           <p className="mt-1 text-xs text-muted-foreground">Endereço interno: /{pipeline.slug}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant={pipeline.is_default ? "secondary" : "outline"}
+            onClick={() =>
+              window.confirm(
+                `Este funil passará a abrir primeiro no Kanban e substituirá o principal atual. Deseja continuar?`,
+              ) && execute(() => setDefaultPipeline(pipeline.id), "Funil principal atualizado.")
+            }
+            disabled={isPending || pipeline.is_default}
+          >
+            {pipeline.is_default ? "Principal" : "Definir como principal"}
+          </Button>
           <Button
             size="icon"
             variant="outline"
@@ -272,6 +312,21 @@ function PipelineEditor({
           </Button>
         </div>
       </header>
+
+      <section className="space-y-3">
+        <div>
+          <h3 className="font-medium">Rótulo do valor</h3>
+          <p className="text-xs text-muted-foreground">
+            Personalize para o nicho, por exemplo “Valor previsto da fatura” ou “Valor do contrato”.
+          </p>
+        </div>
+        <Input
+          className="max-w-xl"
+          value={valueLabel}
+          onChange={(event) => setValueLabel(event.target.value)}
+          placeholder="Valor previsto"
+        />
+      </section>
 
       <section className="space-y-3">
         <div>
@@ -350,7 +405,7 @@ function PipelineEditor({
               const hasOptions = field.type === "select" || field.type === "multiselect";
               return (
                 <div key={`${field.key}-${index}`} className="space-y-2 rounded-md border p-3">
-                  <div className="grid gap-2 md:grid-cols-[1fr_180px_130px_auto]">
+                  <div className="grid gap-2 md:grid-cols-[1fr_170px_170px_130px_auto]">
                     <Input
                       value={field.label}
                       onChange={(e) =>
@@ -378,6 +433,20 @@ function PipelineEditor({
                           {label}
                         </option>
                       ))}
+                    </select>
+                    <select
+                      className="h-10 rounded-md border bg-background px-3 text-sm"
+                      value={field.visibility ?? "commercial"}
+                      onChange={(event) =>
+                        updateField(index, {
+                          visibility: event.target.value as CustomFieldDef["visibility"],
+                        })
+                      }
+                      aria-label="Privacidade do campo"
+                    >
+                      <option value="commercial">Dado comercial</option>
+                      <option value="human_only">Somente humanos</option>
+                      <option value="ai_allowed">Permitido para IA</option>
                     </select>
                     <label className="flex items-center gap-2 text-sm">
                       <Switch

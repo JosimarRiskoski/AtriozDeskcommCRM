@@ -16,6 +16,7 @@ export const inviteMemberSchema = z.object({
       z.object({
         email: z.string().email(),
         role: z.enum(ROLES),
+        can_receive_human_cases: z.boolean().default(false),
       }),
     )
     .min(1)

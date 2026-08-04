@@ -5,6 +5,7 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import { AgentsList } from "./_components/AgentsList";
+import { AgentAssignmentRules } from "./_components/AgentAssignmentRules";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function AgentsListPage() {
         </div>
       </header>
       <AgentsList initialData={agents} canWrite={canWrite} />
+      <AgentAssignmentRules canWrite={canWrite} />
     </div>
   );
 }

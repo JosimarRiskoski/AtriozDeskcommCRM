@@ -15,35 +15,37 @@
  * cacheWriteTokens}. Validado no ai@7 via scripts/smoke-llm.sh (modelo real) —
  * upgrade de major re-valida esses paths pelo mesmo gate (regra dura 16).
  */
-import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
-import type pg from 'pg';
-import { z } from 'zod';
+import { generateText, stepCountIs, type ModelMessage, type ToolSet } from "ai";
+import type pg from "pg";
+import { z } from "zod";
 
-import type { Logger } from '../../obs/logger';
-import { resolveOrgLlmConfig, type LlmEdgeConfig } from './credentials';
-import { costCents } from './pricing';
-import { createDefaultRegistry, type ProviderRegistry } from './providers';
-import { buildStablePrefix } from './stable-prefix';
+import type { Logger } from "../../obs/logger";
+import { resolveOrgLlmConfig, type LlmEdgeConfig } from "./credentials";
+import { costCents } from "./pricing";
+import { createDefaultRegistry, type ProviderRegistry } from "./providers";
+import { buildStablePrefix } from "./stable-prefix";
 
 // Call sites FORA da camada importam os tipos daqui — nunca de 'ai' direto
 // (o seam é a única porta). `tool` idem: é como o agente define ToolSet sem
 // tocar no SDK.
-export { tool } from 'ai';
-export type { ModelMessage, ToolSet } from 'ai';
-export type { LlmEdgeConfig } from './credentials';
-export { llmEdgeConfigFromEnv, LlmNotConfiguredError } from './credentials';
+export { tool } from "ai";
+export type { ModelMessage, ToolSet } from "ai";
+export type { LlmEdgeConfig } from "./credentials";
+export { llmEdgeConfigFromEnv, LlmNotConfiguredError } from "./credentials";
 
 /** Teto mensal da org esgotado — runs recusados ANTES do provider (zero tokens). */
 export class LlmBudgetExceededError extends Error {
-  override readonly name = 'llm_budget_exceeded';
+  override readonly name = "llm_budget_exceeded";
   constructor() {
-    super('orçamento mensal de LLM da org esgotado — chamada recusada; ajuste o teto ou aguarde a virada do mês (agent_inbox_items kind=budget_exceeded)');
+    super(
+      "orçamento mensal de LLM da org esgotado — chamada recusada; ajuste o teto ou aguarde a virada do mês (agent_inbox_items kind=budget_exceeded)",
+    );
   }
 }
 
 /** Provider da config sem entrada no registry — erro de config, nunca fallback. */
 export class LlmProviderUnknownError extends Error {
-  override readonly name = 'llm_provider_unknown';
+  override readonly name = "llm_provider_unknown";
   constructor(provider: string) {
     super(`provider LLM desconhecido na config da org: ${provider}`);
   }
@@ -51,7 +53,7 @@ export class LlmProviderUnknownError extends Error {
 
 /** Modelo pedido fora de enabled_models da org. */
 export class LlmModelNotEnabledError extends Error {
-  override readonly name = 'llm_model_not_enabled';
+  override readonly name = "llm_model_not_enabled";
   constructor(model: string) {
     super(`modelo não habilitado para a org (enabled_models): ${model}`);
   }
@@ -72,6 +74,9 @@ export interface RunModelCallInput {
   leadId?: string | null;
   jobId?: string | null;
   variantId?: string | null;
+  agentId?: string | null;
+  agentDailyBudgetCents?: number;
+  agentMonthlyBudgetCents?: number;
   /** atribuição de custo: 'agent_turn' (default) | 'classifier' | 'compaction' | 'connection_test' */
   purpose?: string;
   system?: string;
@@ -94,7 +99,7 @@ export interface RunModelCallInput {
    * Override de provider/credencial vindo da versão PUBLICADA do agente (Fase
    * 2B) — resolvido no seam, nunca no call site. Sem ele, config da org.
    */
-  llmOverride?: import('./credentials').LlmResolveOverride;
+  llmOverride?: import("./credentials").LlmResolveOverride;
 }
 
 export interface RunModelCallDeps {
@@ -110,7 +115,11 @@ export interface RunModelCallDeps {
  * tipado. ponytail: o insert-if-not-exists é um único statement; duas recusas
  * exatamente simultâneas podem duplicar o alerta — inócuo.
  */
-async function assertBudget(db: pg.Pool, organizationId: string, budgetCents: number | null): Promise<void> {
+async function assertBudget(
+  db: pg.Pool,
+  organizationId: string,
+  budgetCents: number | null,
+): Promise<void> {
   if (budgetCents === null) {
     return;
   }
@@ -138,16 +147,70 @@ async function assertBudget(db: pg.Pool, organizationId: string, budgetCents: nu
   throw new LlmBudgetExceededError();
 }
 
-export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunModelCallInput, deps: RunModelCallDeps = {}) {
+async function assertAgentBudget(
+  db: pg.Pool,
+  input: Pick<
+    RunModelCallInput,
+    "tenantId" | "agentId" | "agentDailyBudgetCents" | "agentMonthlyBudgetCents"
+  >,
+): Promise<void> {
+  if (!input.agentId) return;
+  const daily = input.agentDailyBudgetCents ?? 0;
+  const monthly = input.agentMonthlyBudgetCents ?? 0;
+  if (daily <= 0 && monthly <= 0) return;
+  const { rows } = await db.query<{ spent_today: number; spent_month: number }>(
+    `select
+       coalesce(sum(cost_cents) filter (where created_at >= date_trunc('day', now())), 0)::float8 as spent_today,
+       coalesce(sum(cost_cents) filter (where created_at >= date_trunc('month', now())), 0)::float8 as spent_month
+     from llm_calls
+     where organization_id = $1 and agent_id = $2`,
+    [input.tenantId, input.agentId],
+  );
+  const spentToday = rows[0]?.spent_today ?? 0;
+  const spentMonth = rows[0]?.spent_month ?? 0;
+  const period =
+    daily > 0 && spentToday >= daily
+      ? "diário"
+      : monthly > 0 && spentMonth >= monthly
+        ? "mensal"
+        : null;
+  if (!period) return;
+  await db.query(
+    `insert into agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
+     select $1, 'budget_exceeded', 'critical',
+            'Limite de IA do agente atingido — novos turnos pausados',
+            $3,
+            'ai_agent_budget', $2::uuid
+     where not exists (
+       select 1 from agent_inbox_items
+       where organization_id = $1 and kind = 'budget_exceeded' and status = 'open'
+         and ref_kind = 'ai_agent_budget' and ref_id = $2::uuid
+     )`,
+    [
+      input.tenantId,
+      input.agentId,
+      `O agente atingiu o limite ${period}. O atendimento humano permanece disponível.`,
+    ],
+  );
+  throw new LlmBudgetExceededError();
+}
+
+export async function runModelCall(
+  db: pg.Pool,
+  cfg: LlmEdgeConfig,
+  input: RunModelCallInput,
+  deps: RunModelCallDeps = {},
+) {
   const registry = deps.registry ?? createDefaultRegistry();
   const config = await resolveOrgLlmConfig(db, cfg, input.tenantId, input.llmOverride);
 
   await assertBudget(db, input.tenantId, config.monthlyBudgetCents);
+  await assertAgentBudget(db, input);
 
   const model = input.model ?? config.defaultModel;
   if (model === null || model === undefined) {
     throw new Error(
-      'modelo LLM não definido — configure organizations.settings.llm.default_model ou passe input.model',
+      "modelo LLM não definido — configure organizations.settings.llm.default_model ou passe input.model",
     );
   }
   if (config.enabledModels.length > 0 && !config.enabledModels.includes(model)) {
@@ -159,7 +222,9 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   }
   const parsedParams = paramsSchema.safeParse(config.params);
   if (!parsedParams.success) {
-    throw new Error('params inválidos em organizations.settings.llm.params — corrija a config da org');
+    throw new Error(
+      "params inválidos em organizations.settings.llm.params — corrija a config da org",
+    );
   }
   const { temperature, topP, topK, maxOutputTokens } = parsedParams.data;
 
@@ -170,7 +235,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   const prefix = buildStablePrefix({
     system: input.system,
     tools: input.tools,
-    cacheTtl: cfg.cacheTtl ?? '1h',
+    cacheTtl: cfg.cacheTtl ?? "1h",
   });
 
   const startedAt = Date.now();
@@ -199,16 +264,17 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
 
   const { rows } = await db.query<{ id: string }>(
     `insert into llm_calls
-       (organization_id, contact_id, job_id, variant_id, purpose, provider, model,
+       (organization_id, contact_id, job_id, variant_id, agent_id, purpose, provider, model,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_cents, latency_ms)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      returning id`,
     [
       input.tenantId,
       input.leadId ?? null,
       input.jobId ?? null,
       input.variantId ?? null,
-      input.purpose ?? 'agent_turn',
+      input.agentId ?? null,
+      input.purpose ?? "agent_turn",
       config.provider,
       model,
       usage.inputTokens,
@@ -221,11 +287,11 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   );
 
   // Só métricas — nunca conteúdo de mensagem (PII) nem chave.
-  deps.log?.info('llm: chamada concluída', {
+  deps.log?.info("llm: chamada concluída", {
     organization_id: input.tenantId,
     provider: config.provider,
     model,
-    purpose: input.purpose ?? 'agent_turn',
+    purpose: input.purpose ?? "agent_turn",
     ...usage,
     cost_cents: cost,
     latency_ms: latencyMs,

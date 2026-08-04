@@ -252,6 +252,41 @@ export async function runCampaignTick(
     summary.completed = completed ? 1 : 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (message === "campaign_channel_not_working") {
+      await admin
+        .from("outreach_campaign_recipients")
+        .update({
+          status: "pending",
+          processing_lease_until: null,
+          last_error_code: "connection_paused",
+          last_error_message:
+            "Envio pausado: a conexão atribuída não está ativa. Reative-a ou confirme a troca manualmente.",
+          updated_at: now.toISOString(),
+        })
+        .eq("id", claim.recipient_id);
+      const { data: currentRecipient } = await admin
+        .from("outreach_campaign_recipients")
+        .select("channel_session_id")
+        .eq("id", claim.recipient_id)
+        .maybeSingle();
+      await admin.from("outreach_campaign_connection_events").insert({
+        organization_id: claim.organization_id,
+        campaign_id: claim.campaign_id,
+        recipient_id: claim.recipient_id,
+        from_channel_session_id: currentRecipient?.channel_session_id ?? null,
+        kind: "connection_paused",
+        reason: "A conexão ficou indisponível durante a execução.",
+      });
+      await admin
+        .from("outreach_campaigns")
+        .update({
+          next_dispatch_at: new Date(now.getTime() + 15 * 60_000).toISOString(),
+          updated_at: now.toISOString(),
+        })
+        .eq("id", claim.campaign_id);
+      summary.deferred = 1;
+      return summary;
+    }
     const { data: current } = await admin
       .from("outreach_campaign_recipients")
       .select("attempts")

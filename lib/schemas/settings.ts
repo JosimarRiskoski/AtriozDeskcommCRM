@@ -135,6 +135,7 @@ const customFieldSchema = z.object({
     "url",
   ]),
   required: z.boolean().optional(),
+  visibility: z.enum(["human_only", "ai_allowed", "commercial"]).optional(),
   options: z.array(z.object({ value: z.string().min(1), label: z.string().min(1) })).optional(),
 });
 
@@ -149,5 +150,6 @@ export const pipelineConfigPatchSchema = z.object({
     .optional(),
   fields: z.array(customFieldSchema).max(50).optional(),
   lost_reasons: z.array(z.string().min(1).max(80)).max(50).optional(),
+  value_label: z.string().trim().min(1).max(80).optional(),
 });
 export type PipelineConfigPatch = z.infer<typeof pipelineConfigPatchSchema>;

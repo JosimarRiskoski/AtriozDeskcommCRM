@@ -97,6 +97,7 @@ export function KanbanBoard({
   const reactivations = useMemo(() => {
     const m = new Map<string, { proposalId: string; expiresAt: string }>();
     for (const p of propostasVivas ?? []) {
+      if (!p.proposal_id || !p.expires_at) continue;
       m.set(p.lead_id, { proposalId: p.proposal_id, expiresAt: p.expires_at });
     }
     return m;
@@ -114,6 +115,10 @@ export function KanbanBoard({
   const canonicalTags = useMemo(() => {
     const raw = (pipelineProp ?? queryResult.data?.pipeline)?.settings?.canonical_tags;
     return Array.isArray(raw) ? raw.filter((t): t is string => typeof t === "string") : [];
+  }, [pipelineProp, queryResult.data?.pipeline]);
+  const valueLabel = useMemo(() => {
+    const value = (pipelineProp ?? queryResult.data?.pipeline)?.settings?.value_label;
+    return typeof value === "string" && value.trim() ? value : "Valor previsto";
   }, [pipelineProp, queryResult.data?.pipeline]);
 
   // O dossiê é do BOARD e não da página: ele precisa do lead inteiro e do nome
@@ -234,7 +239,7 @@ export function KanbanBoard({
         tabIndex={0}
       >
         <div className="flex h-full min-w-max gap-3 pr-1">
-          {data.stages.map((stage) => (
+          {data.stages.map((stage, stageIndex) => (
             <StageColumn
               key={stage.id}
               stage={stage}
@@ -245,9 +250,12 @@ export function KanbanBoard({
               reactivations={reactivations}
               pulses={pulsesProp ?? queryResult.pulses}
               canonicalTags={canonicalTags}
+              valueLabel={valueLabel}
               selectedLeadIds={selectedLeadIds}
               onSelect={handleSelect}
               onOpen={setDossieId}
+              stageIndex={stageIndex}
+              stageCount={data.stages.length}
             />
           ))}
         </div>
@@ -260,6 +268,7 @@ export function KanbanBoard({
           pipelineId={pipelineId}
           stageName={data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"}
           ownerNames={ownerNames}
+          valueLabel={valueLabel}
         />
       )}
     </DragDropContext>

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useTeamMembers, type TeamMember } from "@/hooks/team/useTeamMembers";
@@ -38,6 +39,8 @@ import {
 } from "@/components/ui/dialog";
 import { ROLES, type Role } from "@/lib/schemas/team";
 import { DotsThree } from "@/lib/ui/icons";
+import { Switch } from "@/components/ui/switch";
+import { apiClient } from "@/lib/api/client";
 
 interface Props {
   currentUserId: string;
@@ -48,6 +51,8 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
   const { data, isLoading, isError } = useTeamMembers();
   const changeRole = useChangeRole();
   const revoke = useRevokeMember();
+  const queryClient = useQueryClient();
+  const [updatingCasesFor, setUpdatingCasesFor] = useState<string | null>(null);
 
   const [revokeDialog, setRevokeDialog] = useState<TeamMember | null>(null);
 
@@ -71,6 +76,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
               <TableHead>Membro</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Casos humanos</TableHead>
               <TableHead>Última atividade</TableHead>
               {canManage ? <TableHead className="w-[80px]" /> : null}
             </TableRow>
@@ -83,6 +89,46 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                   {m.email ? (
                     <div className="text-xs text-muted-foreground">{m.email}</div>
                   ) : null}
+                </TableCell>
+                <TableCell>
+                  <div className="flex min-w-[190px] flex-col gap-2">
+                    <label className="flex items-center gap-2 text-xs">
+                      <Switch
+                        checked={m.can_receive_human_cases}
+                        disabled={!canManage || updatingCasesFor === m.user_id}
+                        onCheckedChange={async (checked) => {
+                          setUpdatingCasesFor(m.user_id);
+                          try {
+                            await apiClient.patch(`/api/v1/team/${m.user_id}/human-cases`, {
+                              can_receive_human_cases: checked,
+                              is_primary_human_case_responder: checked && m.is_primary_human_case_responder,
+                            });
+                            await queryClient.invalidateQueries({ queryKey: ["team", "members"] });
+                            toast.success(checked ? "Membro habilitado para casos." : "Membro removido da fila de casos.");
+                          } finally { setUpdatingCasesFor(null); }
+                        }}
+                      />
+                      Pode receber casos
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <Switch
+                        checked={m.is_primary_human_case_responder}
+                        disabled={!canManage || !m.can_receive_human_cases || updatingCasesFor === m.user_id}
+                        onCheckedChange={async (checked) => {
+                          setUpdatingCasesFor(m.user_id);
+                          try {
+                            await apiClient.patch(`/api/v1/team/${m.user_id}/human-cases`, {
+                              can_receive_human_cases: true,
+                              is_primary_human_case_responder: checked,
+                            });
+                            await queryClient.invalidateQueries({ queryKey: ["team", "members"] });
+                            toast.success(checked ? "Responsável principal definido." : "Responsável principal removido.");
+                          } finally { setUpdatingCasesFor(null); }
+                        }}
+                      />
+                      Responsável principal
+                    </label>
+                  </div>
                 </TableCell>
                 <TableCell>
                   {canManage && m.user_id !== currentUserId ? (

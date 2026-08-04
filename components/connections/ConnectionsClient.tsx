@@ -5,15 +5,16 @@ import { toast } from "sonner";
 
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
-import {
-  useChannelSessions,
-  type ChannelSession,
-} from "@/hooks/channels/useChannelSessions";
+import { useChannelSessions, type ChannelSession } from "@/hooks/channels/useChannelSessions";
 import { usePacingKnobs } from "@/hooks/channels/usePacingKnobs";
 import { AntiBanSheet } from "./AntiBanSheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,9 @@ import {
   Phone,
   Plus,
   ShieldCheck,
+  Trash,
+  PencilSimple,
+  Archive,
 } from "@/lib/ui/icons";
 
 type Variant = "success" | "warning" | "error" | "neutral";
@@ -60,6 +64,8 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
   const [checking, setChecking] = useState(false);
   const [qr, setQr] = useState<{ sessionId: string; title: string } | null>(null);
   const [antiBanId, setAntiBanId] = useState<string | null>(null);
+  const [newConnectionOpen, setNewConnectionOpen] = useState(false);
+  const [manageConnection, setManageConnection] = useState<ChannelSession | null>(null);
   const pacingItems = usePacingKnobs().data?.items ?? [];
 
   const invalidate = useCallback(
@@ -93,21 +99,25 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
     void runHealthCheck(sessions);
   }, [sessions, runHealthCheck]);
 
-  const handleConnectNew = useCallback(async () => {
-    setCreating(true);
-    try {
-      const res = await apiClient.post<{ data: ChannelSession }>(
-        "/api/v1/channel-sessions",
-        {},
-      );
-      invalidate();
-      setQr({ sessionId: res.data.id, title: "Conectar novo WhatsApp" });
-    } catch (err) {
-      toast.error(errMsg(err, "Não foi possível iniciar a conexão."));
-    } finally {
-      setCreating(false);
-    }
-  }, [invalidate]);
+  const handleConnectNew = useCallback(
+    async (input: { display_name: string; purpose?: string; is_default: boolean }) => {
+      setCreating(true);
+      try {
+        const res = await apiClient.post<{ data: ChannelSession }>(
+          "/api/v1/channel-sessions",
+          input,
+        );
+        invalidate();
+        setNewConnectionOpen(false);
+        setQr({ sessionId: res.data.id, title: "Conectar novo WhatsApp" });
+      } catch (err) {
+        toast.error(errMsg(err, "Não foi possível iniciar a conexão."));
+      } finally {
+        setCreating(false);
+      }
+    },
+    [invalidate],
+  );
 
   const handleReconnect = useCallback(
     async (c: ChannelSession) => {
@@ -177,7 +187,11 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
               Atualizar saúde
             </Button>
           )}
-          <Button size="sm" disabled={creating || !wahaConfigured} onClick={handleConnectNew}>
+          <Button
+            size="sm"
+            disabled={creating || !wahaConfigured}
+            onClick={() => setNewConnectionOpen(true)}
+          >
             {creating ? (
               <CircleNotch size={14} className="animate-spin" aria-hidden />
             ) : (
@@ -192,7 +206,8 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
         <div className="rounded-md border border-warning bg-warning-bg p-4 text-sm text-warning-fg">
           <p className="font-medium">O serviço do WhatsApp não está ativo.</p>
           <p className="mt-1">
-            Suba o container (<code>docker compose up -d waha</code>) para conectar e reconectar números.
+            Suba o container (<code>docker compose up -d waha</code>) para conectar e reconectar
+            números.
           </p>
         </div>
       )}
@@ -228,6 +243,15 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                   </div>
                   <Badge variant={info.variant}>{info.label}</Badge>
                 </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {c.is_default ? (
+                    <Badge variant="secondary">Padrão para novos envios</Badge>
+                  ) : null}
+                  {c.purpose ? <Badge variant="outline">{c.purpose}</Badge> : null}
+                  {c.phone_number ? (
+                    <Badge variant="outline">Final {c.phone_number.replace(/\D/g, "").slice(-4)}</Badge>
+                  ) : null}
+                </div>
                 <p className="text-[11px] text-muted-foreground">
                   {c.last_health_check_at
                     ? `Verificado ${new Date(c.last_health_check_at).toLocaleString("pt-BR")}`
@@ -252,7 +276,7 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                     Motivo informado: {c.status_reason}
                   </p>
                 ) : null}
-                <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-2.5 text-xs">
+                <div className="bg-muted/30 grid grid-cols-2 gap-2 rounded-md border p-2.5 text-xs">
                   <span className="text-muted-foreground">Inbox e humano</span>
                   <span className={ready ? "text-success-fg" : "text-warning-fg"}>
                     {ready ? "Pronto" : "Aguardando conexão"}
@@ -262,7 +286,9 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                     {ready ? "Canal disponível" : "Indisponível"}
                   </span>
                   <span className="text-muted-foreground">Limite diário</span>
-                  <span>{pacing?.channel_session.daily_message_limit ?? c.daily_message_limit} mensagens</span>
+                  <span>
+                    {pacing?.channel_session.daily_message_limit ?? c.daily_message_limit} mensagens
+                  </span>
                 </div>
                 <div className="mt-auto flex gap-2">
                   <Button
@@ -282,6 +308,10 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                     <ShieldCheck size={14} aria-hidden />
                     Proteção de envio
                   </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setManageConnection(c)}>
+                    <PencilSimple size={14} aria-hidden />
+                    Gerenciar
+                  </Button>
                 </div>
               </Card>
             );
@@ -295,6 +325,23 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
         onClose={() => setAntiBanId(null)}
       />
 
+      <NewConnectionDialog
+        open={newConnectionOpen}
+        onOpenChange={setNewConnectionOpen}
+        pending={creating}
+        hasConnections={list.length > 0}
+        onCreate={handleConnectNew}
+      />
+
+      <ManageConnectionDialog
+        connection={manageConnection}
+        onOpenChange={(open) => !open && setManageConnection(null)}
+        onChanged={() => {
+          setManageConnection(null);
+          invalidate();
+        }}
+      />
+
       {qr && (
         <QrDialog
           sessionId={qr.sessionId}
@@ -305,6 +352,278 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
         />
       )}
     </div>
+  );
+}
+
+function NewConnectionDialog({
+  open,
+  onOpenChange,
+  pending,
+  hasConnections,
+  onCreate,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  pending: boolean;
+  hasConnections: boolean;
+  onCreate: (input: { display_name: string; purpose?: string; is_default: boolean }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [isDefault, setIsDefault] = useState(!hasConnections);
+  useEffect(() => {
+    if (open) setIsDefault(!hasConnections);
+  }, [open, hasConnections]);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Conectar novo WhatsApp</DialogTitle>
+          <DialogDescription>
+            Dê um nome fácil de reconhecer. O número aparecerá após a leitura do QR Code.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="new-connection-name">Nome da conexão</Label>
+            <Input
+              id="new-connection-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Ex.: Comercial principal"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-connection-purpose">Finalidade</Label>
+            <Input
+              id="new-connection-purpose"
+              value={purpose}
+              onChange={(event) => setPurpose(event.target.value)}
+              placeholder="Ex.: Atendimento e fechamento"
+            />
+          </div>
+          <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+            <span>
+              <span className="block font-medium">Conexão padrão</span>
+              <span className="text-xs text-muted-foreground">
+                Usada como primeira opção em novos envios.
+              </span>
+            </span>
+            <Switch checked={isDefault} onCheckedChange={setIsDefault} />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={pending || name.trim().length < 2}
+              onClick={() =>
+                onCreate({
+                  display_name: name.trim(),
+                  purpose: purpose.trim() || undefined,
+                  is_default: isDefault,
+                })
+              }
+            >
+              {pending ? "Preparando…" : "Gerar QR Code"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type ConnectionDependencies = Record<string, number>;
+
+function ManageConnectionDialog({
+  connection,
+  onOpenChange,
+  onChanged,
+}: {
+  connection: ChannelSession | null;
+  onOpenChange: (open: boolean) => void;
+  onChanged: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [isDefault, setIsDefault] = useState(false);
+  const [reason, setReason] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [dependencies, setDependencies] = useState<ConnectionDependencies | null>(null);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (!connection) return;
+    setName(connection.display_name || "");
+    setPurpose(connection.purpose || "");
+    setIsDefault(connection.is_default);
+    setReason("");
+    setConfirmation("");
+    setDependencies(null);
+    void apiClient
+      .get<{ data: { dependencies: ConnectionDependencies } }>(
+        `/api/v1/channel-sessions/${connection.id}?dependencies=1`,
+      )
+      .then((response) => setDependencies(response.data.dependencies))
+      .catch(() => toast.error("Não foi possível verificar os vínculos desta conexão."));
+  }, [connection]);
+
+  if (!connection) return null;
+  const totalDependencies = Object.values(dependencies ?? {}).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  const inactive = ["FAILED", "STOPPED"].includes(connection.status);
+
+  async function mutate(action: "save" | "archive" | "delete") {
+    setPending(true);
+    try {
+      if (action === "save") {
+        await apiClient.patch(`/api/v1/channel-sessions/${connection!.id}`, {
+          action: "update",
+          display_name: name.trim(),
+          purpose: purpose.trim() || null,
+          is_default: isDefault,
+        });
+        toast.success("Conexão atualizada.");
+      } else if (action === "archive") {
+        await apiClient.patch(`/api/v1/channel-sessions/${connection!.id}`, {
+          action: "archive",
+          reason: reason.trim(),
+        });
+        toast.success("Conexão arquivada. O histórico foi preservado.");
+      } else {
+        await apiClient.delete(`/api/v1/channel-sessions/${connection!.id}`, {
+          headers: {
+            "X-Confirm-Connection-Name": encodeURIComponent(confirmation),
+            "X-Deletion-Reason": encodeURIComponent(reason.trim()),
+          },
+        });
+        toast.success("Sessão técnica excluída.");
+      }
+      onChanged();
+    } catch (error) {
+      toast.error(errMsg(error, "Não foi possível concluir a operação."));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Gerenciar conexão</DialogTitle>
+          <DialogDescription>
+            {connection.phone_number || connection.waha_session_name}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-5">
+          <div className="space-y-3 rounded-md border p-3">
+            <div className="space-y-2">
+              <Label htmlFor="manage-name">Nome</Label>
+              <Input
+                id="manage-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manage-purpose">Finalidade</Label>
+              <Input
+                id="manage-purpose"
+                value={purpose}
+                onChange={(event) => setPurpose(event.target.value)}
+              />
+            </div>
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>Usar como conexão padrão</span>
+              <Switch checked={isDefault} onCheckedChange={setIsDefault} />
+            </label>
+            <Button
+              disabled={pending || name.trim().length < 2}
+              onClick={() => void mutate("save")}
+            >
+              Salvar identificação
+            </Button>
+          </div>
+
+          <div className="space-y-2 rounded-md border p-3 text-sm">
+            <p className="font-medium">Vínculos encontrados</p>
+            {dependencies ? (
+              Object.entries(dependencies).map(([label, count]) => (
+                <div key={label} className="flex justify-between">
+                  <span className="text-muted-foreground">{label.replaceAll("_", " ")}</span>
+                  <span>{count}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-muted-foreground">Verificando…</p>
+            )}
+          </div>
+
+          <div className="space-y-3 rounded-md border border-warning p-3">
+            <div className="space-y-2">
+              <Label htmlFor="connection-reason">Motivo</Label>
+              <Textarea
+                id="connection-reason"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Explique por que esta conexão será removida"
+              />
+            </div>
+            {!inactive ? (
+              <p className="text-xs text-warning-fg">
+                Desconecte o WhatsApp antes de arquivar ou excluir.
+              </p>
+            ) : null}
+            {connection.is_default ? (
+              <p className="text-xs text-warning-fg">
+                Defina outra conexão como padrão antes de remover esta.
+              </p>
+            ) : null}
+            <Button
+              variant="outline"
+              disabled={pending || !inactive || connection.is_default || reason.trim().length < 3}
+              onClick={() => void mutate("archive")}
+            >
+              <Archive size={14} /> Arquivar e preservar histórico
+            </Button>
+            <div className="space-y-2 border-t pt-3">
+              <Label htmlFor="delete-confirmation">
+                Para excluir a sessão técnica, digite: {connection.display_name}
+              </Label>
+              <Input
+                id="delete-confirmation"
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+              />
+              <Button
+                variant="destructive"
+                disabled={
+                  pending ||
+                  !inactive ||
+                  connection.is_default ||
+                  totalDependencies > 0 ||
+                  confirmation !== connection.display_name ||
+                  reason.trim().length < 3
+                }
+                onClick={() => void mutate("delete")}
+              >
+                <Trash size={14} /> Excluir sessão técnica
+              </Button>
+              {totalDependencies > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  A exclusão técnica está bloqueada porque existem vínculos. Use Arquivar ou
+                  reatribua as configurações.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

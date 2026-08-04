@@ -39,11 +39,19 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
       details: parsed.error.flatten(),
     });
   }
+  if (parsed.data.automation_enabled) {
+    return fail(
+      "validation_failed",
+      "A automação só pode ser ativada pela homologação do piloto.",
+      422,
+      { requestId },
+    );
+  }
 
   const supabase = await createClient();
   const { data: existing, error: fetchErr } = await supabase
     .from("webhook_sources")
-    .select("id")
+    .select("id,default_pipeline_id,default_stage_id")
     .eq("id", id)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
@@ -53,6 +61,76 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   // secret plaintext do input vira secret_encrypted (migration 0041); a coluna
   // em claro não existe mais. `secret: null` remove o segredo da fonte.
   const { secret: patchedSecret, ...restPatch } = parsed.data;
+  const effectivePipeline =
+    restPatch.default_pipeline_id === undefined
+      ? existing.default_pipeline_id
+      : restPatch.default_pipeline_id;
+  const effectiveStage =
+    restPatch.default_stage_id === undefined
+      ? existing.default_stage_id
+      : restPatch.default_stage_id;
+  const admin = createAdminClient();
+  if (effectivePipeline) {
+    const { data: pipeline } = await admin
+      .from("crm_pipelines")
+      .select("id")
+      .eq("id", effectivePipeline)
+      .eq("organization_id", activeOrg.orgId)
+      .maybeSingle();
+    if (!pipeline)
+      return fail("validation_failed", "Funil inválido para esta organização.", 422, { requestId });
+  }
+  if (effectiveStage) {
+    const { data: stage } = await admin
+      .from("crm_stages")
+      .select("id,pipeline_id")
+      .eq("id", effectiveStage)
+      .eq("organization_id", activeOrg.orgId)
+      .maybeSingle();
+    if (!stage || stage.pipeline_id !== effectivePipeline)
+      return fail("validation_failed", "A etapa não pertence ao funil escolhido.", 422, {
+        requestId,
+      });
+  }
+  if (restPatch.default_channel_session_id) {
+    const { data: session } = await admin
+      .from("channel_sessions")
+      .select("id,status")
+      .eq("id", restPatch.default_channel_session_id)
+      .eq("organization_id", activeOrg.orgId)
+      .maybeSingle();
+    if (!session || session.status !== "WORKING")
+      return fail("validation_failed", "A conexão precisa estar ativa nesta organização.", 422, {
+        requestId,
+      });
+  }
+  if (restPatch.default_agent_id) {
+    const { data: agent } = await admin
+      .from("ai_agents")
+      .select("id")
+      .eq("id", restPatch.default_agent_id)
+      .eq("organization_id", activeOrg.orgId)
+      .maybeSingle();
+    if (!agent)
+      return fail("validation_failed", "Agente inválido para esta organização.", 422, {
+        requestId,
+      });
+  }
+  if (restPatch.followup_flow_id) {
+    const { data: flow } = await admin
+      .from("followup_flow_pointers")
+      .select("id,status")
+      .eq("id", restPatch.followup_flow_id)
+      .eq("organization_id", activeOrg.orgId)
+      .maybeSingle();
+    if (!flow || flow.status !== "active")
+      return fail(
+        "validation_failed",
+        "A cadência precisa estar publicada nesta organização.",
+        422,
+        { requestId },
+      );
+  }
   const patch: Record<string, unknown> = { ...restPatch, updated_at: new Date().toISOString() };
   if (patchedSecret !== undefined) {
     if (patchedSecret === null) {
@@ -90,7 +168,11 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
     metadata: { ...restPatch, ...(patchedSecret !== undefined ? { secret_changed: true } : {}) },
   });
 
-  const { secret_encrypted: encAfter, ...updatedPublic } = updated as Record<string, unknown>;
+  const {
+    secret_encrypted: encAfter,
+    previous_secret_encrypted: _previous,
+    ...updatedPublic
+  } = updated as Record<string, unknown>;
   return ok({ ...updatedPublic, has_secret: encAfter !== null }, { requestId });
 }
 

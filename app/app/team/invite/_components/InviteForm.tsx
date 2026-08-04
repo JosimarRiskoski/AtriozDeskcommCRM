@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { ROLES, type Role } from "@/lib/schemas/team";
 import { apiClient } from "@/lib/api/client";
+import { Switch } from "@/components/ui/switch";
 
 interface ResultState {
   sent: Array<{ email: string; accept_url: string; email_dispatched: boolean; expires_at: string }>;
@@ -50,6 +51,7 @@ const ROLE_LABEL: Record<Role, string> = {
 export function InviteForm() {
   const [emailsRaw, setEmailsRaw] = useState("");
   const [role, setRole] = useState<Role>("agent");
+  const [canReceiveCases, setCanReceiveCases] = useState(true);
   const [result, setResult] = useState<ResultState | null>(null);
   const [history, setHistory] = useState<InvitationRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -84,7 +86,7 @@ export function InviteForm() {
     }
     try {
       const res = await invite.mutateAsync({
-        invitations: unique.map((email) => ({ email, role })),
+        invitations: unique.map((email) => ({ email, role, can_receive_human_cases: canReceiveCases })),
       });
       setResult(res.data);
       const ok = res.data.sent.length;
@@ -124,6 +126,10 @@ export function InviteForm() {
             placeholder={"alice@empresa.com\nbob@empresa.com"}
           />
         </div>
+        <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
+          <Switch checked={canReceiveCases} onCheckedChange={setCanReceiveCases} />
+          Pode receber casos humanos após aceitar o convite
+        </label>
         <div className="space-y-2">
           <Label htmlFor="role">Role</Label>
           <Select value={role} onValueChange={(v) => setRole(v as Role)}>

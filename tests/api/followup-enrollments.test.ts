@@ -189,7 +189,14 @@ function version(overrides: Row = {}): Row {
   return { id: VERSION_ID, organization_id: ORG_ID, pointer_id: POINTER_ID, graph: GRAPH, ...overrides };
 }
 function contact(overrides: Row = {}): Row {
-  return { id: CONTACT_ID, organization_id: ORG_ID, ...overrides };
+  return {
+    id: CONTACT_ID,
+    organization_id: ORG_ID,
+    is_blocked: false,
+    is_anonymized: false,
+    phone_number: "+5511999999999",
+    ...overrides,
+  };
 }
 
 beforeEach(() => {

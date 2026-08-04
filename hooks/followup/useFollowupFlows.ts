@@ -13,6 +13,14 @@ export interface FollowupFlowPointerRow {
   status: FollowupFlowStatus;
   active_version_id: string | null;
   handoff_policy: string;
+  trigger_config?: Record<string, unknown>;
+  objective?: string;
+  duration_minutes?: number;
+  steps_count?: number;
+  next_send_minutes?: number;
+  agent_name?: string | null;
+  channel_name?: string | null;
+  cancel_on_reply?: boolean;
   updated_at: string;
 }
 

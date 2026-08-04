@@ -85,9 +85,73 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
   );
   const [testing, setTesting] = React.useState(false);
   const [testOk, setTestOk] = React.useState(false);
+  const [pilotBusy, setPilotBusy] = React.useState(false);
+  const [automationEnabled, setAutomationEnabled] = React.useState(source.automation_enabled);
+  const [newSecret, setNewSecret] = React.useState<string | null>(null);
 
   const url = publicUrl(source.path_token);
   const events = eventsRes?.data ?? [];
+
+  const pilotAction = async (action: "validate" | "approve_and_enable" | "disable") => {
+    if (
+      action === "approve_and_enable" &&
+      !window.confirm("Confirma que o piloto foi revisado e autoriza esta automação?")
+    )
+      return;
+    setPilotBusy(true);
+    try {
+      const response = await fetch(`/api/v1/webhook-sources/${source.id}/pilot`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const json = await response.json();
+      if (!response.ok)
+        return toast.error(json?.error?.message ?? "Não foi possível validar a integração.");
+      if (action === "validate")
+        toast.success(
+          json.data.valid
+            ? "Configuração pronta para o piloto."
+            : `Pendências: ${json.data.issues.join(", ")}`,
+        );
+      else {
+        setAutomationEnabled(json.data.automation_enabled);
+        toast.success(
+          json.data.automation_enabled ? "Automação homologada e ativada." : "Automação desligada.",
+        );
+      }
+    } finally {
+      setPilotBusy(false);
+    }
+  };
+
+  const rotateSecret = async () => {
+    const response = await fetch(`/api/v1/webhook-sources/${source.id}/rotate-secret`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ overlap_hours: 24 }),
+    });
+    const json = await response.json();
+    if (!response.ok)
+      return toast.error(json?.error?.message ?? "Não foi possível rotacionar a credencial.");
+    setNewSecret(json.data.secret);
+    toast.success("Nova credencial criada. A anterior permanece válida por 24 horas.");
+  };
+
+  const revokeSecret = async () => {
+    if (!window.confirm("Revogar a credencial da 3C e pausar esta fonte agora?")) return;
+    const response = await fetch(`/api/v1/webhook-sources/${source.id}/rotate-secret`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ revoke: true, overlap_hours: 0 }),
+    });
+    const json = await response.json();
+    if (!response.ok)
+      return toast.error(json?.error?.message ?? "Não foi possível revogar a credencial.");
+    setAutomationEnabled(false);
+    setNewSecret(null);
+    toast.success("Credencial revogada e fonte pausada.");
+  };
 
   const sendTestLead = async () => {
     setTesting(true);
@@ -99,7 +163,11 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
       const res = await fetch(`/api/v1/webhooks/in/${source.path_token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: "Lead de Teste", telefone: "11999990000", utm_source: "teste" }),
+        body: JSON.stringify({
+          nome: "Lead de Teste",
+          telefone: "11999990000",
+          utm_source: "teste",
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -153,7 +221,9 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
           </section>
 
           <section className="space-y-2">
-            <p className="text-sm font-medium text-text">Formulário pronto para colar no seu site</p>
+            <p className="text-sm font-medium text-text">
+              Formulário pronto para colar no seu site
+            </p>
             <Textarea readOnly rows={6} value={formSnippet(url)} className="font-mono text-xs" />
             <Button
               type="button"
@@ -173,7 +243,10 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
               <div className="mt-3 space-y-4 text-sm text-muted-foreground">
                 <div>
                   <p className="font-medium text-text">WordPress / Elementor</p>
-                  <p>Cole o endereço acima no campo &quot;Action&quot; (ou &quot;URL de envio&quot;) do seu formulário.</p>
+                  <p>
+                    Cole o endereço acima no campo &quot;Action&quot; (ou &quot;URL de envio&quot;)
+                    do seu formulário.
+                  </p>
                 </div>
                 <div>
                   <p className="font-medium text-text">Zapier / n8n</p>
@@ -196,18 +269,94 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
             </pre>
           </details>
 
-          <section className="space-y-3">
-            <Button type="button" onClick={sendTestLead} disabled={testing}>
-              {testing ? "Enviando…" : "Enviar lead de teste"}
-            </Button>
-            {testOk ? (
-              <p className="text-sm">
-                <Link href="/app/kanban" className="text-accent underline underline-offset-4">
-                  Ver no Kanban
-                </Link>
+          {source.provider_type !== "3c" && (
+            <section className="space-y-3">
+              <Button type="button" onClick={sendTestLead} disabled={testing}>
+                {testing ? "Enviando…" : "Enviar lead de teste"}
+              </Button>
+              {testOk ? (
+                <p className="text-sm">
+                  <Link href="/app/kanban" className="text-accent underline underline-offset-4">
+                    Ver no Kanban
+                  </Link>
+                </p>
+              ) : null}
+            </section>
+          )}
+
+          {source.provider_type !== "generic" && (
+            <section className="space-y-3 rounded-sm border border-border p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Piloto e automação</p>
+                <Badge variant={automationEnabled ? "success" : "neutral"}>
+                  {automationEnabled ? "Ativada" : "Desligada"}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A entrada de contatos continua funcionando; agente, IA e cadência só funcionam após
+                homologação explícita.
               </p>
-            ) : null}
-          </section>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pilotBusy}
+                  onClick={() => void pilotAction("validate")}
+                >
+                  Validar configuração
+                </Button>
+                {!automationEnabled ? (
+                  <Button
+                    type="button"
+                    disabled={pilotBusy}
+                    onClick={() => void pilotAction("approve_and_enable")}
+                  >
+                    Homologar e ativar
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pilotBusy}
+                    onClick={() => void pilotAction("disable")}
+                  >
+                    Desligar automação
+                  </Button>
+                )}
+              </div>
+            </section>
+          )}
+
+          {source.provider_type === "3c" && (
+            <section className="space-y-3 rounded-sm border border-border p-3">
+              <p className="text-sm font-medium">Credencial exclusiva da 3C</p>
+              <p className="text-xs text-muted-foreground">
+                Permite somente enviar leads para esta organização. Nunca concede acesso ao
+                Supabase.
+              </p>
+              <Button type="button" variant="secondary" onClick={() => void rotateSecret()}>
+                Gerar nova credencial
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => void revokeSecret()}>
+                Revogar credencial e pausar
+              </Button>
+              {newSecret && (
+                <>
+                  <Textarea readOnly value={newSecret} className="font-mono text-xs" />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => copy(newSecret, "Credencial copiada.")}
+                  >
+                    <Copy /> Copiar agora
+                  </Button>
+                  <p className="text-xs text-warning">
+                    Ela não será mostrada novamente. A anterior continua válida por 24 horas.
+                  </p>
+                </>
+              )}
+            </section>
+          )}
 
           <section className="space-y-2">
             <p className="text-sm font-medium text-text">Últimos recebimentos</p>
@@ -223,7 +372,9 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
                         ev.valid_signature === false ? "bg-error" : "bg-success",
                       )}
                     />
-                    <span className="text-muted-foreground">{relativeReceivedAt(ev.created_at)}</span>
+                    <span className="text-muted-foreground">
+                      {relativeReceivedAt(ev.created_at)}
+                    </span>
                     {ev.valid_signature === false ? (
                       <span className="text-xs text-error">assinatura inválida</span>
                     ) : null}
@@ -236,7 +387,9 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
           <section className="flex items-center justify-between rounded-sm border border-border p-3">
             <div>
               <p className="text-sm font-medium text-text">Fonte ativa</p>
-              <p className="text-xs text-muted-foreground">Pausada, ela para de aceitar novos envios.</p>
+              <p className="text-xs text-muted-foreground">
+                Pausada, ela para de aceitar novos envios.
+              </p>
             </div>
             <Switch
               checked={source.is_active}
@@ -245,8 +398,7 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
                 update.mutate(
                   { id: source.id, is_active: checked },
                   {
-                    onSuccess: () =>
-                      toast.success(checked ? "Fonte ativada." : "Fonte pausada."),
+                    onSuccess: () => toast.success(checked ? "Fonte ativada." : "Fonte pausada."),
                   },
                 )
               }

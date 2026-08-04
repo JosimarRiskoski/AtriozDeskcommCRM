@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { useAttendantMetrics, type AttendantMetric } from "@/hooks/metrics/useAttendantMetrics";
 import { useTeamMembers } from "@/hooks/team/useTeamMembers";
+import { usePipelineMetrics } from "@/hooks/metrics/usePipelineMetrics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -19,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FailuresPanel } from "./FailuresPanel";
+import { HumanAiComparison } from "./HumanAiComparison";
 
 const ALL = "__all__";
 
@@ -37,16 +40,19 @@ function attendantLabel(a: AttendantMetric): string {
 
 interface Props {
   canCompare: boolean;
+  canConfigureCost: boolean;
   currentUserId: string;
 }
 
-export function MetricsClient({ canCompare, currentUserId }: Props) {
+export function MetricsClient({ canCompare, canConfigureCost, currentUserId }: Props) {
   const [owner, setOwner] = useState<string>(ALL);
   const [days, setDays] = useState("30");
+  const [showFailures, setShowFailures] = useState(false);
   const selectedOwner = owner === ALL ? null : owner;
   const { data, isLoading, isError } = useAttendantMetrics(selectedOwner, Number(days));
   // Opções do filtro: só manager+ (a rota /team é manager+). Agent nem vê o filtro.
   const team = useTeamMembers({ enabled: canCompare });
+  const pipelineMetrics = usePipelineMetrics(Number(days), canCompare);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
   if (isError || !data)
@@ -115,7 +121,24 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
             "Envios que terminaram com falha registrada.",
           ],
         ].map(([label, value, description]) => (
-          <Card key={String(label)}>
+          <Card
+            key={String(label)}
+            className={
+              label === "Falharam"
+                ? "cursor-pointer transition-colors hover:border-destructive"
+                : undefined
+            }
+            role={label === "Falharam" ? "button" : undefined}
+            tabIndex={label === "Falharam" ? 0 : undefined}
+            onClick={label === "Falharam" ? () => setShowFailures(true) : undefined}
+            onKeyDown={
+              label === "Falharam"
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") setShowFailures(true);
+                  }
+                : undefined
+            }
+          >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">{label}</CardTitle>
             </CardHeader>
@@ -126,6 +149,13 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
           </Card>
         ))}
       </div>
+
+      <FailuresPanel
+        open={showFailures}
+        days={Number(days)}
+        onClose={() => setShowFailures(false)}
+      />
+      {canCompare && <HumanAiComparison days={Number(days)} canConfigureCost={canConfigureCost} />}
 
       <Card>
         <CardHeader>
@@ -156,6 +186,62 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {canCompare && pipelineMetrics.data ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Evolução das oportunidades</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Movimentações e tempo médio por etapa no período, além do valor aberto atual.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Etapa</TableHead>
+                  <TableHead className="text-right">Abertos</TableHead>
+                  <TableHead className="text-right">Entradas</TableHead>
+                  <TableHead className="text-right">Tempo médio</TableHead>
+                  <TableHead className="text-right">Valor aberto</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pipelineMetrics.data.stages.map((stage) => (
+                  <TableRow key={stage.stage_id}>
+                    <TableCell>{stage.stage_name}</TableCell>
+                    <TableCell className="text-right tabular-nums">{stage.open_count}</TableCell>
+                    <TableCell className="text-right tabular-nums">{stage.entries}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatDuration(stage.avg_seconds)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {(stage.value_cents / 100).toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border p-3 text-sm">
+                <span className="text-muted-foreground">Ganhos no período</span>
+                <p className="text-lg font-semibold tabular-nums">
+                  {pipelineMetrics.data.outcomes.won}
+                </p>
+              </div>
+              <div className="rounded-md border p-3 text-sm">
+                <span className="text-muted-foreground">Perdidos no período</span>
+                <p className="text-lg font-semibold tabular-nums">
+                  {pipelineMetrics.data.outcomes.lost}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

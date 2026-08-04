@@ -35,6 +35,14 @@ const stageInput = z.object({
 });
 
 const PRESETS = {
+  reuniao: [
+    "Interesse",
+    "Aguardando documentação",
+    "Aguardando proposta",
+    "Aguardando fechamento",
+    "Fechado/Ganho",
+    "Perdido",
+  ],
   vendas: [
     "Novo lead",
     "Primeiro contato",
@@ -119,11 +127,13 @@ function stageFlags(name: string, index: number, total: number) {
 export async function createPipeline(input: {
   name: string;
   preset: keyof typeof PRESETS;
+  isDefault?: boolean;
 }): Promise<Result<{ id: string }>> {
   const parsed = z
     .object({
       name: z.string().trim().min(2).max(100),
-      preset: z.enum(["vendas", "imobiliaria", "energia", "servicos", "suporte"]),
+      preset: z.enum(["reuniao", "vendas", "imobiliaria", "energia", "servicos", "suporte"]),
+      isDefault: z.boolean().optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { ok: false, error: "Informe um nome e escolha um modelo." };
@@ -153,6 +163,7 @@ export async function createPipeline(input: {
       name: parsed.data.name,
       slug,
       position,
+      is_default: false,
       vocabulary: { lead: "Lead", deal: "Negócio", won: "Ganho", lost: "Perdido" },
       settings: { fields: [], lost_reasons: [] },
     })
@@ -161,22 +172,33 @@ export async function createPipeline(input: {
   if (error || !pipeline)
     return { ok: false, error: error?.message ?? "Não foi possível criar o funil." };
   const names = PRESETS[parsed.data.preset];
-  const { error: stagesError } = await supabase
-    .from("crm_stages")
-    .insert(
-      names.map((name, position) => ({
-        organization_id: org.orgId,
-        pipeline_id: pipeline.id,
-        name,
-        slug: `${slug}-${slugify(name)}`,
-        position,
-        color: position === 0 ? "#3b82f6" : null,
-        ...stageFlags(name, position, names.length),
-      })) as never,
-    );
+  const { error: stagesError } = await supabase.from("crm_stages").insert(
+    names.map((name, position) => ({
+      organization_id: org.orgId,
+      pipeline_id: pipeline.id,
+      name,
+      slug: `${slug}-${slugify(name)}`,
+      position,
+      color: position === 0 ? "#3b82f6" : null,
+      ...stageFlags(name, position, names.length),
+    })) as never,
+  );
   if (stagesError) {
     await supabase.from("crm_pipelines").delete().eq("id", pipeline.id);
     return { ok: false, error: stagesError.message };
+  }
+  if (parsed.data.isDefault) {
+    const { data: changed, error: defaultError } = await supabase.rpc(
+      "fn_set_default_pipeline" as never,
+      { p_pipeline: pipeline.id } as never,
+    );
+    if (defaultError || changed !== true) {
+      await supabase.from("crm_pipelines").delete().eq("id", pipeline.id);
+      return {
+        ok: false,
+        error: defaultError?.message ?? "Não foi possível definir o novo funil como principal.",
+      };
+    }
   }
   await audit({
     action: "pipeline.created",
@@ -188,6 +210,39 @@ export async function createPipeline(input: {
   });
   revalidatePath("/app/settings/tenant/pipelines");
   return { ok: true, data: { id: pipeline.id } };
+}
+
+export async function setDefaultPipeline(pipelineId: string): Promise<Result> {
+  const parsed = z.string().uuid().safeParse(pipelineId);
+  const auth = await requireAdmin();
+  if (!parsed.success || !auth) return { ok: false, error: "Funil inválido ou sem permissão." };
+  const { user, org, supabase } = auth;
+  const { data: target } = await supabase
+    .from("crm_pipelines")
+    .select("id")
+    .eq("id", parsed.data)
+    .eq("organization_id", org.orgId)
+    .eq("is_archived", false)
+    .maybeSingle();
+  if (!target) return { ok: false, error: "Funil não encontrado." };
+  const { data, error } = await supabase.rpc(
+    "fn_set_default_pipeline" as never,
+    {
+      p_pipeline: parsed.data,
+    } as never,
+  );
+  if (error || data !== true)
+    return { ok: false, error: error?.message ?? "Não foi possível alterar o funil principal." };
+  await audit({
+    action: "pipeline.default_changed",
+    actorUserId: user.id,
+    organizationId: org.orgId,
+    resourceType: "pipeline",
+    resourceId: parsed.data,
+  });
+  revalidatePath("/app/kanban");
+  revalidatePath("/app/settings/tenant/pipelines");
+  return { ok: true };
 }
 
 export async function updatePipelineIdentity(pipelineId: string, name: string): Promise<Result> {
@@ -210,6 +265,42 @@ export async function updatePipelineIdentity(pipelineId: string, name: string): 
     resourceId: pipelineId,
     metadata: { name: parsed.data },
   });
+  revalidatePath("/app/settings/tenant/pipelines");
+  return { ok: true };
+}
+
+export async function renamePipelineStage(
+  pipelineId: string,
+  stageId: string,
+  name: string,
+): Promise<Result> {
+  const parsed = z
+    .object({
+      pipelineId: z.string().uuid(),
+      stageId: z.string().uuid(),
+      name: z.string().trim().min(1).max(80),
+    })
+    .safeParse({ pipelineId, stageId, name });
+  const auth = await requireAdmin();
+  if (!parsed.success || !auth)
+    return { ok: false, error: !parsed.success ? "Nome de etapa inválido." : "Sem permissão." };
+  const { user, org, supabase } = auth;
+  const { error } = await supabase
+    .from("crm_stages")
+    .update({ name: parsed.data.name, updated_at: new Date().toISOString() })
+    .eq("id", parsed.data.stageId)
+    .eq("pipeline_id", parsed.data.pipelineId)
+    .eq("organization_id", org.orgId);
+  if (error) return { ok: false, error: error.message };
+  await audit({
+    action: "pipeline.stage_updated",
+    actorUserId: user.id,
+    organizationId: org.orgId,
+    resourceType: "pipeline_stage",
+    resourceId: parsed.data.stageId,
+    metadata: { pipeline_id: parsed.data.pipelineId, fields: ["name"] },
+  });
+  revalidatePath(`/app/pipelines/${parsed.data.pipelineId}`);
   revalidatePath("/app/settings/tenant/pipelines");
   return { ok: true };
 }
@@ -258,17 +349,15 @@ export async function duplicatePipeline(pipelineId: string): Promise<Result<{ id
     .single();
   if (error || !copy) return { ok: false, error: error?.message ?? "Falha ao duplicar." };
   if (stages?.length) {
-    const { error: stagesError } = await supabase
-      .from("crm_stages")
-      .insert(
-        stages.map((stage, index) => ({
-          ...stage,
-          organization_id: org.orgId,
-          pipeline_id: copy.id,
-          position: index,
-          slug: `${slug}-${slugify(stage.name)}-${index}`,
-        })) as never,
-      );
+    const { error: stagesError } = await supabase.from("crm_stages").insert(
+      stages.map((stage, index) => ({
+        ...stage,
+        organization_id: org.orgId,
+        pipeline_id: copy.id,
+        position: index,
+        slug: `${slug}-${slugify(stage.name)}-${index}`,
+      })) as never,
+    );
     if (stagesError) {
       await supabase.from("crm_pipelines").delete().eq("id", copy.id);
       return { ok: false, error: stagesError.message };

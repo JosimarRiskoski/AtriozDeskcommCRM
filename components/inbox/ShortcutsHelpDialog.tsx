@@ -10,7 +10,7 @@ const BINDINGS: { keys: string; description: string }[] = [
   { keys: "j", description: "Próxima conversa" },
   { keys: "k", description: "Conversa anterior" },
   { keys: "r", description: "Focar resposta" },
-  { keys: "a", description: "Assumir conversa" },
+  { keys: "a", description: "Pegar conversa" },
   { keys: "e", description: "Fechar conversa" },
   { keys: "?", description: "Mostrar atalhos" },
 ];

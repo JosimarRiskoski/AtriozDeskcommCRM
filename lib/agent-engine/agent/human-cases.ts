@@ -52,7 +52,7 @@ export const provideCaseUpdateInputSchema = z.strictObject({
 });
 export type ProvideCaseUpdateInput = z.infer<typeof provideCaseUpdateInputSchema>;
 
-const OPEN_STATUSES = ['awaiting_human', 'awaiting_lead'] as const;
+const OPEN_STATUSES = ['awaiting_human', 'awaiting_lead', 'escalated'] as const;
 
 /**
  * True se há um caso 'awaiting_human'|'awaiting_lead' aberto para a conversa.
@@ -249,8 +249,8 @@ export async function resolveCaseFromHuman(
   const { rowCount } = await db.query(
     `with updated as (
        update agent_cases
-          set status = 'resolved', closed_at = now(), updated_at = now()
-        where organization_id = $1 and id = $2 and status = 'awaiting_human'
+          set status = 'resolved', closed_at = now(), first_human_response_at=coalesce(first_human_response_at,now()), updated_at = now()
+        where organization_id = $1 and id = $2 and status in ('awaiting_human','escalated')
         returning id
      )
      insert into agent_case_events (organization_id, case_id, kind, actor_kind, actor_user_id, human_action, body)
@@ -276,8 +276,8 @@ export async function markAwaitingLead(
   const { rowCount } = await db.query(
     `with updated as (
        update agent_cases
-          set status = 'awaiting_lead', updated_at = now()
-        where organization_id = $1 and id = $2 and status = 'awaiting_human'
+          set status = 'awaiting_lead', first_human_response_at=coalesce(first_human_response_at,now()), updated_at = now()
+        where organization_id = $1 and id = $2 and status in ('awaiting_human','escalated')
         returning id
      )
      insert into agent_case_events (organization_id, case_id, kind, actor_kind, actor_user_id, human_action, body)
@@ -304,7 +304,7 @@ export async function escalateCase(
   const { rowCount } = await db.query(
     `with updated as (
        update agent_cases
-          set status = 'escalated', closed_at = now(), updated_at = now()
+          set status = 'escalated', closed_at = null, escalated_at=coalesce(escalated_at,now()), first_human_response_at=coalesce(first_human_response_at,now()), updated_at = now()
         where organization_id = $1 and id = $2 and status = 'awaiting_human'
         returning id
      )

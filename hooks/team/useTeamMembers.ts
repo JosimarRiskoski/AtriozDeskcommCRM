@@ -12,6 +12,8 @@ export interface TeamMember {
   email: string | null;
   full_name: string | null;
   last_sign_in_at: string | null;
+  can_receive_human_cases: boolean;
+  is_primary_human_case_responder: boolean;
 }
 
 export function useTeamMembers(opts?: { enabled?: boolean }) {

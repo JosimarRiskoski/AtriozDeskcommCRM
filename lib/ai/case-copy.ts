@@ -30,7 +30,6 @@ export const STATUS_BADGE_VARIANT: Record<CaseStatus, "warning" | "info" | "succ
 export const CASE_REPLY_DISABLED_REASON: Partial<Record<CaseStatus, string>> = {
   awaiting_lead: "Aguardando o cliente responder — a IA avisa você quando tiver a informação.",
   resolved: "Este caso já foi concluído.",
-  escalated: "Este caso virou atendimento humano — não precisa mais de resposta aqui.",
   cancelled: "Este caso foi cancelado.",
 };
 

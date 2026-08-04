@@ -16,6 +16,7 @@ export interface AuditEntry {
   metadata: Record<string, unknown> | null;
   actor_ip: string | null;
   actor_user_agent: string | null;
+  actor: { type: "usuario" | "sistema" | "ia" | "webhook" | "integracao"; name: string };
 }
 
 export interface AuditFilters {

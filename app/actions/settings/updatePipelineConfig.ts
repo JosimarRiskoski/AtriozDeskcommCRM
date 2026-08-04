@@ -5,16 +5,12 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
-import {
-  pipelineConfigPatchSchema,
-  type PipelineConfigPatch,
-} from "@/lib/schemas/settings";
+import { pipelineConfigPatchSchema, type PipelineConfigPatch } from "@/lib/schemas/settings";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 
 export type UpdatePipelineConfigResult =
-  | { ok: true }
-  | { ok: false; error: string; details?: unknown };
+  { ok: true } | { ok: false; error: string; details?: unknown };
 
 export async function updatePipelineConfig(
   pipelineId: string,
@@ -59,6 +55,7 @@ export async function updatePipelineConfig(
   const nextSettings: Record<string, unknown> = { ...currentSettings };
   if (parsed.data.fields !== undefined) nextSettings.fields = parsed.data.fields;
   if (parsed.data.lost_reasons !== undefined) nextSettings.lost_reasons = parsed.data.lost_reasons;
+  if (parsed.data.value_label !== undefined) nextSettings.value_label = parsed.data.value_label;
 
   const { error } = await supabase
     .from("crm_pipelines")
@@ -77,6 +74,7 @@ export async function updatePipelineConfig(
       vocabulary_changed: !!parsed.data.vocabulary,
       fields_count: parsed.data.fields?.length ?? null,
       lost_reasons_count: parsed.data.lost_reasons?.length ?? null,
+      value_label_changed: parsed.data.value_label !== undefined,
     },
   });
 

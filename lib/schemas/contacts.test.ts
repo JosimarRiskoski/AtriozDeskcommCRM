@@ -51,9 +51,10 @@ describe("contactCreateSchema", () => {
     expect(parsed.source).toBe("manual");
   });
 
-  it("rejects non-E.164 phones", () => {
+  it("normaliza telefone brasileiro digitado sem +55", () => {
     const r = contactCreateSchema.safeParse({ phone_number: "11999998888" });
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.phone_number).toBe("+5511999998888");
   });
 
   it("accepts E.164 phones", () => {

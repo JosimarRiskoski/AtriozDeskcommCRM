@@ -57,6 +57,14 @@ export interface Lead {
    * aparece quando o roteamento é inequívoco.
    */
   next_action?: { label: string; seq: number; proposed_at: string } | null;
+  followup?: {
+    enrollment_id: string;
+    flow_name: string;
+    agent_name: string | null;
+    status: string;
+    next_eval_at: string | null;
+    cancel_on_reply: boolean;
+  } | null;
   /**
    * Derivado (não é coluna): o score vem de `crm_lead_scores` por LEFT JOIN.
    *

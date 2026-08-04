@@ -13,7 +13,12 @@ export interface ContactSummary {
   phone_number: string | null;
   tags: string[];
   is_blocked: boolean;
+  blocked_reason: string | null;
+  blocked_at: string | null;
   is_anonymized: boolean;
+  consent?: Record<string, unknown>;
+  source?: string;
+  source_metadata?: Record<string, unknown>;
 }
 
 export type ConversationWithContact = Conversation & {
@@ -33,10 +38,7 @@ interface ListResponse {
   meta?: { cursor?: string | null; has_more?: boolean };
 }
 
-export function useConversationsRealtime(
-  filters: ConversationsFilters,
-  orgId: string | null,
-) {
+export function useConversationsRealtime(filters: ConversationsFilters, orgId: string | null) {
   const qc = useQueryClient();
   const queryKey = ["conversations", filters] as const;
 

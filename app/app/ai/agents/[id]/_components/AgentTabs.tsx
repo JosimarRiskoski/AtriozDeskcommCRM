@@ -9,6 +9,7 @@ import { TestPanel } from "./TestPanel";
 import { RunsTable } from "./RunsTable";
 import { VersionHistory } from "./VersionHistory";
 import { ProposalsPanel } from "./ProposalsPanel";
+import { ControlPolicyTab } from "./ControlPolicyTab";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
@@ -25,7 +26,7 @@ interface Props {
 
 export function AgentTabs(props: Props) {
   const [tab, setTab] = React.useState<
-    "configuration" | "test" | "runs" | "history" | "proposals"
+    "configuration" | "controls" | "test" | "runs" | "history" | "proposals"
   >("configuration");
   const hasVersion = !!(props.draft || props.published);
 
@@ -36,6 +37,7 @@ export function AgentTabs(props: Props) {
       className="flex flex-col gap-4"
     >
       <TabsList>
+        <TabsTrigger value="controls">Controles da IA</TabsTrigger>
         <TabsTrigger value="configuration">Configuração</TabsTrigger>
         <TabsTrigger value="test" disabled={!hasVersion}>
           Teste
@@ -55,6 +57,10 @@ export function AgentTabs(props: Props) {
           channelSessions={props.channelSessions}
           readOnly={props.readOnly}
         />
+      </TabsContent>
+
+      <TabsContent value="controls" className="m-0">
+        <ControlPolicyTab agent={props.agent} readOnly={props.readOnly ?? false} />
       </TabsContent>
 
       <TabsContent value="test" className="m-0">

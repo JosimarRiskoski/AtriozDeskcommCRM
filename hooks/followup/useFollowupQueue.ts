@@ -5,12 +5,7 @@ import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 
 export type FollowupEnrollmentStatus =
-  | "active"
-  | "waiting_reply"
-  | "paused_handoff"
-  | "completed"
-  | "cancelled"
-  | "dead";
+  "active" | "waiting_reply" | "paused_handoff" | "completed" | "cancelled" | "dead";
 
 export interface FollowupQueueRow {
   source: "enrollment" | "promise";
@@ -58,7 +53,8 @@ export function useFollowupQueue(filters: FollowupQueueFilters = {}) {
         throw err;
       }
     },
-    getNextPageParam: (last) => (last.meta?.has_more && last.meta.cursor ? last.meta.cursor : undefined),
+    getNextPageParam: (last) =>
+      last.meta?.has_more && last.meta.cursor ? last.meta.cursor : undefined,
     staleTime: 15_000,
   });
 }
@@ -76,6 +72,7 @@ export function useCancelFollowupEnrollment() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["followup", "queue"] });
+      void qc.invalidateQueries({ queryKey: ["contact-followup"] });
       toast.success("Follow-up cancelado.");
     },
     onError: (err) => {

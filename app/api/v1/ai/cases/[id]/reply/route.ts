@@ -108,7 +108,7 @@ export async function POST(req: NextRequest, { params }: RouteParams): Promise<R
   if (caseRow === undefined) {
     return fail("not_found", "Caso não encontrado.", 404, { requestId });
   }
-  if (caseRow.status !== "awaiting_human") {
+  if (!["awaiting_human", "escalated"].includes(caseRow.status)) {
     return fail(
       "invalid_state",
       "O caso não está aguardando resposta do atendente (awaiting_human).",

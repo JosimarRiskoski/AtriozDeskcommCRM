@@ -35,6 +35,25 @@ export async function finishOnboarding(): Promise<FinishOnboardingResult> {
   const alreadyOnboarded = Boolean(existing?.onboarded_at);
 
   if (!alreadyOnboarded) {
+    // Garante uma fila utilizável antes de habilitar casos automáticos: quem
+    // conclui o onboarding vira o responsável principal inicial. A escolha
+    // pode ser alterada depois na tela Equipe.
+    const { data: currentPrimary } = await admin
+      .from("user_organizations")
+      .select("user_id")
+      .eq("organization_id", ctx.orgId)
+      .eq("is_primary_human_case_responder", true)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (!currentPrimary) {
+      const { error: responderError } = await admin
+        .from("user_organizations")
+        .update({ can_receive_human_cases: true, is_primary_human_case_responder: true, updated_at: new Date().toISOString() })
+        .eq("organization_id", ctx.orgId)
+        .eq("user_id", ctx.userId)
+        .is("revoked_at", null);
+      if (responderError) return { ok: false, error: "db_error", details: responderError.message };
+    }
     const { error } = await admin
       .from("organizations")
       .update({ onboarded_at: new Date().toISOString() })
@@ -52,6 +71,12 @@ export async function finishOnboarding(): Promise<FinishOnboardingResult> {
       action: "onboarding.completed",
       actorUserId: ctx.userId,
       organizationId: ctx.orgId,
+    });
+    await audit({
+      action: "team.human_case_eligibility_changed",
+      actorUserId: ctx.userId,
+      organizationId: ctx.orgId,
+      metadata: { source: "onboarding", default_responder_user_id: currentPrimary?.user_id ?? ctx.userId },
     });
     await audit({
       action: "tenant.onboarded",

@@ -15,6 +15,9 @@ export interface CardInput {
   title: string;
   valueCents: number | null;
   currency: string | null;
+  source?: string;
+  valueLabel?: string;
+  followup?: Lead["followup"];
   owner: OwnerDisplay;
   /** Nome do estágio atual — o "3d em Negociação" do rodapé. */
   stageName: string;
@@ -73,6 +76,7 @@ export function buildCardInput(
     | "title"
     | "value_cents"
     | "currency"
+    | "source"
     | "tags"
     | "last_activity_at"
     | "created_at"
@@ -82,6 +86,7 @@ export function buildCardInput(
     | "owner_agent"
     | "next_action"
     | "score"
+    | "followup"
   >,
   opts: {
     stageName: string;
@@ -92,6 +97,7 @@ export function buildCardInput(
     reactivations?: Map<string, { proposalId: string; expiresAt: string }>;
     /** `crm_pipelines.settings.canonical_tags` — só a primeira que o lead tiver. */
     canonicalTags?: string[];
+    valueLabel?: string;
     now?: Date;
   },
 ): CardInput {
@@ -109,6 +115,9 @@ export function buildCardInput(
     title: lead.title,
     valueCents: lead.value_cents,
     currency: lead.currency,
+    source: lead.source,
+    valueLabel: opts.valueLabel,
+    followup: lead.followup ?? null,
     owner: resolveLeadOwner(lead, opts.ownerNames),
     stageName: opts.stageName,
     hoursInStage,

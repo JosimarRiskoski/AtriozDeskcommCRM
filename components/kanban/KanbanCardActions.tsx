@@ -18,6 +18,14 @@ import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import { LoseLeadDialog } from "./LoseLeadDialog";
 import { EditLeadDialog } from "./EditLeadDialog";
+import { StartFollowupCard } from "@/components/contacts/StartFollowupCard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { Lead } from "@/lib/types/leads";
 
 interface KanbanCardActionsProps {
@@ -28,6 +36,7 @@ interface KanbanCardActionsProps {
 export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) {
   const [loseOpen, setLoseOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [followupOpen, setFollowupOpen] = useState(false);
   const winMutation = useWinLead(pipelineId);
   const editMutation = useEditLead(pipelineId);
   // spec 13 §4: escrita no funil é agent+ — viewer não reatribui (a rota
@@ -70,16 +79,16 @@ export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) 
             <DotsThree size={16} weight="bold" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
           <DropdownMenuItem
             onSelect={() => {
               setEditOpen(true);
             }}
           >
             <PencilSimple size={14} className="mr-2" /> Editar
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!lead.contact_id} onSelect={() => setFollowupOpen(true)}>
+            Iniciar follow-up
           </DropdownMenuItem>
           {canAssign && (
             <DropdownMenuSub>
@@ -154,6 +163,17 @@ export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) 
         lead={lead}
         pipelineId={pipelineId}
       />
+      <Dialog open={followupOpen} onOpenChange={setFollowupOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Iniciar follow-up</DialogTitle>
+            <DialogDescription>
+              Escolha um fluxo publicado para o contato vinculado a esta oportunidade.
+            </DialogDescription>
+          </DialogHeader>
+          {lead.contact_id ? <StartFollowupCard contactId={lead.contact_id} /> : null}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

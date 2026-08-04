@@ -45,7 +45,7 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteRes
   const db = createAdminClient();
   const { data: invitation, error: invitationError } = await db
     .from("team_invitations")
-    .select("id,status,email,organization_id,role,expires_at")
+    .select("id,status,email,organization_id,role,expires_at,can_receive_human_cases")
     .eq("id", payload.invite_id)
     .eq("organization_id", payload.organization_id)
     .maybeSingle();
@@ -80,6 +80,7 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteRes
         revoked_at: null,
         accepted_at: existing.revoked_at ? nowIso : (nowIso),
         updated_at: nowIso,
+        can_receive_human_cases: invitation.can_receive_human_cases,
       })
       .eq("id", existing.id);
     if (updErr) return { ok: false, error: "internal_error", message: updErr.message };
@@ -101,6 +102,7 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteRes
         role: payload.role,
         invited_at: new Date(payload.exp * 1000 - 24 * 60 * 60 * 1000).toISOString(),
         accepted_at: nowIso,
+        can_receive_human_cases: invitation.can_receive_human_cases,
       })
       .select("id")
       .single();

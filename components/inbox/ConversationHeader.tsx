@@ -12,6 +12,8 @@ import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { useConversationAiControl } from "@/hooks/inbox/useConversationAiControl";
+import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
+import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +22,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ConversationAgentDialog } from "@/components/inbox/ConversationAgentDialog";
+import { ContinueConversationDialog } from "@/components/inbox/ContinueConversationDialog";
 
 interface Props {
   conversation: ConversationWithContact;
@@ -40,21 +44,36 @@ export function ConversationHeader({ conversation }: Props) {
   const release = useReleaseConversation();
   const close = useCloseConversation();
   const aiControl = useConversationAiControl(conversation.id);
+  const members = useAssignableMembers(Boolean(conversation.assigned_to_user_id));
+  const channels = useChannelSessions();
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [continueDialogOpen, setContinueDialogOpen] = useState(false);
 
   const c = conversation.contacts ?? null;
   const displayName = c?.display_name?.trim() || c?.name?.trim() || c?.phone_number || "Sem nome";
   const phone = c?.phone_number ?? null;
   const status = conversation.status;
   const isMineAssigned = conversation.assigned_to_user_id === user.id;
-  const isOpen = status === "open" || conversation.assigned_to_user_id == null;
+  const isAvailable =
+    conversation.assigned_to_user_id == null && !["closed", "archived"].includes(status);
   const aiPaused = Boolean(
     conversation.ai_control_mode === "force_paused" ||
-      (conversation.bot_silenced_until &&
-        (conversation.bot_silenced_until === "infinity" ||
-          new Date(conversation.bot_silenced_until).getTime() > renderedAt)),
+    (conversation.bot_silenced_until &&
+      (conversation.bot_silenced_until === "infinity" ||
+        new Date(conversation.bot_silenced_until).getTime() > renderedAt)),
   );
   const aiForcedActive = conversation.ai_control_mode === "force_active";
+  const assignee = members.data?.find(
+    (member) => member.user_id === conversation.assigned_to_user_id,
+  );
+  const channel = channels.data?.find((item) => item.id === conversation.channel_session_id);
+  const channelName = channel
+    ? channel.display_name || channel.phone_number || channel.waha_session_name
+    : null;
+  const channelUnavailable = Boolean(
+    channel && !["WORKING", "connected", "active", "online"].includes(channel.status),
+  );
 
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-4 py-3">
@@ -65,14 +84,37 @@ export function ConversationHeader({ conversation }: Props) {
             {STATUS_LABEL[status] ?? status}
           </Badge>
         </div>
-        {phone && (
-          <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-            <Phone size={11} weight="regular" aria-hidden /> {phone}
-          </p>
-        )}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          {phone && (
+            <span className="flex items-center gap-1">
+              <Phone size={11} weight="regular" aria-hidden /> {phone}
+            </span>
+          )}
+          {channelName && (
+            <span title={channel?.phone_number ?? undefined}>
+              Recebida em: {channelName}
+              {channel?.phone_number && channel.display_name
+                ? ` · ${channel.phone_number.slice(-4)}`
+                : ""}
+            </span>
+          )}
+          {conversation.assigned_to_user_id && (
+            <span>
+              Atendida por: {assignee?.full_name || (isMineAssigned ? "Você" : "Membro da equipe")}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
+        {channelUnavailable && !c?.is_blocked ? (
+          <Button size="sm" variant="outline" onClick={() => setContinueDialogOpen(true)}>
+            Continuar em outro número
+          </Button>
+        ) : null}
+        <Button size="sm" variant="outline" onClick={() => setAgentDialogOpen(true)}>
+          {conversation.agent_selection_mode === "manual" ? "Agente manual" : "Agente automático"}
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -82,40 +124,52 @@ export function ConversationHeader({ conversation }: Props) {
               title="Definir como a IA deve agir somente nesta conversa"
             >
               {aiPaused ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}
-              {aiForcedActive ? "IA ativa aqui" : aiPaused ? "IA pausada" : "Controle da IA"}
+              {aiForcedActive
+                ? "IA ativa nesta conversa"
+                : aiPaused
+                  ? "IA pausada · atendimento humano"
+                  : "IA seguindo regra geral"}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-72">
             <DropdownMenuLabel>
               <span className="block">IA neste contato</span>
               <span className="text-xs font-normal text-muted-foreground">
-                Esta escolha vale somente para esta conversa.
+                Esta escolha vale somente para esta conversa e não inicia follow-up.
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => aiControl.setMode.mutate("inherit")}>
               <span>
                 <span className="block">Seguir configuração geral</span>
-                <span className="text-xs text-muted-foreground">Usa o estado normal do agente.</span>
+                <span className="text-xs text-muted-foreground">
+                  Usa o estado normal do agente.
+                </span>
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => aiControl.setMode.mutate("force_active")}>
               <Play size={14} aria-hidden />
               <span>
-                <span className="block">Ativar IA somente neste contato</span>
-                <span className="text-xs text-muted-foreground">Útil para testes controlados.</span>
+                <span className="block">
+                  {aiPaused ? "Devolver para IA" : "Ativar IA somente neste contato"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  A IA pode responder aqui. Nenhuma cadência será iniciada.
+                </span>
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => aiControl.setMode.mutate("force_paused")}>
               <Pause size={14} aria-hidden />
               <span>
                 <span className="block">Pausar IA neste contato</span>
-                <span className="text-xs text-muted-foreground">O atendimento fica com a equipe.</span>
+                <span className="text-xs text-muted-foreground">
+                  O atendimento fica com a equipe até usar “Devolver para IA”.
+                </span>
               </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {isOpen && (
+        {isAvailable && (
           <Button
             size="sm"
             variant="default"
@@ -127,9 +181,15 @@ export function ConversationHeader({ conversation }: Props) {
               })
             }
           >
-            Assumir
+            Pegar conversa
           </Button>
         )}
+        {conversation.assigned_to_user_id && !isMineAssigned ? (
+          <span className="max-w-44 text-right text-[11px] text-muted-foreground">
+            “Pegar conversa” não aparece porque ela já está com outro atendente. Use Transferir se
+            necessário.
+          </span>
+        ) : null}
         {isMineAssigned && (
           <Button
             size="sm"
@@ -178,6 +238,19 @@ export function ConversationHeader({ conversation }: Props) {
         conversationId={conversation.id}
         open={reassignOpen}
         onOpenChange={setReassignOpen}
+      />
+      <ConversationAgentDialog
+        conversationId={conversation.id}
+        currentAgentId={conversation.selected_agent_id}
+        currentReason={conversation.agent_selection_reason}
+        humanAttending={conversation.assignee_kind === "user"}
+        open={agentDialogOpen}
+        onOpenChange={setAgentDialogOpen}
+      />
+      <ContinueConversationDialog
+        conversationId={conversation.id}
+        open={continueDialogOpen}
+        onOpenChange={setContinueDialogOpen}
       />
     </div>
   );

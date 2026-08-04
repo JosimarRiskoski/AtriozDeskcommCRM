@@ -30,6 +30,9 @@ export function DoneClient({ recap }: { recap: Recap }) {
       <p className="text-sm text-muted-foreground">
         Sua operação está configurada. Você pode ajustar tudo nas Configurações.
       </p>
+      <p className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3 text-left text-xs text-muted-foreground">
+        Ao concluir, você será definido como responsável principal pelos casos humanos. Depois poderá habilitar outros responsáveis na tela Equipe.
+      </p>
       <ul className="mx-auto max-w-sm space-y-2 text-left text-sm">
         {ITEMS.map((it) => {
           const done = recap[it.key];

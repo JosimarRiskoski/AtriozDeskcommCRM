@@ -46,6 +46,43 @@ describe("createWebhookSourceSchema", () => {
     });
     expect(r.success).toBe(false);
   });
+
+  it("allows contact-only capture without pipeline", () => {
+    const result = createWebhookSourceSchema.safeParse({
+      name: "Formulário institucional",
+      create_opportunity: false,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("requires external id and secret for 3C", () => {
+    const result = createWebhookSourceSchema.safeParse({
+      name: "3C",
+      provider_type: "3c",
+      create_opportunity: false,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("keeps paid traffic automation disabled before pilot", () => {
+    const result = createWebhookSourceSchema.safeParse({
+      name: "Meta Ads",
+      provider_type: "paid_traffic",
+      create_opportunity: false,
+      automation_enabled: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("requires a connection when IA or cadence is configured", () => {
+    const result = createWebhookSourceSchema.safeParse({
+      name: "Meta Ads",
+      provider_type: "paid_traffic",
+      create_opportunity: false,
+      activate_ai: true,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("createAutomationRuleSchema", () => {

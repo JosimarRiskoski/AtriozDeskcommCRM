@@ -7,6 +7,7 @@ import type { FollowupFlowPointerRow } from "@/hooks/followup/useFollowupFlows";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FlowsList } from "./_components/FlowsList";
 import { QueueTab } from "./_components/QueueTab";
+import { ReactivationsTab } from "./_components/ReactivationsTab";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +36,8 @@ export default async function FollowupFlowsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Follow-ups</h1>
           <p className="text-sm text-text-muted">
-            Fluxos automáticos de reengajamento — silêncio, mudança de etapa ou fim
-            de conversa disparam mensagens sem intervenção manual.
+            Fluxos automáticos de reengajamento — silêncio, mudança de etapa ou fim de conversa
+            disparam mensagens sem intervenção manual.
           </p>
         </div>
       </header>
@@ -44,12 +45,16 @@ export default async function FollowupFlowsPage() {
         <TabsList>
           <TabsTrigger value="fluxos">Fluxos</TabsTrigger>
           <TabsTrigger value="fila">Fila</TabsTrigger>
+          <TabsTrigger value="reativacoes">Reativações</TabsTrigger>
         </TabsList>
         <TabsContent value="fluxos">
           <FlowsList initialData={flows} canWrite={canWrite} />
         </TabsContent>
         <TabsContent value="fila">
           <QueueTab canWrite={canWrite} />
+        </TabsContent>
+        <TabsContent value="reativacoes">
+          <ReactivationsTab canWrite={canWrite} />
         </TabsContent>
       </Tabs>
     </div>

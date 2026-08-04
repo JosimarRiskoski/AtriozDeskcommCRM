@@ -26,6 +26,7 @@ interface Props {
   onSaved?: () => void;
   /** O dossiê não tem "cancelar"; o diálogo tem. */
   onCancel?: () => void;
+  valueLabel?: string;
 }
 
 function centsToReais(cents: number | null | undefined): string {
@@ -42,7 +43,13 @@ function centsToReais(cents: number | null | undefined): string {
  * registro justamente de quem o produziu — a funcionalidade que prova "sua ação
  * fica registrada" provaria isso para todo mundo menos para o autor.
  */
-export function LeadFieldsForm({ lead, pipelineId, onSaved, onCancel }: Props) {
+export function LeadFieldsForm({
+  lead,
+  pipelineId,
+  onSaved,
+  onCancel,
+  valueLabel = "Valor previsto",
+}: Props) {
   const edit = useEditLead(pipelineId);
 
   const form = useForm<FormShape>({
@@ -111,51 +118,44 @@ export function LeadFieldsForm({ lead, pipelineId, onSaved, onCancel }: Props) {
     }
   }
 
-
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="title">Título</Label>
+        <Input id="title" {...form.register("title", { required: true, minLength: 2 })} />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="description">Observação interna · somente humanos</Label>
+        <Textarea id="description" rows={3} {...form.register("description")} />
+        <p className="text-xs text-muted-foreground">
+          Este texto não é incluído automaticamente na memória da IA.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="title">Título</Label>
+          <Label htmlFor="valueReais">{valueLabel} (R$)</Label>
           <Input
-            id="title"
-            {...form.register("title", { required: true, minLength: 2 })}
+            id="valueReais"
+            inputMode="decimal"
+            placeholder="0,00"
+            {...form.register("valueReais")}
           />
+          {form.formState.errors.valueReais && (
+            <p className="text-xs text-error-fg">{form.formState.errors.valueReais.message}</p>
+          )}
         </div>
-
         <div className="space-y-2">
-          <Label htmlFor="description">Descrição</Label>
-          <Textarea id="description" rows={3} {...form.register("description")} />
+          <Label htmlFor="expected_close_date">Fechamento previsto</Label>
+          <Input id="expected_close_date" type="date" {...form.register("expected_close_date")} />
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="valueReais">Valor (R$)</Label>
-            <Input
-              id="valueReais"
-              inputMode="decimal"
-              placeholder="0,00"
-              {...form.register("valueReais")}
-            />
-            {form.formState.errors.valueReais && (
-              <p className="text-xs text-error-fg">
-                {form.formState.errors.valueReais.message}
-              </p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="expected_close_date">Fechamento previsto</Label>
-            <Input
-              id="expected_close_date"
-              type="date"
-              {...form.register("expected_close_date")}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="tagsRaw">Tags (separadas por vírgula)</Label>
-          <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="tagsRaw">Tags (separadas por vírgula)</Label>
+        <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
+      </div>
 
       <div className="flex justify-end gap-2">
         {onCancel && (

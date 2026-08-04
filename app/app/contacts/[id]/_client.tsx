@@ -17,6 +17,9 @@ import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { BackNavigation } from "@/components/shell/BackNavigation";
 import { StartFollowupCard } from "@/components/contacts/StartFollowupCard";
 import { DeleteContactDialog } from "@/components/contacts/DeleteContactDialog";
+import { ContactOriginsCard } from "@/components/contacts/ContactOriginsCard";
+import { CommunicationPrivacyCard } from "@/components/contacts/CommunicationPrivacyCard";
+import { DuplicateContactCard } from "@/components/contacts/DuplicateContactCard";
 
 interface Props {
   contactId: string;
@@ -96,7 +99,18 @@ export function ContactDetailClient({ contactId }: Props) {
                 {t}
               </Badge>
             ))}
-            {contact.is_blocked && <Badge variant="warning">Bloqueado</Badge>}
+            {contact.is_blocked && (
+              <Badge
+                variant="warning"
+                title={
+                  contact.blocked_reason === "stop_keyword"
+                    ? "O CRM identificou um pedido para interromper mensagens"
+                    : contact.blocked_reason || "Envios bloqueados no CRM"
+                }
+              >
+                Bloqueado no CRM
+              </Badge>
+            )}
             {contact.is_anonymized && <Badge variant="destructive">Anonimizado</Badge>}
           </div>
         </div>
@@ -195,6 +209,17 @@ export function ContactDetailClient({ contactId }: Props) {
                 ))}
               </dl>
             </Card>
+            <ContactOriginsCard contactId={contactId} />
+            <CommunicationPrivacyCard
+              contactId={contactId}
+              isBlocked={contact.is_blocked}
+              blockedReason={contact.blocked_reason}
+              blockedAt={contact.blocked_at}
+              canManage={!!isAdmin}
+            />
+            {canManageFollowups && !contact.is_anonymized ? (
+              <DuplicateContactCard contactId={contactId} currentName={displayName} />
+            ) : null}
             {canManageFollowups && !contact.is_anonymized && (
               <StartFollowupCard contactId={contactId} />
             )}

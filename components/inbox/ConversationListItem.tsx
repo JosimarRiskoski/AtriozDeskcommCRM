@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
+import { contactSourceLabel } from "@/lib/contacts/source-labels";
 
 interface Props {
   conversation: ConversationWithContact;
@@ -52,18 +53,9 @@ function waitingLabel(conversation: ConversationWithContact): string {
   return `Aguardando ${formatDistanceToNowStrict(new Date(since), { addSuffix: true, locale: ptBR })}`;
 }
 
-export function ConversationListItem({
-  conversation,
-  isSelected,
-  onSelect,
-  queuePosition,
-}: Props) {
+export function ConversationListItem({ conversation, isSelected, onSelect, queuePosition }: Props) {
   const c = conversation.contacts ?? null;
-  const displayName =
-    c?.display_name?.trim() ||
-    c?.name?.trim() ||
-    c?.phone_number ||
-    "Sem nome";
+  const displayName = c?.display_name?.trim() || c?.name?.trim() || c?.phone_number || "Sem nome";
   const phoneFallback = c?.phone_number ?? "??";
   const tags = c?.tags ?? [];
   const visibleTags = tags.slice(0, 2);
@@ -80,7 +72,7 @@ export function ConversationListItem({
       type="button"
       onClick={() => onSelect(conversation.id)}
       className={cn(
-        "group flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left transition-colors hover:bg-accent/40",
+        "hover:bg-accent/40 group flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left transition-colors",
         isSelected && "bg-accent/60",
       )}
       aria-current={isSelected ? "true" : undefined}
@@ -104,14 +96,12 @@ export function ConversationListItem({
         {queuePosition !== undefined && (
           <div className="mb-1 flex items-center gap-1.5">
             <span
-              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/10 px-1 text-[10px] font-medium tabular-nums text-primary"
+              className="bg-primary/10 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums text-primary"
               aria-label={`Posição ${queuePosition} na fila`}
             >
               {queuePosition}º
             </span>
-            <span className="text-[10px] text-muted-foreground">
-              {waitingLabel(conversation)}
-            </span>
+            <span className="text-[10px] text-muted-foreground">{waitingLabel(conversation)}</span>
           </div>
         )}
         <div className="flex items-baseline justify-between gap-2">
@@ -134,16 +124,27 @@ export function ConversationListItem({
         </p>
 
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          {c?.source && (
+            <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[10px]">
+              {contactSourceLabel(c.source)}
+            </Badge>
+          )}
           {visibleTags.map((t) => (
             <Badge key={t} variant="secondary" className="h-4 px-1.5 text-[10px]">
               {t}
             </Badge>
           ))}
-          {overflow > 0 && (
-            <span className="text-[10px] text-muted-foreground">+{overflow}</span>
-          )}
+          {overflow > 0 && <span className="text-[10px] text-muted-foreground">+{overflow}</span>}
           {c?.is_blocked && (
-            <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
+            <Badge
+              variant="destructive"
+              className="h-4 px-1.5 text-[10px]"
+              title={
+                c.blocked_reason === "stop_keyword"
+                  ? "O CRM identificou um pedido para interromper mensagens"
+                  : c.blocked_reason || "Envios bloqueados no CRM"
+              }
+            >
               Bloqueado
             </Badge>
           )}
@@ -152,9 +153,7 @@ export function ConversationListItem({
               Anonimizado
             </Badge>
           )}
-          {unread > 0 && (
-            <Badge className="ml-auto h-4 min-w-4 px-1.5 text-[10px]">{unread}</Badge>
-          )}
+          {unread > 0 && <Badge className="ml-auto h-4 min-w-4 px-1.5 text-[10px]">{unread}</Badge>}
         </div>
       </div>
     </button>

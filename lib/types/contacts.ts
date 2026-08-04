@@ -18,6 +18,7 @@ export interface Contact {
   birthdate: string | null;
   is_blocked: boolean;
   blocked_reason: string | null;
+  blocked_at?: string | null;
   is_anonymized: boolean;
   anonymized_at: string | null;
   is_merged_into: string | null;

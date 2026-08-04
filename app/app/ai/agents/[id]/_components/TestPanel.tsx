@@ -43,6 +43,7 @@ interface TestResponse {
     cost_cents?: number;
     latency_ms?: number;
     would_send_to?: { session?: string | null; chat_id?: string | null };
+    abort_reason?: string | null;
     stub?: boolean;
   };
 }
@@ -56,12 +57,11 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
   const [contactPhone, setContactPhone] = React.useState("");
   const [pending, setPending] = React.useState(false);
   const [result, setResult] = React.useState<TestResponse["data"] | null>(null);
+  const explanation = React.useMemo(() => explainTestResult(result), [result]);
 
   if (!target) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Configure e salve uma versão antes de testar.
-      </p>
+      <p className="text-sm text-muted-foreground">Configure e salve uma versão antes de testar.</p>
     );
   }
 
@@ -174,19 +174,15 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
         </p>
 
         {!result && !pending ? (
-          <p className="text-sm text-muted-foreground">
-            Nenhum teste executado ainda.
-          </p>
+          <p className="text-sm text-muted-foreground">Nenhum teste executado ainda.</p>
         ) : null}
 
-        {pending ? (
-          <p className="text-sm text-muted-foreground">Executando dry-run…</p>
-        ) : null}
+        {pending ? <p className="text-sm text-muted-foreground">Executando dry-run…</p> : null}
 
         {result ? (
           <>
             {result.stub ? (
-              <p className="rounded-md border border-border/60 bg-muted/40 p-2 text-xs text-muted-foreground">
+              <p className="border-border/60 bg-muted/40 rounded-md border p-2 text-xs text-muted-foreground">
                 Stub: o runtime real é entregue na S-13.08. O trace abaixo é simulado.
               </p>
             ) : null}
@@ -208,6 +204,19 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
               finalText={result.final_text ?? null}
               emptyMessage="Sem tool calls (resposta direta do LLM)."
             />
+
+            <div className="space-y-2 rounded-md border p-3 text-xs">
+              <p className="font-medium">Por que a IA respondeu assim?</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <Cell label="Fonte usada">{explanation.source}</Cell>
+                <Cell label="Informação não encontrada">{explanation.notFound}</Cell>
+                <Cell label="Handoff">{explanation.handoff}</Cell>
+              </div>
+              <p className="text-muted-foreground">
+                Abra o rastro acima para conferir cada ferramenta e fonte. O modo teste nunca envia
+                a resposta ao WhatsApp.
+              </p>
+            </div>
           </>
         ) : null}
       </div>
@@ -215,9 +224,44 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
   );
 }
 
+function explainTestResult(result: TestResponse["data"] | null) {
+  if (!result) return { source: "—", notFound: "—", handoff: "—" };
+  const trace = JSON.stringify(result.tool_calls ?? {}).toLowerCase();
+  const sourceIds = [
+    ...JSON.stringify(result.tool_calls ?? {}).matchAll(
+      /knowledge_source_id["']?\s*[:=]\s*["']([^"']+)/gi,
+    ),
+  ].map((match) => match[1]);
+  const searched = trace.includes("search_knowledge");
+  const missing =
+    trace.includes("knowledge_unavailable") ||
+    trace.includes("no_knowledge_base") ||
+    trace.includes('"hits":[]');
+  const handoff =
+    result.status === "handoff" ||
+    trace.includes("handoff") ||
+    Boolean(result.abort_reason?.includes("handoff"));
+  return {
+    source:
+      sourceIds.length > 0
+        ? [...new Set(sourceIds)].join(", ")
+        : searched
+          ? "Base de conhecimento consultada"
+          : "Nenhuma fonte consultada",
+    notFound: missing
+      ? "Sim — a busca não encontrou conteúdo autorizado"
+      : searched
+        ? "Não indicado pelo rastro"
+        : "Não houve busca",
+    handoff: handoff
+      ? result.abort_reason || "Sim — regra ou ferramenta de atendimento humano"
+      : "Não acionado",
+  };
+}
+
 function Cell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded border border-border/60 px-2 py-1">
+    <div className="border-border/60 rounded border px-2 py-1">
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="font-mono">{children}</p>
     </div>

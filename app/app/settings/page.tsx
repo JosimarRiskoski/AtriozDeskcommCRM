@@ -70,6 +70,13 @@ const LINKS: SettingsLink[] = [
     adminOnly: true,
   },
   {
+    href: "/app/settings/human-support",
+    title: "Atendimento humano",
+    description: "Responsáveis, prazos, handoff e avisos aos gestores.",
+    group: "Operação comercial",
+    adminOnly: true,
+  },
+  {
     href: "/app/settings/tenant/pipelines",
     title: "Pipelines",
     description: "Funis, etapas, campos e motivos de perda.",

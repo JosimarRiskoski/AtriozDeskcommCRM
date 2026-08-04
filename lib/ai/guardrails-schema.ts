@@ -88,6 +88,27 @@ export const agentConfigSchema = z.object({
   rag_top_k: z.number().int().min(1).max(20).default(5),
   rag_similarity_threshold: z.number().min(0).max(1).default(0.72),
   confidence_threshold: z.number().min(0).max(1).default(0.6),
+  knowledge_base_enabled: z.boolean().default(true),
+  external_internet_allowed: z.boolean().default(false),
+  forbidden_topics: z.array(z.string().trim().min(1).max(120)).max(50).default([]),
+  human_required_topics: z.array(z.string().trim().min(1).max(120)).max(50).default([]),
+  fixed_responses: z
+    .array(
+      z.object({
+        topic: z.string().trim().min(1).max(120),
+        response: z.string().trim().min(1).max(2000),
+      }),
+    )
+    .max(50)
+    .default([]),
+  fallback_message: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .default("Não encontrei essa informação na base autorizada. Vou encaminhar para uma pessoa."),
+  daily_budget_cents: z.number().int().min(0).max(10000000).default(0),
+  monthly_budget_cents: z.number().int().min(0).max(100000000).default(0),
 });
 export type AgentConfig = z.infer<typeof agentConfigSchema>;
 
@@ -98,6 +119,15 @@ export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
   rag_top_k: 5,
   rag_similarity_threshold: 0.72,
   confidence_threshold: 0.6,
+  knowledge_base_enabled: true,
+  external_internet_allowed: false,
+  forbidden_topics: [],
+  human_required_topics: [],
+  fixed_responses: [],
+  fallback_message:
+    "Não encontrei essa informação na base autorizada. Vou encaminhar para uma pessoa.",
+  daily_budget_cents: 0,
+  monthly_budget_cents: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -141,7 +171,10 @@ export const SYSTEM_PROMPT_PLACEHOLDERS: Array<{ token: string; description: str
   { token: "{{vocabulary.lead}}", description: "Vocabulário do tenant para 'lead' (ex: cliente)" },
   { token: "{{vocabulary.deal}}", description: "Vocabulário do tenant para 'deal' (ex: pedido)" },
   { token: "{{vocabulary.won}}", description: "Vocabulário do tenant para 'won' (ex: pago)" },
-  { token: "{{vocabulary.lost}}", description: "Vocabulário do tenant para 'lost' (ex: cancelado)" },
+  {
+    token: "{{vocabulary.lost}}",
+    description: "Vocabulário do tenant para 'lost' (ex: cancelado)",
+  },
   { token: "{{contact_name}}", description: "Nome do contato em atendimento" },
   { token: "{{contact_locale}}", description: "Locale do contato (ex: pt-BR)" },
   { token: "{{recent_messages}}", description: "Últimas N mensagens da conversa" },

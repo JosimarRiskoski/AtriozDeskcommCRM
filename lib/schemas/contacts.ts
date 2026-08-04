@@ -8,6 +8,7 @@
  *  - lgpdAnonymizeSchema    → POST /api/v1/lgpd/anonymize (irreversible)
  */
 import { z } from "zod";
+import { normalizePhoneBR } from "@/lib/phone/normalize";
 
 const PHONE_REGEX = /^\+\d{8,15}$/;
 const CPF_DIGITS = /^\d{11}$/;
@@ -37,7 +38,17 @@ export const contactCreateSchema = z.object({
   email: z.string().email().optional(),
   phone_number: z
     .string()
-    .regex(PHONE_REGEX, "Telefone deve estar em formato E.164 (+5511999998888)")
+    .transform((value, ctx) => {
+      const normalized = normalizePhoneBR(value);
+      if (!normalized || !PHONE_REGEX.test(normalized)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Telefone deve estar em formato E.164 (+5511999998888)",
+        });
+        return z.NEVER;
+      }
+      return normalized;
+    })
     .optional(),
   cpf: z.string().refine(isValidCpf, "CPF inválido").optional(),
   birthdate: z

@@ -65,17 +65,22 @@ function makeDb(pointers: Row[], versions: Row[], enrollments: Row[] = []) {
     followup_flow_pointers: pointers,
     followup_flow_versions: versions,
     followup_enrollments: enrollments,
+    ai_agent_versions: [],
   };
 
   function builder(table: string) {
     const filters: Array<[string, unknown]> = [];
+    const inFilters: Array<[string, unknown[]]> = [];
     let orderCol: string | null = null;
     let orderAsc = true;
     let mode: "select" | "insert" | "update" | "delete" = "select";
     let payload: Row | undefined;
 
     function matches(row: Row): boolean {
-      return filters.every(([k, v]) => row[k] === v);
+      return (
+        filters.every(([k, v]) => row[k] === v) &&
+        inFilters.every(([k, values]) => values.includes(row[k]))
+      );
     }
 
     function execute(): { data: Row[] | null; error: { code?: string; message: string } | null } {
@@ -161,6 +166,10 @@ function makeDb(pointers: Row[], versions: Row[], enrollments: Row[] = []) {
       },
       eq(col: string, val: unknown) {
         filters.push([col, val]);
+        return b;
+      },
+      in(col: string, values: unknown[]) {
+        inFilters.push([col, values]);
         return b;
       },
       order(col: string, opts?: { ascending?: boolean }) {
@@ -481,7 +490,9 @@ describe("DELETE /api/v1/ai/followup-flows/:id", () => {
     const res = await DELETE(req("DELETE"), ctx(FLOW_ID));
 
     expect(res.status).toBe(200);
-    const remaining = await db.from("followup_flow_pointers").select();
+    const remaining = (await db.from("followup_flow_pointers").select()) as {
+      data: unknown[];
+    };
     expect(remaining.data).toHaveLength(0);
     expect(vi.mocked(audit)).toHaveBeenCalledWith(
       expect.objectContaining({ action: "followup_flow.deleted", resourceId: FLOW_ID }),

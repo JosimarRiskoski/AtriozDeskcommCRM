@@ -17,6 +17,7 @@ interface Props {
   pipelineId: string;
   stageName: string;
   ownerNames?: Map<string, string | null>;
+  valueLabel: string;
 }
 
 function formatBRL(cents: number | null, currency: string | null): string {
@@ -52,6 +53,7 @@ export function LeadDossier({
   pipelineId,
   stageName,
   ownerNames,
+  valueLabel,
 }: Props) {
   const campos = useRef<HTMLDivElement | null>(null);
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
@@ -78,7 +80,7 @@ export function LeadDossier({
         {/* ① cabeçalho vivo */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border pb-3 text-xs">
           <span className="font-medium tabular-nums text-text">
-            {formatBRL(lead.value_cents, lead.currency)}
+            {valueLabel}: {formatBRL(lead.value_cents, lead.currency)}
           </span>
           <span className="text-text-muted">{stageName}</span>
           <OwnerBadge
@@ -138,7 +140,7 @@ export function LeadDossier({
           <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
             Dados do negócio
           </h3>
-          <LeadFieldsForm lead={lead} pipelineId={pipelineId} />
+          <LeadFieldsForm lead={lead} pipelineId={pipelineId} valueLabel={valueLabel} />
         </div>
       </SheetContent>
     </Sheet>

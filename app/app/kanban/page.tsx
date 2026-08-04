@@ -1,6 +1,5 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Kanban } from "@/lib/ui/icons";
-import { Badge } from "@/components/ui/badge";
 import { EmptyPipeline } from "@/components/empty";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,6 +15,9 @@ export default async function KanbanPickerPage() {
 
   const list = pipelines ?? [];
 
+  const preferred = list.find((pipeline) => pipeline.is_default) ?? list[0];
+  if (preferred) redirect(`/app/pipelines/${preferred.id}`);
+
   return (
     <div className="flex h-full flex-col gap-4 p-6">
       <header className="flex items-center gap-3">
@@ -25,39 +27,9 @@ export default async function KanbanPickerPage() {
 
       {list.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
-          <EmptyPipeline
-            primary={{ label: "Ir para Configurações", href: "/app/settings" }}
-          />
+          <EmptyPipeline primary={{ label: "Ir para Configurações", href: "/app/settings" }} />
         </div>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {list.map((p) => (
-            <li key={p.id}>
-              <Link
-                href={`/app/pipelines/${p.id}`}
-                className="flex items-center justify-between rounded-md border border-border bg-surface px-4 py-3 transition-colors hover:border-border-strong"
-              >
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{p.name}</span>
-                    {p.is_default && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Default
-                      </Badge>
-                    )}
-                  </div>
-                  {p.description && (
-                    <span className="text-xs text-muted-foreground">
-                      {p.description}
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs text-muted-foreground">/{p.slug}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      ) : null}
     </div>
   );
 }

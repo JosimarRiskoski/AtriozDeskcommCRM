@@ -191,6 +191,31 @@ export async function performHumanHandoff(
     ],
   );
 
+  // Espelha o handoff na fila operacional usada pela equipe. Mantemos o item
+  // técnico acima para compatibilidade do motor, mas o atendente trabalha em
+  // Casos humanos, com prazo, responsável e histórico auditável.
+  await db.query(
+    `with new_case as (
+       insert into agent_cases
+         (organization_id,conversation_id,title,summary,blocker,status,source,urgency,category,reason_code,context_snapshot)
+       select $1,$2,$3,$4,$5,'awaiting_human','agent','high','customer_request','handoff',
+              jsonb_build_object('activities',jsonb_build_array('IA transferiu o atendimento para a equipe'))
+       where not exists (
+         select 1 from agent_cases where organization_id=$1 and conversation_id=$2
+           and status in ('awaiting_human','awaiting_lead','escalated')
+       ) returning id
+     )
+     insert into agent_case_events(organization_id,case_id,kind,actor_kind,body,metadata)
+     select $1,id,'opened','agent',$5,jsonb_build_object('reason_code','handoff') from new_case`,
+    [
+      ids.tenantId,
+      ids.conversationId,
+      opts.inboxTitle ?? 'Atendimento humano solicitado',
+      opts.conversationSummary,
+      opts.reason,
+    ],
+  );
+
   // PII fora do log: só ids/motivo — nunca o resumo da conversa (regra dura 8).
   opts.log.info('handoff humano aplicado (force_human + silêncio + crons cancelados + inbox)', {
     reason: opts.reason,

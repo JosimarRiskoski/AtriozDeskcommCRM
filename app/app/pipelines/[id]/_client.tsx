@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useBoard } from "@/hooks/kanban/useBoard";
 
@@ -25,15 +26,19 @@ import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { Button } from "@/components/ui/button";
 import { Plus } from "@/lib/ui/icons";
+import { Badge } from "@/components/ui/badge";
 import type { LeadFilters } from "@/lib/kanban/filters";
 import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/filters";
+import { savePipelineStage } from "@/app/actions/settings/managePipelines";
 
 export function PipelinePageClient({
   pipelineId,
   initialName,
+  pipelines,
 }: {
   pipelineId: string;
   initialName: string;
+  pipelines: Array<{ id: string; name: string; is_default: boolean }>;
 }) {
   const { data, isLoading, error, pulses, realtimeStatus, seguranca } = useBoard(pipelineId);
   const router = useRouter();
@@ -49,6 +54,7 @@ export function PipelinePageClient({
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
+  const [changingStages, startChangingStages] = useTransition();
 
   const filteredLeads = data ? applyFilters(data.leads, filters) : [];
 
@@ -78,16 +84,64 @@ export function PipelinePageClient({
         <h1 className="text-2xl font-semibold tracking-tight">
           {data?.pipeline.name ?? initialName}
         </h1>
-        <Button onClick={() => setNewOpen(true)} disabled={!data}>
-          <Plus size={16} className="mr-2" /> Novo Lead
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            disabled={filteredLeads.length === 0}
+            onClick={() => setSelectedIds(filteredLeads.map((lead) => lead.id))}
+            title="Seleciona os resultados dos filtros atuais para ações coletivas"
+          >
+            Selecionar resultados ({filteredLeads.length})
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!data || changingStages}
+            onClick={() =>
+              startChangingStages(async () => {
+                const result = await savePipelineStage(pipelineId, {
+                  name: "Nova etapa",
+                  color: "#64748b",
+                  requires_human: false,
+                  is_won: false,
+                  is_lost: false,
+                });
+                if (result.ok) toast.success("Etapa criada. Clique no nome para editar.");
+                else toast.error(result.error);
+              })
+            }
+          >
+            <Plus size={16} /> Nova etapa
+          </Button>
+          <Button onClick={() => setNewOpen(true)} disabled={!data}>
+            <Plus size={16} className="mr-2" /> Novo Lead
+          </Button>
+        </div>
       </header>
+      <nav className="flex shrink-0 gap-2 overflow-x-auto" aria-label="Funis disponíveis">
+        {pipelines.map((pipeline) => (
+          <Button
+            key={pipeline.id}
+            variant={pipeline.id === pipelineId ? "default" : "outline"}
+            size="sm"
+            onClick={() => router.push(`/app/pipelines/${pipeline.id}`)}
+            className="shrink-0"
+          >
+            {pipeline.name}
+            {pipeline.is_default ? <Badge variant="secondary">Principal</Badge> : null}
+          </Button>
+        ))}
+      </nav>
       {data && (
         <NewLeadDialog
           open={newOpen}
           onOpenChange={setNewOpen}
           pipelineId={pipelineId}
           stages={data.stages}
+          valueLabel={
+            typeof data.pipeline.settings?.value_label === "string"
+              ? data.pipeline.settings.value_label
+              : "Valor previsto"
+          }
         />
       )}
       <div className="shrink-0">

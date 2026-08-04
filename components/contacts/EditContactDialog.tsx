@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { randomId } from "@/lib/random-id";
 import {
   Dialog,
   DialogContent,
@@ -33,14 +34,25 @@ interface Props {
   onOpenChange: (v: boolean) => void;
 }
 
+interface CustomFieldDraft {
+  id: string;
+  key: string;
+  value: string;
+}
+
+function customFieldDrafts(contact: Contact): CustomFieldDraft[] {
+  return Object.entries(contact.custom_fields ?? {}).map(([key, value]) => ({
+    id: randomId(),
+    key,
+    value: value == null ? "" : String(value),
+  }));
+}
+
 export function EditContactDialog({ contact, open, onOpenChange }: Props) {
   const update = useUpdateContact(contact.id);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>(
-    Object.entries(contact.custom_fields ?? {}).map(([key, value]) => ({
-      key,
-      value: value == null ? "" : String(value),
-    })),
+  const [customFields, setCustomFields] = useState<CustomFieldDraft[]>(() =>
+    customFieldDrafts(contact),
   );
 
   const form = useForm<FormShape>({
@@ -66,8 +78,13 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
         state: contact.state ?? "",
         tagsRaw: contact.tags.join(", "),
       });
+      setCustomFields(customFieldDrafts(contact));
     }
-  }, [open, contact, form]);
+    // O dialogo recebe atualizacoes realtime do contato enquanto esta aberto.
+    // Resetar pelo objeto inteiro apaga a tecla atual e parece interromper a
+    // digitacao. Um novo snapshot so entra ao abrir ou trocar de contato.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, contact.id, form]);
 
   async function onSubmit(values: FormShape) {
     setServerError(null);
@@ -150,7 +167,12 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => setCustomFields((items) => [...items, { key: "", value: "" }])}
+                onClick={() =>
+                  setCustomFields((items) => [
+                    ...items,
+                    { id: randomId(), key: "", value: "" },
+                  ])
+                }
               >
                 Adicionar campo
               </Button>
@@ -159,7 +181,7 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
               <p className="text-xs text-muted-foreground">Nenhum campo personalizado.</p>
             ) : (
               customFields.map((field, index) => (
-                <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                <div key={field.id} className="grid grid-cols-[1fr_1fr_auto] gap-2">
                   <Input
                     value={field.key}
                     onChange={(e) =>

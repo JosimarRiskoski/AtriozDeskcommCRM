@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
-  const authz = await requireRole("manager", { requestId, resource: "pipelines" });
+  const authz = await requireRole("agent", { requestId, resource: "pipelines" });
   if (!authz.ok) return authz.response;
 
   const supabase = await createClient();

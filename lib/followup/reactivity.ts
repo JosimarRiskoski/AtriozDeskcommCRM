@@ -196,8 +196,8 @@ async function reactToInbound(
         e,
         key,
         "reactivity_replied",
-        { reason: "cancel_on_reply" },
-        cancelPatch(clock, "replied", "cancel_on_reply"),
+        { reason: "Cliente respondeu" },
+        cancelPatch(clock, "replied", "Cliente respondeu"),
       );
       if (applied) reacted++;
       continue;

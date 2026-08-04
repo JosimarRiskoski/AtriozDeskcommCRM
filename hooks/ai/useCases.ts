@@ -6,7 +6,8 @@ import { apiClient } from "@/lib/api/client";
 export type CaseStatus = "awaiting_human" | "awaiting_lead" | "resolved" | "escalated" | "cancelled";
 
 /** 'guardrail_autofallback' = o caso foi aberto pelo sistema (spec 14) sem a IA pedir explicitamente. */
-export type CaseSource = "agent" | "guardrail_autofallback";
+export type CaseSource = "agent" | "guardrail_autofallback" | "manual";
+export type CaseUrgency = "low" | "normal" | "high" | "critical";
 
 /** Espelha o CHECK de agent_case_events.kind. */
 export type CaseEventKind =
@@ -34,6 +35,15 @@ export interface CaseListItem {
   conversation_id: string;
   contact_name: string | null;
   contact_phone: string | null;
+  assignee_user_id: string | null;
+  assignee_name: string | null;
+  urgency: CaseUrgency;
+  category: string;
+  reason_code: string;
+  first_response_due_at: string | null;
+  escalation_due_at: string | null;
+  agent_id: string | null;
+  agent_name: string | null;
 }
 
 export interface CaseListData {
@@ -61,18 +71,54 @@ export interface CaseDetailData {
   opened_at: string;
   closed_at: string | null;
   conversation_id: string;
+  contact_id: string | null;
+  lead_id: string | null;
+  agent_id: string | null;
+  assignee_user_id: string | null;
+  assignee_name: string | null;
+  urgency: CaseUrgency;
+  category: string;
+  reason_code: string;
+  first_response_due_at: string | null;
+  escalation_due_at: string | null;
+  escalated_at: string | null;
+  resolution_note: string | null;
+  activities: unknown[];
+  documents: unknown[];
   contact_name: string | null;
   contact_phone: string | null;
   events: CaseEvent[];
 }
 
 /** Lista de casos humanos (spec 15 §9). Polling 60s — casos nascem no worker. */
-export function useCases(status: "open" | "resolved" = "open") {
+export interface CaseFilters {
+  status: "open" | "awaiting_human" | "awaiting_lead" | "escalated" | "resolved";
+  assignee_user_id?: string;
+  urgency?: CaseUrgency;
+  agent_id?: string;
+  opened_for?: "all" | "overdue" | "24h" | "7d";
+}
+
+export function useCases(filters: CaseFilters = { status: "open" }) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
   return useQuery({
-    queryKey: ["ai-cases", status],
+    queryKey: ["ai-cases", filters],
     refetchInterval: 60_000,
     queryFn: () =>
-      apiClient.get<{ data: CaseListData }>(`/api/v1/ai/cases?status=${status}`).then((r) => r.data),
+      apiClient.get<{ data: CaseListData }>(`/api/v1/ai/cases?${params}`).then((r) => r.data),
+  });
+}
+
+export function useAssignCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, assignee_user_id, reason }: { id: string; assignee_user_id: string; reason: string }) =>
+      apiClient.patch(`/api/v1/ai/cases/${id}/assignment`, { assignee_user_id, reason }),
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: ["ai-case", vars.id] });
+      qc.invalidateQueries({ queryKey: ["ai-cases"] });
+    },
   });
 }
 

@@ -55,6 +55,8 @@ function members(): TeamMember[] {
       email: "admin@example.com",
       full_name: "Admin",
       last_sign_in_at: null,
+      can_receive_human_cases: true,
+      is_primary_human_case_responder: true,
     },
     {
       user_id: AGENT_ID,
@@ -66,6 +68,8 @@ function members(): TeamMember[] {
       email: "agente@example.com",
       full_name: "Agente",
       last_sign_in_at: null,
+      can_receive_human_cases: false,
+      is_primary_human_case_responder: false,
     },
   ];
 }

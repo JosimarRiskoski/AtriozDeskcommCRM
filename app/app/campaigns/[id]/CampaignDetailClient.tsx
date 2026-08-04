@@ -22,6 +22,13 @@ type Recipient = {
   attempts: number;
   last_error_code: string | null;
   last_error_message: string | null;
+  channel_session_id: string;
+  channel_sessions: {
+    id: string;
+    display_name: string | null;
+    phone_number: string | null;
+    status: string;
+  } | null;
 };
 
 type Detail = {
@@ -37,7 +44,12 @@ type Detail = {
     completed_at: string | null;
     audio_storage_path: string | null;
   };
-  session: { display_name: string | null; status: string } | null;
+  sessions: Array<{
+    id: string;
+    display_name: string | null;
+    phone_number: string | null;
+    status: string;
+  }>;
   recipients: Recipient[];
   summary: {
     total: number;
@@ -49,6 +61,12 @@ type Detail = {
     failed: number;
     finished: number;
     progress: number;
+  };
+  forecast: {
+    projected_start: string;
+    projected_end: string;
+    duration_seconds: number;
+    connection_counts: Record<string, number>;
   };
 };
 
@@ -82,6 +100,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/v1/campaigns/${campaignId}`, { cache: "no-store" });
@@ -125,6 +144,35 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     setBusy(false);
   }
 
+  async function reassign(recipient: Recipient) {
+    const target = reassignTargets[recipient.id];
+    if (!target) return toast.error("Escolha uma conexão ativa.");
+    const targetName =
+      detail?.sessions.find((session) => session.id === target)?.display_name ||
+      "a conexão escolhida";
+    if (
+      !window.confirm(
+        `Confirma mover este destinatário para ${targetName}? A troca ficará registrada no histórico.`,
+      )
+    )
+      return;
+    const reason = window.prompt("Informe o motivo da troca:", "Conexão original indisponível");
+    if (!reason?.trim()) return;
+    const response = await fetch(
+      `/api/v1/campaigns/${campaignId}/recipients/${recipient.id}/reassign`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ channel_session_id: target, confirmed: true, reason }),
+      },
+    );
+    const json = await response.json();
+    if (!response.ok)
+      return toast.error(json?.error?.message ?? "Não foi possível trocar a conexão.");
+    toast.success("Conexão trocada e registrada.");
+    await load();
+  }
+
   if (loading)
     return <div className="p-6 text-sm text-muted-foreground">Carregando acompanhamento…</div>;
   if (error || !detail)
@@ -132,7 +180,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
       <div className="p-6 text-sm text-destructive">{error ?? "Campanha não encontrada."}</div>
     );
 
-  const { campaign, summary, recipients, session } = detail;
+  const { campaign, summary, recipients, sessions, forecast } = detail;
   return (
     <div className="flex h-full flex-col gap-5 overflow-y-auto p-6">
       <header className="space-y-3">
@@ -203,13 +251,21 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
       <Card className="grid gap-4 p-5 text-sm md:grid-cols-2 xl:grid-cols-4">
         <div>
           <p className="text-xs text-muted-foreground">Conexão</p>
-          <p className="font-medium">
-            {session?.display_name || "WhatsApp"} · {session?.status || "—"}
-          </p>
+          <div className="space-y-1 font-medium">
+            {sessions.map((session) => (
+              <p key={session.id}>
+                {session.display_name || session.phone_number || "WhatsApp"} · {session.status} ·{" "}
+                {forecast.connection_counts[session.id] ?? 0} aguardando
+              </p>
+            ))}
+          </div>
         </div>
         <div>
           <p className="text-xs text-muted-foreground">Próximo envio</p>
           <p className="font-medium">{dateTime(campaign.next_dispatch_at)}</p>
+          <p className="text-xs text-muted-foreground">
+            Nova previsão de conclusão: {dateTime(forecast.projected_end)}
+          </p>
         </div>
         <div>
           <p className="text-xs text-muted-foreground">Cadência</p>
@@ -246,6 +302,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                 <th className="p-3">#</th>
                 <th className="p-3">Contato</th>
                 <th className="p-3">Status</th>
+                <th className="p-3">Conexão atribuída</th>
                 <th className="p-3">Texto</th>
                 <th className="p-3">Áudio</th>
                 <th className="p-3">Tentativas</th>
@@ -262,6 +319,11 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                       {recipient.phone_normalized}
                     </div>
                   </td>
+                  <td className="p-3 text-xs">
+                    {recipient.channel_sessions?.display_name ||
+                      recipient.channel_sessions?.phone_number ||
+                      "—"}
+                  </td>
                   <td className="p-3">
                     <Badge variant={recipientBadge(recipient.status)}>
                       {RECIPIENT_STATUS_LABELS[recipient.status] ?? recipient.status}
@@ -272,6 +334,41 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   <td className="p-3">{recipient.attempts}</td>
                   <td className="max-w-sm p-3 text-xs text-muted-foreground">
                     {recipient.last_error_message || "—"}
+                    {recipient.status === "pending" &&
+                      recipient.channel_sessions?.status !== "WORKING" && (
+                        <div className="mt-2 flex gap-2">
+                          <select
+                            className="rounded border bg-background p-1"
+                            value={reassignTargets[recipient.id] ?? ""}
+                            onChange={(event) =>
+                              setReassignTargets((current) => ({
+                                ...current,
+                                [recipient.id]: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Escolher conexão ativa</option>
+                            {sessions
+                              .filter(
+                                (session) =>
+                                  session.status === "WORKING" &&
+                                  session.id !== recipient.channel_session_id,
+                              )
+                              .map((session) => (
+                                <option key={session.id} value={session.id}>
+                                  {session.display_name || session.phone_number || session.id}
+                                </option>
+                              ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="rounded border px-2"
+                            onClick={() => void reassign(recipient)}
+                          >
+                            Trocar
+                          </button>
+                        </div>
+                      )}
                   </td>
                 </tr>
               ))}

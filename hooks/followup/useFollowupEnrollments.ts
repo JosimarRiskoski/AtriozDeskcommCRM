@@ -26,8 +26,9 @@ export function useStartFollowupEnrollment() {
       );
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["followup", "queue"] });
+      void queryClient.invalidateQueries({ queryKey: ["contact-followup", variables.contactId] });
       toast.success("Follow-up iniciado para este contato.", {
         description: "Ele já aparece na fila e seguirá os horários do fluxo publicado.",
       });

@@ -26,6 +26,11 @@ export interface Conversation {
   snooze_until: string | null;
   bot_silenced_until: string | null;
   ai_control_mode: "inherit" | "force_active" | "force_paused";
+  selected_agent_id: string | null;
+  agent_selection_mode: "inherit" | "manual";
+  agent_selection_reason: string | null;
+  agent_selected_at: string | null;
+  agent_selected_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 }

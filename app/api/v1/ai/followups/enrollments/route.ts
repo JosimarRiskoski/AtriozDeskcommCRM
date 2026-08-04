@@ -25,7 +25,14 @@ export const dynamic = "force-dynamic";
 
 const LIST_COLUMNS =
   "id, pointer_id, version_id, contact_id, status, current_node_id, next_eval_at, outcome, started_at, completed_at, updated_at";
-const ENROLLMENT_STATUSES = ["active", "waiting_reply", "paused_handoff", "completed", "cancelled", "dead"];
+const ENROLLMENT_STATUSES = [
+  "active",
+  "waiting_reply",
+  "paused_handoff",
+  "completed",
+  "cancelled",
+  "dead",
+];
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -84,17 +91,28 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (pointerErr) return fail("internal_error", pointerErr.message, 500, { requestId });
   if (!pointer) return fail("not_found", "Fluxo não encontrado.", 404, { requestId });
   if (pointer.status !== "active" || !pointer.active_version_id) {
-    return fail("flow_not_active", "Fluxo não está ativo (precisa estar publicado).", 422, { requestId });
+    return fail("flow_not_active", "Fluxo não está ativo (precisa estar publicado).", 422, {
+      requestId,
+    });
   }
 
   const { data: contact, error: contactErr } = await supabase
     .from("contacts")
-    .select("id")
+    .select("id,is_blocked,is_anonymized,phone_number")
     .eq("organization_id", activeOrg.orgId)
     .eq("id", contact_id)
     .maybeSingle();
   if (contactErr) return fail("internal_error", contactErr.message, 500, { requestId });
   if (!contact) return fail("not_found", "Contato não encontrado.", 404, { requestId });
+  if (contact.is_blocked || contact.is_anonymized)
+    return fail(
+      "contact_ineligible",
+      "Contato excluído, bloqueado ou anonimizado. O follow-up não pode ser iniciado.",
+      422,
+      { requestId },
+    );
+  if (!contact.phone_number)
+    return fail("contact_ineligible", "Contato sem telefone válido.", 422, { requestId });
 
   const { data: version, error: versionErr } = await supabase
     .from("followup_flow_versions")
@@ -103,7 +121,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     .eq("id", pointer.active_version_id)
     .maybeSingle();
   if (versionErr) return fail("internal_error", versionErr.message, 500, { requestId });
-  if (!version) return fail("internal_error", "Version ativa do fluxo não encontrada.", 500, { requestId });
+  if (!version)
+    return fail("internal_error", "Version ativa do fluxo não encontrada.", 500, { requestId });
 
   const graph = flowGraphSchema.parse(version.graph);
   const triggerNode = graph.nodes.find((n) => n.type === "trigger");
@@ -152,9 +171,16 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   if (insErr || !created) {
     if (insErr?.code === "23505") {
-      return fail("conflict", "Este contato já está em um follow-up ativo (1 por lead na organização).", 409, { requestId });
+      return fail(
+        "conflict",
+        "Este contato já está em um follow-up ativo (1 por lead na organização).",
+        409,
+        { requestId },
+      );
     }
-    return fail("internal_error", insErr?.message ?? "followup_enrollment_insert_failed", 500, { requestId });
+    return fail("internal_error", insErr?.message ?? "followup_enrollment_insert_failed", 500, {
+      requestId,
+    });
   }
 
   void audit({

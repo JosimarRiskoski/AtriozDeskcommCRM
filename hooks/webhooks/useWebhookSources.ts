@@ -9,13 +9,21 @@ export interface WebhookSourceRow {
   organization_id: string;
   name: string;
   source_code: string;
+  provider_type: "generic" | "3c" | "paid_traffic";
   require_external_id: boolean;
+  create_opportunity: boolean;
   path_token: string;
   is_active: boolean;
   kind: string;
   last_received_at: string | null;
-  default_pipeline_id: string;
-  default_stage_id: string;
+  default_pipeline_id: string | null;
+  default_stage_id: string | null;
+  default_channel_session_id: string | null;
+  default_agent_id: string | null;
+  activate_ai: boolean;
+  followup_flow_id: string | null;
+  automation_enabled: boolean;
+  pilot_approved_at: string | null;
   redirect_to: string | null;
   field_map: Record<string, unknown>;
   has_secret: boolean;
@@ -33,11 +41,19 @@ export interface WebhookSourceEvent {
 
 export interface CreateWebhookSourceInput {
   name: string;
+  provider_type?: "generic" | "3c" | "paid_traffic";
   source_code?: string;
   require_external_id?: boolean;
   secret?: string;
-  default_pipeline_id: string;
-  default_stage_id: string;
+  create_opportunity?: boolean;
+  default_pipeline_id?: string | null;
+  default_stage_id?: string | null;
+  default_channel_session_id?: string | null;
+  default_agent_id?: string | null;
+  activate_ai?: boolean;
+  followup_flow_id?: string | null;
+  automation_external_state_field?: string | null;
+  field_map?: Record<string, string[]>;
   redirect_to?: string | null;
 }
 

@@ -3,6 +3,9 @@
  * Sem I/O — puro, testável. A rota (webhooks/in/[token]) faz o resto.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { normalizePhoneBR } from "@/lib/phone/normalize";
+
+export { normalizePhoneBR } from "@/lib/phone/normalize";
 
 export interface FieldMap {
   name?: string[];
@@ -16,6 +19,17 @@ const DEFAULT_FIELD_MAP: Required<FieldMap> = {
   email: ["email", "e-mail", "mail"],
 };
 
+const SOURCE_TRACKING_FIELDS = new Set([
+  "campaign_id",
+  "campaign_name",
+  "ad_id",
+  "ad_name",
+  "adset_id",
+  "adset_name",
+  "form_id",
+  "platform",
+]);
+
 export interface MappedLead {
   name: string | null;
   phone: string | null;
@@ -24,25 +38,10 @@ export interface MappedLead {
   source_metadata: Record<string, string>;
 }
 
-/** Normaliza telefone BR para E.164. ponytail: heurística BR-only (público-alvo); internacional entra quando houver demanda. */
-export function normalizePhoneBR(raw: unknown): string | null {
-  if (typeof raw !== "string" || !raw.trim()) return null;
-  const digits = raw.replace(/\D/g, "");
-  if (raw.trim().startsWith("+")) {
-    return /^\d{8,15}$/.test(digits) ? `+${digits}` : null;
-  }
-  if (digits.length === 12 || digits.length === 13) {
-    // 55 + DDD + numero
-    return digits.startsWith("55") ? `+${digits}` : null;
-  }
-  if (digits.length === 10 || digits.length === 11) {
-    // DDD + numero (fixo ou celular)
-    return `+55${digits}`;
-  }
-  return null;
-}
-
-function firstMatch(payload: Record<string, unknown>, aliases: string[]): { key: string; value: string } | null {
+function firstMatch(
+  payload: Record<string, unknown>,
+  aliases: string[],
+): { key: string; value: string } | null {
   const lowered = new Map(Object.keys(payload).map((k) => [k.toLowerCase(), k]));
   for (const alias of aliases) {
     const key = lowered.get(alias.toLowerCase());
@@ -74,9 +73,14 @@ export function mapInboundPayload(
   for (const [key, value] of Object.entries(payload)) {
     if (consumed.has(key)) continue;
     const str =
-      typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : null;
+      typeof value === "string"
+        ? value
+        : typeof value === "number" || typeof value === "boolean"
+          ? String(value)
+          : null;
     if (str === null) continue; // objetos/arrays aninhados: descartados no v1
-    if (key.toLowerCase().startsWith("utm_")) source_metadata[key.toLowerCase()] = str;
+    if (key.toLowerCase().startsWith("utm_") || SOURCE_TRACKING_FIELDS.has(key.toLowerCase()))
+      source_metadata[key.toLowerCase()] = str;
     else custom_fields[key] = str;
   }
 
@@ -90,11 +94,21 @@ export function mapInboundPayload(
 }
 
 /** HMAC SHA-256 hex do raw body. Header: X-Deskcomm-Signature. */
-export function verifyInboundSignature(rawBody: string, header: string | null, secret: string): boolean {
+export function verifyInboundSignature(
+  rawBody: string,
+  header: string | null,
+  secret: string,
+): boolean {
   if (!header) return false;
   const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
   const a = Buffer.from(expected, "utf8");
   const b = Buffer.from(header, "utf8");
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
+}
+
+export function isExternalAutomationActive(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value !== "string") return false;
+  return ["1", "active", "running", "ativo", "executando"].includes(value.trim().toLowerCase());
 }

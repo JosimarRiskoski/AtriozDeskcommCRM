@@ -8,10 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
-import type {
-  ListConversationsQuery,
-  PatchConversationInput,
-} from "@/lib/schemas";
+import type { ListConversationsQuery, PatchConversationInput } from "@/lib/schemas";
 import type { Conversation } from "@/lib/types/messaging";
 
 type SB = SupabaseClient;
@@ -21,8 +18,10 @@ const SELECT_COLS = `
   status_changed_at, assigned_to_user_id, assignee_kind, assigned_at, last_inbound_at,
   last_outbound_at, last_message_at, last_message_preview,
   unread_count_for_assignee, is_group, group_chat_id, tags, metadata,
-  snooze_until, bot_silenced_until, ai_control_mode, created_at, updated_at,
-  contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked)
+  snooze_until, bot_silenced_until, ai_control_mode,
+  selected_agent_id, agent_selection_mode, agent_selection_reason,
+  agent_selected_at, agent_selected_by_user_id, created_at, updated_at,
+  contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, blocked_reason, blocked_at, consent, source, source_metadata)
 `;
 
 interface CursorPayload {
@@ -130,9 +129,7 @@ export async function listConversationsHandler(
     }
     const op = asc ? "gt" : "lt";
     if (c.sort) {
-      query = query.or(
-        `${sortCol}.${op}.${c.sort},and(${sortCol}.eq.${c.sort},id.${op}.${c.id})`,
-      );
+      query = query.or(`${sortCol}.${op}.${c.sort},and(${sortCol}.eq.${c.sort},id.${op}.${c.id})`);
     } else {
       // Página já na região de sort NULL (nulls last): pagina só por id.
       query = query.is(sortCol, null);

@@ -20,7 +20,7 @@ import { getWahaClient, wahaFriendlyError } from "@/lib/waha/client";
 export const dynamic = "force-dynamic";
 
 export const CHANNEL_COLUMNS =
-  "id, waha_session_name, display_name, phone_number, status, status_reason, last_health_check_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
+  "id, waha_session_name, display_name, phone_number, purpose, is_default, archived_at, status, status_reason, last_health_check_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
@@ -34,6 +34,7 @@ export async function GET(): Promise<Response> {
     .from("channel_sessions")
     .select(CHANNEL_COLUMNS)
     .eq("organization_id", activeOrg.orgId)
+    .is("archived_at", null)
     .order("created_at", { ascending: true });
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
@@ -42,7 +43,10 @@ export async function GET(): Promise<Response> {
     .select("channel_session_id,last_inbound_at,last_outbound_at")
     .eq("organization_id", activeOrg.orgId);
 
-  const activity = new Map<string, { last_inbound_at: string | null; last_outbound_at: string | null }>();
+  const activity = new Map<
+    string,
+    { last_inbound_at: string | null; last_outbound_at: string | null }
+  >();
   for (const conversation of conversations ?? []) {
     const current = activity.get(conversation.channel_session_id) ?? {
       last_inbound_at: null,
@@ -108,6 +112,13 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const supabase = await createClient();
+  if (parsed.data.is_default) {
+    await supabase
+      .from("channel_sessions")
+      .update({ is_default: false })
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_default", true);
+  }
   // Nome de sessão único por canal — o hardcode `org_<8>` era 1 número por org.
   const sessionName = `org_${activeOrg.orgId.slice(0, 8)}_${randomUUID().replace(/-/g, "").slice(0, 6)}`;
 
@@ -116,7 +127,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     .insert({
       organization_id: activeOrg.orgId,
       waha_session_name: sessionName,
-      display_name: parsed.data.display_name ?? null,
+      display_name: parsed.data.display_name,
+      purpose: parsed.data.purpose ?? null,
+      is_default: parsed.data.is_default,
       engine: "NOWEB",
       webhook_path_token: randomUUID().replace(/-/g, ""),
       webhook_secret_encrypted: Buffer.from([0]),
@@ -129,7 +142,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     .select(CHANNEL_COLUMNS)
     .single();
   if (insErr || !created) {
-    return fail("internal_error", insErr?.message ?? "channel_session_insert_failed", 500, { requestId });
+    return fail("internal_error", insErr?.message ?? "channel_session_insert_failed", 500, {
+      requestId,
+    });
   }
 
   try {

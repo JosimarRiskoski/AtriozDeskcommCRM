@@ -16,7 +16,7 @@ export default async function CasesPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Casos</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Casos humanos</h1>
         <p className="text-sm text-muted-foreground">
           Quando a IA trava em algo que só um humano resolve, ela abre um caso aqui — e
           continua conversando com o cliente enquanto espera sua resposta.

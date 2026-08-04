@@ -9,6 +9,7 @@ import { NextActionSlot } from "./NextActionSlot";
 import { ReactivationSlot } from "./ReactivationSlot";
 import { ScoreSlot } from "./ScoreSlot";
 import { OwnerBadge } from "./OwnerBadge";
+import { contactSourceLabel } from "@/lib/contacts/source-labels";
 
 interface KanbanCardProps {
   /** O que o card mostra — explicitamente NÃO é a linha do banco. */
@@ -100,7 +101,7 @@ export function KanbanCard({
             "group relative overflow-hidden rounded-md border border-border bg-surface",
             "py-2.5 pl-3 pr-3 shadow-xs transition-colors",
             "hover:border-border-strong",
-            snapshot.isDragging && "rotate-1 shadow-md ring-1 ring-accent/40",
+            snapshot.isDragging && "ring-accent/40 rotate-1 shadow-md ring-1",
             isSelected && "ring-2 ring-accent",
           )}
         >
@@ -166,14 +167,34 @@ export function KanbanCard({
           </div>
 
           {/* ② valor — altura reservada mesmo sem valor, senão o card encolhe. */}
-          <p
+          <div
             className={cn(
-              "mt-1 h-5 text-xs font-medium leading-5 tabular-nums",
+              "mt-1 flex h-5 items-center justify-between gap-2 text-xs font-medium tabular-nums leading-5",
               value ? "text-text" : "text-text-muted",
             )}
           >
-            {value ?? "—"}
-          </p>
+            <span title={`${card.valueLabel ?? "Valor previsto"}: ${value ?? "não informado"}`}>
+              {value ?? "—"}
+            </span>
+            <span className="flex min-w-0 items-center gap-1">
+              {card.followup ? (
+                <span
+                  className="bg-primary/10 shrink-0 rounded px-1.5 text-[10px] font-normal text-primary"
+                  title={`${card.followup.flow_name} · próxima ação: ${card.followup.next_eval_at ? new Date(card.followup.next_eval_at).toLocaleString("pt-BR") : "aguardando condição"}`}
+                >
+                  Follow-up
+                </span>
+              ) : null}
+              {card.source ? (
+                <span
+                  className="max-w-28 truncate rounded bg-muted px-1.5 text-[10px] font-normal text-muted-foreground"
+                  title={`Origem: ${contactSourceLabel(card.source)}`}
+                >
+                  {contactSourceLabel(card.source)}
+                </span>
+              ) : null}
+            </span>
+          </div>
 
           {/* ③ a linha do agente — um slot, três estados, nunca três blocos. */}
           <div className="mt-1.5 flex h-6 items-center gap-2 text-xs">

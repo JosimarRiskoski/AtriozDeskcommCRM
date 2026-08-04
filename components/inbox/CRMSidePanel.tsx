@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Card } from "@/components/ui/card";
@@ -14,6 +15,14 @@ import type { ConversationWithContact } from "@/hooks/inbox/useConversationsReal
 import { activityLabel, actorLabel, actorShape } from "@/lib/leads/activity-vocabulary";
 import { ConversationTagsEditor } from "./ConversationTagsEditor";
 import { cn } from "@/lib/utils";
+import { StartFollowupCard } from "@/components/contacts/StartFollowupCard";
+import { CreateHumanCaseDialog } from "@/components/inbox/CreateHumanCaseDialog";
+import { AIConversationContextCard } from "@/components/inbox/AIConversationContextCard";
+import { OpenHumanCaseCard } from "@/components/inbox/OpenHumanCaseCard";
+import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
+import { useConversationNotes } from "@/hooks/inbox/useConversationNotes";
+import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
+import { contactSourceLabel } from "@/lib/contacts/source-labels";
 
 interface Props {
   conversation: ConversationWithContact | null;
@@ -26,6 +35,14 @@ interface LeadRow {
   value_cents: number | null;
   currency: string | null;
   updated_at: string;
+  assigned_to_user_id: string | null;
+  crm_stages: { name: string } | null;
+}
+
+interface SourceEvent {
+  id: string;
+  source: string;
+  occurred_at: string;
 }
 
 interface OrderRow {
@@ -52,9 +69,7 @@ function formatMoney(cents: number | null, currency: string | null): string {
   if (cents == null) return "—";
   const cur = currency ?? "BRL";
   try {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: cur }).format(
-      cents / 100,
-    );
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: cur }).format(cents / 100);
   } catch {
     return `${(cents / 100).toFixed(2)} ${cur}`;
   }
@@ -112,6 +127,16 @@ export function CRMSidePanel({ conversation }: Props) {
    */
   const [erro, setErro] = useState(false);
   const [tentativa, setTentativa] = useState(0);
+  const [caseDialogOpen, setCaseDialogOpen] = useState(false);
+  const channels = useChannelSessions();
+  const notes = useConversationNotes(conversation?.id ?? null);
+  const members = useAssignableMembers(true);
+  const origins = useQuery({
+    queryKey: ["contact-origins", contactId, "inbox"],
+    enabled: !!contactId,
+    queryFn: async () =>
+      (await apiClient.get<{ data: SourceEvent[] }>(`/api/v1/contacts/${contactId}/origins`)).data,
+  });
 
   useEffect(() => {
     if (!contactId) {
@@ -157,10 +182,11 @@ export function CRMSidePanel({ conversation }: Props) {
 
   const tags = contact?.tags ?? [];
   const displayName =
-    contact?.display_name?.trim() ||
-    contact?.name?.trim() ||
-    contact?.phone_number ||
-    "—";
+    contact?.display_name?.trim() || contact?.name?.trim() || contact?.phone_number || "—";
+  const channel = channels.data?.find((item) => item.id === conversation?.channel_session_id);
+  const incomplete = contact?.source_metadata?.cadastro_incompleto === true;
+  const consentStatus =
+    typeof contact?.consent?.status === "string" ? contact.consent.status : "não informado";
 
   // `erro` PRIMEIRO, e não é detalhe: as três listas voltam a `null` quando a
   // leitura falha, e este derivado lê `null` como "ainda não chegou". Sem esta
@@ -182,14 +208,54 @@ export function CRMSidePanel({ conversation }: Props) {
 
   return (
     <aside className="flex h-full flex-col gap-4 overflow-y-auto border-l border-border bg-background p-4">
-      <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Contato
-        </h3>
+      <details open>
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Contato e canal
+        </summary>
         <Card className="mt-2 space-y-2 p-3 text-sm">
           <div className="font-medium">{displayName}</div>
           {contact?.phone_number && (
             <div className="text-xs text-muted-foreground">{contact.phone_number}</div>
+          )}
+          {contact?.source && (
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground">Origem</span>
+              <Badge variant="outline" className="max-w-[11rem] truncate">
+                {contact.source}
+              </Badge>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-muted-foreground">Cadastro</span>
+            <Badge variant={incomplete ? "warning" : "success"}>
+              {incomplete ? "Incompleto" : "Identificado"}
+            </Badge>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-muted-foreground">Conexão da conversa</span>
+            <span className="text-right">
+              {channel?.display_name || channel?.phone_number || "Não identificada"}
+              {channel?.phone_number ? ` · ${channel.phone_number.slice(-4)}` : ""}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-muted-foreground">Consentimento</span>
+            <span>{consentStatus}</span>
+          </div>
+          {contact?.is_blocked && (
+            <div className="rounded-md border border-warning bg-warning-bg p-2 text-xs text-warning-fg">
+              <div className="font-medium">Envios bloqueados no CRM</div>
+              <div>
+                {contact.blocked_reason === "stop_keyword"
+                  ? "O sistema identificou um pedido para interromper mensagens."
+                  : contact.blocked_reason || "Motivo não informado."}
+              </div>
+              {contact.blocked_at && (
+                <div className="mt-1 text-[11px]">
+                  Desde {new Date(contact.blocked_at).toLocaleString("pt-BR")}
+                </div>
+              )}
+            </div>
           )}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
@@ -210,22 +276,95 @@ export function CRMSidePanel({ conversation }: Props) {
             {contactId && (
               <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
                 <Link href={`/app/contacts/${contactId}`}>
-                  Ver contato
+                  Abrir contato completo
                   <ArrowRight size={12} className="ml-1" weight="regular" aria-hidden />
                 </Link>
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              onClick={() => setCaseDialogOpen(true)}
+            >
+              Criar caso humano
+            </Button>
+            <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
+              <Link href="/app/ai/cases">Ver casos abertos</Link>
+            </Button>
           </div>
         </Card>
-      </section>
+      </details>
+
+      <details>
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Histórico de origens
+        </summary>
+        <Card className="mt-2 space-y-2 p-3 text-xs">
+          {origins.isLoading ? <p className="text-muted-foreground">Carregando…</p> : null}
+          {(origins.data ?? []).length === 0 && !origins.isLoading ? (
+            <p className="text-muted-foreground">Nenhuma origem registrada.</p>
+          ) : null}
+          {(origins.data ?? [])
+            .slice(-5)
+            .reverse()
+            .map((event) => (
+              <div
+                key={event.id}
+                className="flex items-center justify-between gap-2 border-b py-1 last:border-0"
+              >
+                <span>{contactSourceLabel(event.source)}</span>
+                <time className="text-muted-foreground">
+                  {new Date(event.occurred_at).toLocaleDateString("pt-BR")}
+                </time>
+              </div>
+            ))}
+        </Card>
+      </details>
+
+      <details>
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Observações internas ({notes.length})
+        </summary>
+        <Card className="mt-2 space-y-2 p-3 text-xs">
+          {notes.length ? (
+            notes
+              .slice(-3)
+              .reverse()
+              .map((note) => (
+                <p key={note.id} className="whitespace-pre-wrap border-b pb-2 last:border-0">
+                  {note.body}
+                </p>
+              ))
+          ) : (
+            <p className="text-muted-foreground">Nenhuma observação interna.</p>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            Visível somente à equipe; não é enviada automaticamente à IA.
+          </p>
+        </Card>
+      </details>
+
+      <OpenHumanCaseCard conversationId={conversation.id} />
 
       <Separator />
+
+      {contactId && (
+        <>
+          <StartFollowupCard contactId={contactId} compact />
+          <Separator />
+        </>
+      )}
 
       <ConversationTagsEditor
         conversationId={conversation.id}
         orgId={conversation.organization_id}
         tags={conversation.tags ?? []}
       />
+
+      <Separator />
+
+      <AIConversationContextCard conversationId={conversation.id} />
 
       <Separator />
 
@@ -245,14 +384,21 @@ export function CRMSidePanel({ conversation }: Props) {
                 <div className="min-w-0">
                   <div className="truncate font-medium">{l.title}</div>
                   <div className="text-muted-foreground">
-                    {l.status} · {formatMoney(l.value_cents, l.currency)}
+                    {l.crm_stages?.name || l.status} · {formatMoney(l.value_cents, l.currency)}
+                    {l.assigned_to_user_id
+                      ? ` · ${members.data?.find((member) => member.user_id === l.assigned_to_user_id)?.full_name || "Responsável definido"}`
+                      : " · Sem responsável"}
                   </div>
                 </div>
               </li>
             ))}
           </ul>
         ) : (
-          <SemLista vazio="Sem leads." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
+          <SemLista
+            vazio="Sem leads."
+            erro={erro}
+            onTentarDeNovo={() => setTentativa((n) => n + 1)}
+          />
         )}
       </section>
 
@@ -284,7 +430,11 @@ export function CRMSidePanel({ conversation }: Props) {
             ))}
           </ul>
         ) : (
-          <SemLista vazio="Sem pedidos." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
+          <SemLista
+            vazio="Sem pedidos."
+            erro={erro}
+            onTentarDeNovo={() => setTentativa((n) => n + 1)}
+          />
         )}
       </section>
 
@@ -317,7 +467,9 @@ export function CRMSidePanel({ conversation }: Props) {
                   />
                   {activityLabel(a.type)}
                 </div>
-                {a.reason && <div className="mt-0.5 truncate text-muted-foreground">{a.reason}</div>}
+                {a.reason && (
+                  <div className="mt-0.5 truncate text-muted-foreground">{a.reason}</div>
+                )}
                 <div className="text-muted-foreground">
                   {actorLabel(a.actor_kind)} · {shortDate(a.performed_at)}
                 </div>
@@ -325,9 +477,19 @@ export function CRMSidePanel({ conversation }: Props) {
             ))}
           </ul>
         ) : (
-          <SemLista vazio="Sem atividade." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
+          <SemLista
+            vazio="Sem atividade."
+            erro={erro}
+            onTentarDeNovo={() => setTentativa((n) => n + 1)}
+          />
         )}
       </section>
+      <CreateHumanCaseDialog
+        conversationId={conversation.id}
+        contactName={displayName}
+        open={caseDialogOpen}
+        onOpenChange={setCaseDialogOpen}
+      />
     </aside>
   );
 }

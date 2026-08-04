@@ -4,11 +4,7 @@ import { PipelinePageClient } from "./_client";
 
 export const dynamic = "force-dynamic";
 
-export default async function PipelinePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function PipelinePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: pipeline } = await supabase
@@ -17,5 +13,12 @@ export default async function PipelinePage({
     .eq("id", id)
     .maybeSingle();
   if (!pipeline) notFound();
-  return <PipelinePageClient pipelineId={id} initialName={pipeline.name} />;
+  const { data: pipelines } = await supabase
+    .from("crm_pipelines")
+    .select("id,name,is_default")
+    .eq("is_archived", false)
+    .order("position");
+  return (
+    <PipelinePageClient pipelineId={id} initialName={pipeline.name} pipelines={pipelines ?? []} />
+  );
 }

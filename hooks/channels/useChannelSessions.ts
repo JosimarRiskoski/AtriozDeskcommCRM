@@ -8,6 +8,9 @@ export interface ChannelSession {
   waha_session_name: string;
   display_name: string | null;
   phone_number: string | null;
+  purpose: string | null;
+  is_default: boolean;
+  archived_at: string | null;
   status: string;
   status_reason: string | null;
   last_health_check_at: string | null;
@@ -45,6 +48,7 @@ export function useChannelSessions(opts?: { refetchInterval?: number; enabled?: 
 export function deriveOverallHealth(sessions: ChannelSession[] | undefined): ConnectionHealth {
   if (!sessions || sessions.length === 0) return "none";
   if (sessions.some((s) => s.status === "FAILED" || s.status === "STOPPED")) return "down";
-  if (sessions.some((s) => s.status === "STARTING" || s.status === "SCAN_QR_CODE")) return "connecting";
+  if (sessions.some((s) => s.status === "STARTING" || s.status === "SCAN_QR_CODE"))
+    return "connecting";
   return "connected";
 }

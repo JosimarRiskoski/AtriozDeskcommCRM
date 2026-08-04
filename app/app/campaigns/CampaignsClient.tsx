@@ -6,7 +6,13 @@ import { toast } from "sonner";
 
 type Stage = { id: string; name: string; position: number };
 type Pipeline = { id: string; name: string; crm_stages: Stage[] };
-type Session = { id: string; display_name: string | null; status: string };
+type Session = {
+  id: string;
+  display_name: string | null;
+  phone_number: string | null;
+  status: string;
+  daily_message_limit: number;
+};
 type Campaign = {
   id: string;
   name: string;
@@ -22,6 +28,16 @@ type Preview = {
   name: string | null;
   status: string;
   reason: string | null;
+  whatsapp_status?: "confirmed" | "not_found" | "unverified" | null;
+};
+type PreviewSummary = {
+  eligible: number;
+  excluded_by_capacity: number;
+  connection_counts: Record<string, number>;
+  projected_start: string;
+  projected_end: string;
+  duration_seconds: number;
+  business_window: string;
 };
 
 const field = "rounded-md border border-border bg-background px-3 py-2 text-sm";
@@ -41,8 +57,18 @@ export function CampaignsClient({
   const [sheetRange, setSheetRange] = useState("A:Z");
   const [audio, setAudio] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview[]>([]);
+  const [previewSummary, setPreviewSummary] = useState<PreviewSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [pipelineId, setPipelineId] = useState(pipelines[0]?.id ?? "");
+  const firstWorkingSession = sessions.find((item) => item.status === "WORKING")?.id ?? "";
+  const [sessionIds, setSessionIds] = useState<string[]>(
+    firstWorkingSession ? [firstWorkingSession] : [],
+  );
+  const [divideConnections, setDivideConnections] = useState(false);
+  const [createOpportunity, setCreateOpportunity] = useState(true);
+  const [intervalSeconds, setIntervalSeconds] = useState(300);
+  const [businessStart, setBusinessStart] = useState("08:00");
+  const [businessEnd, setBusinessEnd] = useState("18:00");
   const stages = useMemo(
     () =>
       pipelines
@@ -74,20 +100,31 @@ export function CampaignsClient({
       body.set("spreadsheet", spreadsheet);
       body.set("range", sheetRange);
     }
+    body.set("channel_session_ids", JSON.stringify(sessionIds));
+    body.set("distribution_mode", divideConnections ? "balanced" : "single");
+    body.set("interval_seconds", String(intervalSeconds));
+    body.set("business_hour_start", businessStart);
+    body.set("business_hour_end", businessEnd);
     const res = await fetch("/api/v1/campaigns/preview", { method: "POST", body });
     const json = await res.json();
     if (!res.ok) return toast.error(json?.error?.message ?? "Não foi possível validar o CSV.");
     setPreview(json.data?.rows ?? []);
+    setPreviewSummary(json.data?.summary ?? null);
   }
 
   async function create(form: FormData) {
     if (
       (source === "csv" && !file) ||
       (source === "google_sheets" && !spreadsheet.trim()) ||
-      !pipelineId ||
-      !stageId
+      sessionIds.length === 0 ||
+      (divideConnections && sessionIds.length < 2) ||
+      (createOpportunity && (!pipelineId || !stageId))
     ) {
-      toast.error("Informe a lista, o pipeline e a etapa.");
+      toast.error(
+        divideConnections && sessionIds.length < 2
+          ? "Para dividir os contatos, selecione ao menos duas conexões ativas."
+          : "Informe a lista, uma conexão e, se criar oportunidade, o pipeline e a etapa.",
+      );
       return;
     }
     setBusy(true);
@@ -103,13 +140,17 @@ export function CampaignsClient({
         "config",
         JSON.stringify({
           name: form.get("name"),
-          channel_session_id: form.get("session"),
-          pipeline_id: pipelineId,
-          stage_id: stageId,
+          channel_session_id: sessionIds[0],
+          channel_session_ids: sessionIds,
+          distribution_mode: divideConnections ? "balanced" : "single",
+          pipeline_id: createOpportunity ? pipelineId : null,
+          stage_id: createOpportunity ? stageId : null,
           text_template: form.get("text"),
-          interval_seconds: 300,
+          interval_seconds: intervalSeconds,
+          business_hour_start: businessStart,
+          business_hour_end: businessEnd,
           delay_before_audio_seconds: 2,
-          create_lead_before_send: true,
+          create_lead_before_send: createOpportunity,
           ai_mode: form.get("ai_mode"),
         }),
       );
@@ -125,6 +166,7 @@ export function CampaignsClient({
       }
       toast.success("Rascunho criado. Revise e clique em Iniciar.");
       setPreview([]);
+      setPreviewSummary(null);
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao criar campanha.");
@@ -148,7 +190,10 @@ export function CampaignsClient({
     }
   }
 
-  const eligible = preview.filter((r) => r.status === "eligible").length;
+  const confirmed = preview.filter(
+    (row) => row.status === "eligible" && row.whatsapp_status === "confirmed",
+  ).length;
+  const eligible = previewSummary?.eligible ?? confirmed;
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
       <header>
@@ -163,40 +208,135 @@ export function CampaignsClient({
           Nome da campanha
           <input name="name" required maxLength={120} className={field} />
         </label>
-        <label className="grid gap-1 text-sm">
-          Conexão WhatsApp
-          <select name="session" required className={field}>
-            {sessions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.display_name || s.id} — {s.status}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm">
-          Pipeline
-          <select
-            value={pipelineId}
-            onChange={(e) => setPipelineId(e.target.value)}
-            className={field}
-          >
-            {pipelines.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm">
-          Etapa inicial
-          <select value={stageId} onChange={(e) => setStageId(e.target.value)} className={field}>
-            {stages.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <fieldset className="grid gap-2 rounded-md border p-3 text-sm">
+          <legend className="px-1 font-medium">Conexões WhatsApp autorizadas</legend>
+          {sessions.map((session) => {
+            const healthy = session.status === "WORKING";
+            return (
+              <label key={session.id} className="flex items-start gap-2">
+                <input
+                  type={divideConnections ? "checkbox" : "radio"}
+                  name="campaign-session"
+                  checked={sessionIds.includes(session.id)}
+                  disabled={!healthy}
+                  onChange={(event) => {
+                    setSessionIds((current) =>
+                      divideConnections
+                        ? event.target.checked
+                          ? [...new Set([...current, session.id])]
+                          : current.filter((id) => id !== session.id)
+                        : [session.id],
+                    );
+                    setPreview([]);
+                    setPreviewSummary(null);
+                  }}
+                />
+                <span>
+                  <b>{session.display_name || session.phone_number || session.id}</b>
+                  <small className="block text-muted-foreground">
+                    {session.phone_number || "Número não informado"} ·{" "}
+                    {healthy ? "Ativa" : session.status} · limite {session.daily_message_limit}/dia
+                  </small>
+                </span>
+              </label>
+            );
+          })}
+          <label className="flex items-center gap-2 border-t pt-2">
+            <input
+              type="checkbox"
+              checked={divideConnections}
+              onChange={(event) => {
+                setDivideConnections(event.target.checked);
+                setSessionIds((current) => (event.target.checked ? current : current.slice(0, 1)));
+                setPreview([]);
+                setPreviewSummary(null);
+              }}
+            />
+            Dividir os contatos entre os números selecionados
+          </label>
+        </fieldset>
+        <div className="grid gap-3 rounded-md border p-3 text-sm">
+          <label className="flex items-center gap-2 font-medium">
+            <input
+              type="checkbox"
+              checked={createOpportunity}
+              onChange={(event) => setCreateOpportunity(event.target.checked)}
+            />
+            Criar oportunidade no Kanban
+          </label>
+          {createOpportunity && (
+            <>
+              <label className="grid gap-1 text-sm">
+                Pipeline
+                <select
+                  value={pipelineId}
+                  onChange={(e) => setPipelineId(e.target.value)}
+                  className={field}
+                >
+                  {pipelines.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm">
+                Etapa inicial
+                <select
+                  value={stageId}
+                  onChange={(e) => setStageId(e.target.value)}
+                  className={field}
+                >
+                  {stages.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-3 rounded-md border p-3 text-sm lg:col-span-2">
+          <label className="grid gap-1">
+            Intervalo (segundos)
+            <input
+              type="number"
+              min={60}
+              max={86400}
+              value={intervalSeconds}
+              onChange={(event) => {
+                setIntervalSeconds(Number(event.target.value));
+                setPreviewSummary(null);
+              }}
+              className={field}
+            />
+          </label>
+          <label className="grid gap-1">
+            Início dos envios
+            <input
+              type="time"
+              value={businessStart}
+              onChange={(event) => {
+                setBusinessStart(event.target.value);
+                setPreviewSummary(null);
+              }}
+              className={field}
+            />
+          </label>
+          <label className="grid gap-1">
+            Fim dos envios
+            <input
+              type="time"
+              value={businessEnd}
+              onChange={(event) => {
+                setBusinessEnd(event.target.value);
+                setPreviewSummary(null);
+              }}
+              className={field}
+            />
+          </label>
+        </div>
         <label className="grid gap-1 text-sm lg:col-span-2">
           Mensagem
           <textarea
@@ -304,14 +444,91 @@ export function CampaignsClient({
         </div>
         {preview.length > 0 && (
           <div className="rounded-md border p-3 text-sm lg:col-span-2">
-            <b>{eligible} elegíveis</b> · {preview.length - eligible} bloqueados pela validação.
+            {previewSummary && (
+              <div className="mb-3 grid gap-2 rounded-md bg-muted p-3 sm:grid-cols-2 lg:grid-cols-4">
+                <span>
+                  <b>{previewSummary.eligible}</b> elegíveis após capacidade
+                </span>
+                <span>
+                  <b>{Math.ceil(previewSummary.duration_seconds / 60)} min</b> de duração prevista
+                </span>
+                <span>
+                  Início: <b>{new Date(previewSummary.projected_start).toLocaleString("pt-BR")}</b>
+                </span>
+                <span>
+                  Conclusão: <b>{new Date(previewSummary.projected_end).toLocaleString("pt-BR")}</b>
+                </span>
+                {Object.entries(previewSummary.connection_counts).map(([id, count]) => (
+                  <span key={id}>
+                    <b>{count}</b> por{" "}
+                    {sessions.find((session) => session.id === id)?.display_name || id}
+                  </span>
+                ))}
+                <span>
+                  Janela: <b>{previewSummary.business_window}</b>
+                </span>
+              </div>
+            )}
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              <span>
+                <b>{preview.length}</b> contatos importados
+              </span>
+              <span>
+                <b>{eligible}</b> elegíveis
+              </span>
+              <span>
+                <b>{preview.filter((row) => row.status === "duplicate").length}</b> duplicados
+              </span>
+              <span>
+                <b>{preview.filter((row) => row.status === "missing_consent").length}</b> sem
+                consentimento
+              </span>
+              <span>
+                <b>{preview.filter((row) => row.status === "invalid_phone").length}</b> telefones
+                inválidos
+              </span>
+              <span>
+                <b>{preview.filter((row) => row.status === "blocked").length}</b> excluídos
+              </span>
+              <span>
+                <b>{preview.filter((row) => row.whatsapp_status === "confirmed").length}</b>{" "}
+                WhatsApp confirmado
+              </span>
+              <span>
+                <b>{preview.filter((row) => row.whatsapp_status === "not_found").length}</b> não
+                encontrados
+              </span>
+              <span>
+                <b>{preview.filter((row) => row.whatsapp_status === "unverified").length}</b> não
+                foi possível verificar
+              </span>
+            </div>
             <div className="mt-2 max-h-40 overflow-auto text-xs">
               {preview.slice(0, 100).map((r) => (
                 <div key={r.row} className="grid grid-cols-4 gap-2 border-t py-1">
                   <span>{r.row}</span>
                   <span>{r.name || "—"}</span>
                   <span>{r.phone_normalized || r.phone_raw}</span>
-                  <span>{r.status}</span>
+                  <span>
+                    {
+                      {
+                        eligible: "Elegível",
+                        duplicate: "Duplicado",
+                        missing_consent: "Sem consentimento",
+                        invalid_phone: "Telefone inválido",
+                        blocked: "Excluído — bloqueio total",
+                      }[r.status]
+                    }
+                    {r.whatsapp_status
+                      ? ` · ${
+                          {
+                            confirmed: "Confirmado",
+                            not_found: "Não encontrado",
+                            unverified: "Não foi possível verificar",
+                          }[r.whatsapp_status]
+                        }`
+                      : ""}
+                  </span>
                 </div>
               ))}
             </div>

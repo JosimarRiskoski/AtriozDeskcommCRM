@@ -39,6 +39,7 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   pipelineId: string;
   stages: Stage[];
+  valueLabel?: string;
 }
 
 function defaultStageId(stages: Stage[]): string {
@@ -46,7 +47,13 @@ function defaultStageId(stages: Stage[]): string {
   return open?.id ?? stages[0]?.id ?? "";
 }
 
-export function NewLeadDialog({ open, onOpenChange, pipelineId, stages }: Props) {
+export function NewLeadDialog({
+  open,
+  onOpenChange,
+  pipelineId,
+  stages,
+  valueLabel = "Valor previsto",
+}: Props) {
   const create = useCreateLead(pipelineId);
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
 
@@ -129,9 +136,7 @@ export function NewLeadDialog({ open, onOpenChange, pipelineId, stages }: Props)
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Novo Lead</DialogTitle>
-          <DialogDescription>
-            Crie um lead manualmente neste pipeline.
-          </DialogDescription>
+          <DialogDescription>Crie um lead manualmente neste pipeline.</DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
@@ -155,10 +160,7 @@ export function NewLeadDialog({ open, onOpenChange, pipelineId, stages }: Props)
 
           <div className="space-y-2">
             <Label>Etapa</Label>
-            <Select
-              value={stageId}
-              onValueChange={(v) => form.setValue("stage_id", v)}
-            >
+            <Select value={stageId} onValueChange={(v) => form.setValue("stage_id", v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione a etapa" />
               </SelectTrigger>
@@ -176,7 +178,7 @@ export function NewLeadDialog({ open, onOpenChange, pipelineId, stages }: Props)
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="valueReais">Valor (R$)</Label>
+              <Label htmlFor="valueReais">{valueLabel} (R$)</Label>
               <Input
                 id="valueReais"
                 inputMode="decimal"
@@ -184,9 +186,7 @@ export function NewLeadDialog({ open, onOpenChange, pipelineId, stages }: Props)
                 {...form.register("valueReais")}
               />
               {form.formState.errors.valueReais && (
-                <p className="text-xs text-error-fg">
-                  {form.formState.errors.valueReais.message}
-                </p>
+                <p className="text-xs text-error-fg">{form.formState.errors.valueReais.message}</p>
               )}
             </div>
             <div className="space-y-2">
@@ -201,11 +201,7 @@ export function NewLeadDialog({ open, onOpenChange, pipelineId, stages }: Props)
 
           <div className="space-y-2">
             <Label htmlFor="tagsRaw">Tags (separadas por vírgula)</Label>
-            <Input
-              id="tagsRaw"
-              placeholder="vip, recompra"
-              {...form.register("tagsRaw")}
-            />
+            <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
           </div>
 
           <DialogFooter>

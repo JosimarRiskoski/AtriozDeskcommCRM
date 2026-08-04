@@ -85,7 +85,19 @@ function actorLabel(row: {
   acting_as_platform_admin: boolean;
   actor_user_id: string | null;
   actor_api_token_id: string | null;
+  actor?: { type: string; name: string };
 }): string {
+  if (row.actor) {
+    const type =
+      {
+        usuario: "Usuário",
+        sistema: "Sistema",
+        ia: "IA",
+        webhook: "Webhook",
+        integracao: "Integração",
+      }[row.actor.type] ?? row.actor.type;
+    return `${type}: ${row.actor.name}`;
+  }
   if (row.acting_as_platform_admin) return "Administrador da plataforma";
   if (row.actor_user_id) return "Pessoa da equipe";
   if (row.actor_api_token_id) return "Integração autorizada";
@@ -197,19 +209,21 @@ export function AuditClient() {
                   </TableCell>
                   <TableCell className="text-xs">{actorLabel(r)}</TableCell>
                   <TableCell className="text-sm font-medium">{actionLabel(r.action)}</TableCell>
-                  <TableCell className="text-xs">
-                    {resourceLabel(r.resource_type)}
-                  </TableCell>
+                  <TableCell className="text-xs">{resourceLabel(r.resource_type)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     <details>
                       <summary className="cursor-pointer select-none hover:text-foreground">
                         Ver detalhes técnicos
                       </summary>
-                      <div className="mt-2 max-w-md space-y-1 rounded-md bg-muted p-2 font-mono text-[10px] break-all">
+                      <div className="mt-2 max-w-md space-y-1 break-all rounded-md bg-muted p-2 font-mono text-[10px]">
                         <p>Ação: {r.action}</p>
                         {r.resource_id ? <p>ID do item: {r.resource_id}</p> : null}
                         {r.request_id ? <p>ID de rastreamento: {r.request_id}</p> : null}
-                        {r.metadata ? <pre className="whitespace-pre-wrap">{JSON.stringify(r.metadata, null, 2)}</pre> : null}
+                        {r.metadata ? (
+                          <pre className="whitespace-pre-wrap">
+                            {JSON.stringify(r.metadata, null, 2)}
+                          </pre>
+                        ) : null}
                       </div>
                     </details>
                   </TableCell>

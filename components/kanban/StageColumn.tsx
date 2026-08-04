@@ -1,6 +1,16 @@
 "use client";
 import { Droppable } from "@hello-pangea/dnd";
 import type { CSSProperties } from "react";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import {
+  archivePipelineStage,
+  movePipelineStage,
+  renamePipelineStage,
+} from "@/app/actions/settings/managePipelines";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { CaretLeft, CaretRight, Trash } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
 import type { Stage } from "@/lib/kanban/types";
@@ -25,6 +35,9 @@ interface StageColumnProps {
   onSelect?: (leadId: string, additive: boolean) => void;
   /** Abrir o dossiê — atravessa o board até o card, como `pulses`. */
   onOpen?: (leadId: string) => void;
+  stageIndex: number;
+  stageCount: number;
+  valueLabel: string;
 }
 
 function formatBRL(cents: number): string {
@@ -51,15 +64,48 @@ export function StageColumn({
   pulses,
   onSelect,
   onOpen,
+  stageIndex,
+  stageCount,
+  valueLabel,
 }: StageColumnProps) {
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(stage.name);
+  const [savingName, startSavingName] = useTransition();
   const totalCents = leads.reduce((sum, l) => sum + (l.value_cents ?? 0), 0);
   const accentStyle: CSSProperties | undefined = stage.color
     ? { backgroundColor: stage.color }
     : undefined;
 
+  function saveName() {
+    const name = nameDraft.trim();
+    if (!name || name === stage.name) {
+      setNameDraft(stage.name);
+      setEditingName(false);
+      return;
+    }
+    startSavingName(async () => {
+      const result = await renamePipelineStage(pipelineId, stage.id, name);
+      if (result.ok) {
+        toast.success("Nome da etapa atualizado.");
+        setEditingName(false);
+      } else {
+        toast.error(result.error);
+        setNameDraft(stage.name);
+      }
+    });
+  }
+
+  function runStageAction(action: () => Promise<{ ok: boolean; error?: string }>, success: string) {
+    startSavingName(async () => {
+      const result = await action();
+      if (result.ok) toast.success(success);
+      else toast.error(result.error ?? "Não foi possível alterar a etapa.");
+    });
+  }
+
   return (
     <section
-      className="bg-surface-muted/40 flex h-full min-h-0 w-[min(18rem,calc(100vw-3rem))] shrink-0 flex-col overflow-hidden rounded-lg border border-border sm:w-72"
+      className="bg-surface-muted/40 group flex h-full min-h-0 w-[min(18rem,calc(100vw-3rem))] shrink-0 flex-col overflow-hidden rounded-lg border border-border sm:w-72"
       aria-labelledby={`kanban-stage-${stage.id}`}
     >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
@@ -68,15 +114,85 @@ export function StageColumn({
           style={accentStyle}
           aria-hidden
         />
-        <h2
-          id={`kanban-stage-${stage.id}`}
-          className="flex-1 truncate text-sm font-semibold text-text"
-        >
-          {stage.name}
-        </h2>
+        {editingName ? (
+          <Input
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            onBlur={saveName}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") saveName();
+              if (event.key === "Escape") {
+                setNameDraft(stage.name);
+                setEditingName(false);
+              }
+            }}
+            disabled={savingName}
+            className="h-7 flex-1 text-sm"
+            aria-label="Editar nome da etapa"
+            autoFocus
+          />
+        ) : (
+          <button
+            id={`kanban-stage-${stage.id}`}
+            type="button"
+            className="flex-1 truncate text-left text-sm font-semibold text-text hover:underline"
+            title="Clique para editar o nome desta etapa"
+            onClick={() => setEditingName(true)}
+          >
+            {stage.name}
+          </button>
+        )}
         <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium tabular-nums text-text-muted">
           {leads.length}
         </span>
+        <div className="flex opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            disabled={savingName || stageIndex === 0}
+            onClick={() =>
+              runStageAction(() => movePipelineStage(pipelineId, stage.id, -1), "Etapa movida.")
+            }
+            aria-label="Mover etapa para a esquerda"
+          >
+            <CaretLeft size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            disabled={savingName || stageIndex === stageCount - 1}
+            onClick={() =>
+              runStageAction(() => movePipelineStage(pipelineId, stage.id, 1), "Etapa movida.")
+            }
+            aria-label="Mover etapa para a direita"
+          >
+            <CaretRight size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            disabled={savingName || leads.length > 0 || stageCount <= 1}
+            title={
+              leads.length > 0 ? "Mova os negócios antes de arquivar esta etapa" : "Arquivar etapa"
+            }
+            onClick={() => {
+              if (window.confirm(`Arquivar a etapa “${stage.name}”?`))
+                runStageAction(
+                  () => archivePipelineStage(pipelineId, stage.id),
+                  "Etapa arquivada.",
+                );
+            }}
+            aria-label="Arquivar etapa"
+          >
+            <Trash size={14} />
+          </Button>
+        </div>
       </div>
 
       {totalCents > 0 && (
@@ -104,6 +220,7 @@ export function StageColumn({
                   coolingIds,
                   reactivations,
                   canonicalTags,
+                  valueLabel,
                 })}
                 lead={lead}
                 index={idx}

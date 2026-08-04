@@ -43,6 +43,14 @@ export interface PublishedAgentConfig {
   /** knobs de RAG do ai_agents.config (defaults do guardrails-schema: 5 / 0.72). */
   ragTopK: number;
   ragSimilarityThreshold: number;
+  knowledgeBaseEnabled?: boolean;
+  externalInternetAllowed?: boolean;
+  forbiddenTopics?: string[];
+  humanRequiredTopics?: string[];
+  fixedResponses?: Array<{ topic: string; response: string }>;
+  fallbackMessage?: string;
+  dailyBudgetCents?: number;
+  monthlyBudgetCents?: number;
   /** criadores (p/ mint do token efêmero de audit — padrão do runtime nativo). */
   versionCreatedBy: string | null;
   agentCreatedBy: string | null;
@@ -71,15 +79,49 @@ interface Row {
   config: Record<string, unknown> | null;
   version_created_by: string | null;
   agent_created_by: string | null;
+  selection_mode: "manual" | "connection" | "origin" | "stage";
+  selection_reason: string;
+  organization_handoff_rules: Record<string, unknown> | null;
 }
 
 export async function loadPublishedAgentConfig(
   db: pg.Pool,
   organizationId: string,
   channelSessionId: string,
+  conversationId?: string | null,
 ): Promise<PublishedAgentConfig | null> {
   const { rows } = await db.query<Row>(
-    `select a.id as agent_id,
+    `with conversation_context as (
+       select c.selected_agent_id,
+              c.assignee_kind = 'user' as human_attending,
+              c.channel_session_id,
+              ct.source as contact_source,
+              (select l.stage_id from crm_leads l
+               where l.organization_id = c.organization_id and l.contact_id = c.contact_id
+                 and l.status = 'open'
+               order by l.last_activity_at desc nulls last, l.created_at desc
+               limit 1) as stage_id
+       from conversations c
+       join contacts ct on ct.id = c.contact_id and ct.organization_id = c.organization_id
+       where c.id = $3 and c.organization_id = $1
+     ), matched_rule as (
+       select r.agent_id, r.name, r.channel_session_id, r.contact_source, r.stage_id
+       from ai_agent_assignment_rules r, conversation_context cc
+       where r.organization_id = $1 and r.is_active
+         and (r.channel_session_id is null or r.channel_session_id = cc.channel_session_id)
+         and (r.contact_source is null or lower(r.contact_source) = lower(coalesce(cc.contact_source, '')))
+         and (r.stage_id is null or (r.allow_stage_switch and r.stage_id = cc.stage_id))
+       order by
+         ((r.channel_session_id is not null)::int + (r.contact_source is not null)::int + (r.stage_id is not null)::int) desc,
+         r.priority desc, r.created_at asc
+       limit 1
+     ), agent_choice as (
+       select coalesce(
+         (select selected_agent_id from conversation_context),
+         (select agent_id from matched_rule)
+       ) as agent_id
+     )
+     select a.id as agent_id,
             v.id as version_id,
             a.name as agent_name,
             v.system_prompt,
@@ -99,6 +141,18 @@ export async function loadPublishedAgentConfig(
             v.contact_field_access,
             a.active_kb_version_id,
             a.config,
+            (select hs.handoff_rules from human_support_settings hs where hs.organization_id = a.organization_id) as organization_handoff_rules,
+            case
+              when a.id = (select selected_agent_id from conversation_context) then 'manual'
+              when (select stage_id from matched_rule) is not null then 'stage'
+              when (select contact_source from matched_rule) is not null then 'origin'
+              else 'connection'
+            end as selection_mode,
+            case
+              when a.id = (select selected_agent_id from conversation_context) then 'Escolha manual registrada no Inbox'
+              when (select name from matched_rule) is not null then 'Regra automática: ' || (select name from matched_rule)
+              else 'Agente padrão da conexão'
+            end as selection_reason,
             v.created_by as version_created_by,
             a.created_by as agent_created_by
      from ai_agents a
@@ -109,15 +163,45 @@ export async function loadPublishedAgentConfig(
        -- published_version_id preenchido + não arquivado (mesmo critério do
        -- dispatcher nativo do CRM — pausar = despublicar).
        and v.status = 'published'
-       and v.channel_session_id = $2
-     order by a.priority desc, a.created_at asc
+       and coalesce((select not human_attending from conversation_context), true)
+       and (
+         ((select agent_id from agent_choice) is not null
+           and a.id = (select agent_id from agent_choice))
+         or
+         ((select agent_id from agent_choice) is null
+           and v.channel_session_id = $2)
+       )
+     order by
+       case when a.id = (select agent_id from agent_choice) then 0 else 1 end,
+       a.priority desc, a.created_at asc
      limit 1`,
-    [organizationId, channelSessionId],
+    [organizationId, channelSessionId, conversationId ?? null],
   );
   const r = rows[0];
   if (r === undefined) return null;
 
-  const cfg = (r.config ?? {}) as { rag_top_k?: unknown; rag_similarity_threshold?: unknown };
+  if (conversationId) {
+    await db.query(
+      `with previous as (
+         select effective_agent_id from conversations
+         where id = $2 and organization_id = $1 for update
+       ), changed as (
+         update conversations c
+         set effective_agent_id = $3, effective_agent_reason = $5, effective_agent_at = now()
+         from previous p
+         where c.id = $2 and c.organization_id = $1
+           and c.effective_agent_id is distinct from $3::uuid
+         returning p.effective_agent_id
+       )
+       insert into conversation_agent_events
+         (organization_id, conversation_id, from_agent_id, to_agent_id, selection_mode, reason)
+       select $1, $2, effective_agent_id, $3, $4, $5 from changed`,
+      [organizationId, conversationId, r.agent_id, r.selection_mode, r.selection_reason],
+    );
+  }
+
+  const cfg = (r.config ?? {}) as Record<string, unknown>;
+  const orgRules = (r.organization_handoff_rules ?? {}) as Record<string, unknown>;
   const ragTopK =
     typeof cfg.rag_top_k === "number" &&
     Number.isInteger(cfg.rag_top_k) &&
@@ -131,6 +215,30 @@ export async function loadPublishedAgentConfig(
     cfg.rag_similarity_threshold <= 1
       ? cfg.rag_similarity_threshold
       : 0.72;
+  const stringList = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value
+          .filter((item): item is string => typeof item === "string" && item.trim() !== "")
+          .map((item) => item.trim())
+      : [];
+  const orgHumanTopics = [
+    ...stringList(orgRules.required_document_types),
+    ...stringList(orgRules.custom_intents),
+  ];
+  const fixedResponses = Array.isArray(cfg.fixed_responses)
+    ? cfg.fixed_responses.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const row = item as { topic?: unknown; response?: unknown };
+        return typeof row.topic === "string" &&
+          typeof row.response === "string" &&
+          row.topic.trim() &&
+          row.response.trim()
+          ? [{ topic: row.topic.trim(), response: row.response.trim() }]
+          : [];
+      })
+    : [];
+  const cents = (value: unknown): number =>
+    typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
 
   return {
     agentId: r.agent_id,
@@ -156,6 +264,17 @@ export async function loadPublishedAgentConfig(
     activeKbVersionId: r.active_kb_version_id,
     ragTopK,
     ragSimilarityThreshold,
+    knowledgeBaseEnabled: cfg.knowledge_base_enabled !== false,
+    externalInternetAllowed: cfg.external_internet_allowed === true,
+    forbiddenTopics: stringList(cfg.forbidden_topics),
+    humanRequiredTopics: Array.from(new Set([...stringList(cfg.human_required_topics), ...orgHumanTopics])),
+    fixedResponses,
+    fallbackMessage:
+      typeof cfg.fallback_message === "string" && cfg.fallback_message.trim()
+        ? cfg.fallback_message.trim()
+        : "Não encontrei essa informação na base autorizada. Vou encaminhar para uma pessoa.",
+    dailyBudgetCents: cents(cfg.daily_budget_cents),
+    monthlyBudgetCents: cents(cfg.monthly_budget_cents),
     versionCreatedBy: r.version_created_by,
     agentCreatedBy: r.agent_created_by,
   };
@@ -170,4 +289,27 @@ export function matchesHandoffKeyword(signal: string, keywords: readonly string[
   if (keywords.length === 0) return false;
   const lower = signal.toLowerCase();
   return keywords.some((k) => lower.includes(k));
+}
+
+export function renderAgentControlPolicy(config: PublishedAgentConfig): string {
+  const forbiddenTopics = config.forbiddenTopics ?? [];
+  const fixedResponses = config.fixedResponses ?? [];
+  const fallbackMessage =
+    config.fallbackMessage ?? "Não encontrei essa informação na base autorizada.";
+  const lines = [
+    "## Limites obrigatórios deste agente",
+    config.externalInternetAllowed
+      ? "Use somente as ferramentas explicitamente habilitadas; acesso externo é permitido apenas por elas."
+      : "Não busque nem use informações da internet externa.",
+    `Quando a informação não estiver nas fontes autorizadas, responda exatamente: “${fallbackMessage}”`,
+    "Nunca invente preços, políticas, prazos, disponibilidade ou fatos ausentes.",
+  ];
+  if (forbiddenTopics.length > 0) {
+    lines.push(`Assuntos proibidos: ${forbiddenTopics.join("; ")}. Não responda sobre eles.`);
+  }
+  if (fixedResponses.length > 0) {
+    lines.push("Respostas fixas obrigatórias:");
+    for (const item of fixedResponses) lines.push(`- ${item.topic}: ${item.response}`);
+  }
+  return lines.join("\n");
 }
