@@ -94,7 +94,9 @@ services:
     environment:
       WAHA_API_KEY: sha512:${WAHA_API_KEY_SHA512}
       WHATSAPP_HOOK_URL: http://app:3000/api/v1/webhooks/waha
-      WHATSAPP_HOOK_EVENTS: message,message.any,message.ack,session.status,state.change
+      # Inclui votos de enquetes: sem estes eventos, a resposta do contato nunca
+      # alcança o webhook do CRM, embora a enquete seja enviada normalmente.
+      WHATSAPP_HOOK_EVENTS: message,message.any,message.ack,poll.vote,poll.vote.failed,session.status,state.change
       WHATSAPP_HOOK_HMAC: ${WAHA_HMAC_SECRET}
       WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-GOWS}
       GODEBUG: ${WAHA_GODEBUG:-netdns=go}
