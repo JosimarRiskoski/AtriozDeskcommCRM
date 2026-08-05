@@ -222,7 +222,10 @@ export async function setDefaultAgentAction(id: string): Promise<ActionResult> {
 
   const { error: setError } = await admin
     .from("ai_agents")
-    .update({ is_default: true, updated_at: now })
+    // Um agente principal publicado precisa continuar elegível para o Inbox.
+    // Sem reativá-lo aqui, agentes legados podiam ficar "principais" e ainda
+    // assim desaparecer do seletor manual por estarem com is_active=false.
+    .update({ is_default: true, is_active: true, updated_at: now })
     .eq("id", id)
     .eq("organization_id", activeOrg.orgId);
   if (setError) {

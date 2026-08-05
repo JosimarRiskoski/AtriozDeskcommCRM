@@ -46,7 +46,10 @@ export async function GET(_req: NextRequest): Promise<Response> {
     .from("ai_agents")
     .select("id, name, published_version_id")
     .eq("organization_id", orgId)
-    .eq("is_active", true)
+    // Agentes antigos podem ter sido marcados como principais antes da regra
+    // que também os ativa. Mantemos o principal publicado disponível no picker
+    // para não esconder uma configuração válida já existente.
+    .or("is_active.eq.true,is_default.eq.true")
     .is("archived_at", null)
     .order("priority", { ascending: false })
     .order("created_at", { ascending: true });
