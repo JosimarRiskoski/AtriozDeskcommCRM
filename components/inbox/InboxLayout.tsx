@@ -188,7 +188,14 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               conversationId={selectedConversation.id}
               blockedReason={blockedReason}
               disabled={selectedConversation.status === "closed"}
-              contactName={selectedConversation.contacts?.name ?? null}
+              // Alguns contatos recebidos pelo WhatsApp possuem apenas
+              // display_name. Para templates, ele Ã© um nome vÃ¡lido e deve
+              // preencher {{nome}}/{{primeiro_nome}} da mesma forma.
+              contactName={
+                selectedConversation.contacts?.name ||
+                selectedConversation.contacts?.display_name ||
+                null
+              }
             />
           </>
         ) : selectionNotFound ? (
