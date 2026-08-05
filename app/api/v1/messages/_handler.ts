@@ -82,8 +82,11 @@ export async function listMessagesHandler(
     .select(MSG_COLS)
     .eq("conversation_id", conversationId)
     .eq("organization_id", ctx.organization_id)
-    .order("sent_at", { ascending: true })
-    .order("id", { ascending: true })
+    // A primeira página precisa conter as mensagens mais recentes. Em ordem
+    // crescente, uma conversa com mais de 50 mensagens ficava presa no passado
+    // e o atendente não via o que acabou de ser enviado ou recebido.
+    .order("sent_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(q.limit + 1);
 
   if (q.cursor) {
@@ -91,7 +94,8 @@ export async function listMessagesHandler(
     if (!c) {
       throw new ApiError(400, "invalid_cursor", undefined, ctx.requestId, "Cursor inválido.");
     }
-    query = query.or(`sent_at.gt.${c.sent_at},and(sent_at.eq.${c.sent_at},id.gt.${c.id})`);
+    // O cursor segue para o passado: ao pedir mais, carregamos o histórico.
+    query = query.or(`sent_at.lt.${c.sent_at},and(sent_at.eq.${c.sent_at},id.lt.${c.id})`);
   }
 
   const { data, error } = await query;
@@ -102,10 +106,12 @@ export async function listMessagesHandler(
   const rows = (data ?? []) as unknown as Message[];
   const hasMore = rows.length > q.limit;
   const page = hasMore ? rows.slice(0, q.limit) : rows;
-  const last = page[page.length - 1];
-  const cursor = hasMore && last ? encodeMsgCursor({ sent_at: last.sent_at, id: last.id }) : null;
+  const oldest = page[page.length - 1];
+  const cursor =
+    hasMore && oldest ? encodeMsgCursor({ sent_at: oldest.sent_at, id: oldest.id }) : null;
 
-  return { messages: page, cursor, has_more: hasMore };
+  // Mantém o contrato da tela e das ferramentas: resposta cronológica.
+  return { messages: page.slice().reverse(), cursor, has_more: hasMore };
 }
 
 // ---------------------------------------------------------------------------

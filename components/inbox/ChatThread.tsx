@@ -45,6 +45,8 @@ export function ChatThread({ conversationId }: Props) {
   const q = useMessagesRealtime(conversationId);
   const notes = useConversationNotes(conversationId);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const pagesSeen = useRef(0);
   const activeOrg = useActiveOrg();
   const currentUser = useUser();
   const deleteNote = useDeleteNote(conversationId ?? "");
@@ -61,11 +63,27 @@ export function ChatThread({ conversationId }: Props) {
     [messages, notes],
   );
 
-  // Scroll to bottom on first load + new message/note arrival.
+  const pages = q.data?.pages.length ?? 0;
+
   useEffect(() => {
-    if (!bottomRef.current) return;
-    bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [items.length, conversationId]);
+    pagesSeen.current = 0;
+  }, [conversationId]);
+
+  // Rola ao fim na primeira carga e quando chega mensagem nova, mas preserva a
+  // posição de quem clicou para carregar mensagens antigas.
+  useEffect(() => {
+    const firstLoad = pagesSeen.current === 0;
+    const loadedOlder = !firstLoad && pages > pagesSeen.current;
+    pagesSeen.current = pages;
+    if (loadedOlder) return;
+
+    if (!firstLoad) {
+      const scroller = scrollerRef.current;
+      if (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 120) return;
+    }
+
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [items.length, conversationId, pages]);
 
   if (!conversationId) {
     return (
@@ -116,7 +134,7 @@ export function ChatThread({ conversationId }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto py-2">
+      <div ref={scrollerRef} className="flex-1 overflow-y-auto py-2">
         {q.hasNextPage && (
           <div className="flex justify-center py-2">
             <Button
