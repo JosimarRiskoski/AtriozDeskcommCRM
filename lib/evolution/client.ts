@@ -212,7 +212,16 @@ export class EvolutionClient {
       profileName: typeof raw.profileName === "string" ? raw.profileName : undefined,
       ownerJid: typeof raw.ownerJid === "string" ? raw.ownerJid : undefined,
       number: typeof raw.number === "string" ? raw.number : undefined,
-      qrcode: typeof raw.qrcode === "string" ? raw.qrcode : undefined,
+      // A Evolution retorna o QR de conexao como `base64` no endpoint
+      // instance/connect. Algumas versoes e proxies usam `qrcode`, por isso
+      // aceitamos os dois formatos antes de a rota do CRM transformar o valor
+      // em uma imagem PNG segura para o navegador.
+      qrcode:
+        typeof raw.qrcode === "string"
+          ? raw.qrcode
+          : typeof raw.base64 === "string"
+            ? raw.base64
+            : undefined,
       raw,
     };
   }

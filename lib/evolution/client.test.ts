@@ -72,4 +72,19 @@ describe("Evolution helpers", () => {
     expect(parseEvolutionMessageId({ key: { id: "ABC" } })).toBe("ABC");
     expect(parseEvolutionMessageId({ messageId: "XYZ" })).toBe("XYZ");
   });
+
+  it("reads the QR returned by Evolution v2 in its base64 field", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ base64: "data:image/png;base64,QR" }), { status: 200 }),
+    );
+    const client = new EvolutionClient("http://evolution:8080", "secret");
+
+    const connection = await client.connect("crm-1");
+
+    expect(connection.qrcode).toBe("data:image/png;base64,QR");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://evolution:8080/instance/connect/crm-1",
+      expect.anything(),
+    );
+  });
 });
