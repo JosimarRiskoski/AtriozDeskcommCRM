@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bareWaMessageId, parseWahaMessageId } from "@/lib/waha/message-id";
+import { bareWaMessageId, chatIdFromWaMessageId, parseWahaMessageId } from "@/lib/waha/message-id";
 
 describe("parseWahaMessageId", () => {
   it("string plana não é uma shape reconhecida (guard exige objeto) → null", () => {
@@ -51,5 +51,23 @@ describe("bareWaMessageId", () => {
     const candidates = [ackFull, bareWaMessageId(ackFull)];
     expect(candidates).toContain(webjsStored); // WEBJS: casa pela forma full
     expect(candidates).toContain("3EB0ABC"); // NOWEB: casa pela cauda
+  });
+});
+
+describe("chatIdFromWaMessageId", () => {
+  it("recupera o chat de mensagem enviada pelo celular quando NOWEB omite to", () => {
+    expect(chatIdFromWaMessageId("true_250302204792918@lid_2A1B890FB8AA87730CBC")).toBe(
+      "250302204792918@lid",
+    );
+  });
+
+  it("funciona para chat classico e mensagem inbound", () => {
+    expect(chatIdFromWaMessageId("true_5511999999999@c.us_3EB0ABC")).toBe("5511999999999@c.us");
+    expect(chatIdFromWaMessageId("false_5511999999999@c.us_3EB0ABC")).toBe("5511999999999@c.us");
+  });
+
+  it("recusa id bare ou miolo que nao e chat", () => {
+    expect(chatIdFromWaMessageId("3EB02714A82A56A80702CE")).toBeNull();
+    expect(chatIdFromWaMessageId("true_naoehchat_3EB0ABC")).toBeNull();
   });
 });

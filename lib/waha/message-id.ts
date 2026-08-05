@@ -37,3 +37,19 @@ export function bareWaMessageId(id: string): string {
   const cut = id.lastIndexOf('_');
   return cut === -1 ? id : id.slice(cut + 1);
 }
+
+/**
+ * Extrai o chatId do id composto do WAHA (`{fromMe}_{chatId}_{bareId}`).
+ *
+ * O NOWEB pode omitir `to` nas mensagens que o operador digitou no celular.
+ * Nesses casos, o identificador serializado ainda conserva o chat e permite
+ * associar a mensagem à conversa correta sem depender do engine.
+ */
+export function chatIdFromWaMessageId(id: string): string | null {
+  const first = id.indexOf('_');
+  const last = id.lastIndexOf('_');
+  if (first === -1 || last === first) return null;
+
+  const chat = id.slice(first + 1, last);
+  return chat.includes('@') ? chat : null;
+}

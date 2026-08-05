@@ -18,7 +18,7 @@ import { ackToStatus } from "@/lib/types/messaging";
 import { getWahaClient } from "@/lib/waha/client";
 import { parseChatId, type ChatIdentity } from "@/lib/waha/identity";
 export { parseChatId } from "@/lib/waha/identity";
-import { bareWaMessageId } from "@/lib/waha/message-id";
+import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
 import { isExplicitStopRequest } from "@/lib/waha/stop-detection";
 import { handleManagerGroupCommand } from "@/lib/human-support/group-commands";
 
@@ -88,6 +88,11 @@ export interface WahaEnvelope {
  */
 export function outboundChatIdOf(p: WahaPayload): string {
   if (p.to) return p.to;
+  // NOWEB pode omitir `to` quando a mensagem foi escrita no celular. O id
+  // serializado tem a forma `{fromMe}_{chatId}_{bareId}`, então é a fonte mais
+  // confiável antes de recorrer a `from` (que varia de significado por engine).
+  const chatFromMessageId = chatIdFromWaMessageId(p.id ?? "");
+  if (chatFromMessageId) return chatFromMessageId;
   if (p.fromMe && p.from) return p.from;
 
   const info = p._data?.Info;
