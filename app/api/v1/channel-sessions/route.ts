@@ -15,12 +15,12 @@ import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { createChannelSchema } from "@/lib/schemas/channels";
 import { createClient } from "@/lib/supabase/server";
-import { getWahaClient, wahaFriendlyError } from "@/lib/waha/client";
+import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/client";
 
 export const dynamic = "force-dynamic";
 
 export const CHANNEL_COLUMNS =
-  "id, waha_session_name, display_name, phone_number, purpose, is_default, archived_at, status, status_reason, last_health_check_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
+  "id, provider, external_session_name, waha_session_name, display_name, phone_number, purpose, is_default, archived_at, status, status_reason, last_health_check_at, last_inbound_event_at, last_outbound_event_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
@@ -87,11 +87,11 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const { user, org: activeOrg } = authz;
 
-  const waha = getWahaClient();
-  if (!waha) {
+  const evolution = getEvolutionClient();
+  if (!evolution) {
     return fail(
-      "waha_not_configured",
-      "O serviço do WhatsApp (WAHA) não está ativo. Suba o container e tente de novo.",
+      "evolution_not_configured",
+      "O serviço do WhatsApp (Evolution) não está ativo. Suba o container e tente de novo.",
       503,
       { requestId },
     );
@@ -121,17 +121,27 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
   // Nome de sessão único por canal — o hardcode `org_<8>` era 1 número por org.
   const sessionName = `org_${activeOrg.orgId.slice(0, 8)}_${randomUUID().replace(/-/g, "").slice(0, 6)}`;
+  const webhookToken = randomUUID().replace(/-/g, "");
+  const webhookBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
+  if (!webhookBase || !webhookSecret) {
+    return fail("evolution_not_configured", "A URL pública do CRM não está configurada.", 503, {
+      requestId,
+    });
+  }
 
   const { data: created, error: insErr } = await supabase
     .from("channel_sessions")
     .insert({
       organization_id: activeOrg.orgId,
+      provider: "evolution",
+      external_session_name: sessionName,
       waha_session_name: sessionName,
       display_name: parsed.data.display_name,
       purpose: parsed.data.purpose ?? null,
       is_default: parsed.data.is_default,
-      engine: "NOWEB",
-      webhook_path_token: randomUUID().replace(/-/g, ""),
+      engine: "EVOLUTION",
+      webhook_path_token: webhookToken,
       webhook_secret_encrypted: Buffer.from([0]),
       status: "STARTING",
       last_status_change_at: new Date().toISOString(),
@@ -148,7 +158,11 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   try {
-    await waha.startSession(sessionName);
+    await evolution.createInstance({
+      instanceName: sessionName,
+      webhookUrl: `${webhookBase}/api/v1/webhooks/evolution/${webhookToken}`,
+      webhookHeaders: { "x-atrios-evolution-secret": webhookSecret },
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";
     // Rollback: sem WAHA no ar, não deixamos um canal fantasma preso em STARTING.
@@ -157,7 +171,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       .delete()
       .eq("organization_id", activeOrg.orgId)
       .eq("id", created.id);
-    return fail("waha_error", wahaFriendlyError(msg), 502, { requestId });
+    return fail("evolution_error", evolutionFriendlyError(msg), 502, { requestId });
   }
 
   void audit({
@@ -167,7 +181,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     resourceType: "channel_session",
     resourceId: created.id,
     requestId,
-    metadata: { waha_session_name: sessionName },
+    metadata: { provider: "evolution", external_session_name: sessionName },
   });
 
   return ok(created, { requestId, status: 201 });

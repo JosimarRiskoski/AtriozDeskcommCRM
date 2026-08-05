@@ -5,6 +5,8 @@ import { apiClient } from "@/lib/api/client";
 
 export interface ChannelSession {
   id: string;
+  provider: "waha" | "evolution";
+  external_session_name: string;
   waha_session_name: string;
   display_name: string | null;
   phone_number: string | null;
@@ -14,6 +16,8 @@ export interface ChannelSession {
   status: string;
   status_reason: string | null;
   last_health_check_at: string | null;
+  last_inbound_event_at: string | null;
+  last_outbound_event_at: string | null;
   last_status_change_at: string | null;
   last_inbound_at: string | null;
   last_outbound_at: string | null;

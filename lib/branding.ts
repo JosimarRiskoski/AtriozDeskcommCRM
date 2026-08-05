@@ -16,7 +16,8 @@
  * runtime em vez de lida do bundle.
  */
 
-export const DEFAULT_APP_NAME = "DeskcommCRM";
+export const DEFAULT_APP_NAME = "Atrios CRM Inteligente";
+export const DEFAULT_APP_LOGO_URL = "/icon";
 
 export type Branding = {
   /** Nome exibido na interface e nos títulos de página. */
@@ -40,10 +41,10 @@ export function resolveBranding(
   logoUrl: string | undefined | null,
 ): Branding {
   const resolvedName = (name ?? "").trim() || DEFAULT_APP_NAME;
-  const resolvedLogo = (logoUrl ?? "").trim();
+  const resolvedLogo = (logoUrl ?? "").trim() || DEFAULT_APP_LOGO_URL;
   return {
     name: resolvedName,
-    logoUrl: resolvedLogo.length > 0 ? resolvedLogo : null,
+    logoUrl: resolvedLogo,
     // Spread em vez de [0]: nome começando com emoji ou acento composto quebraria
     // no meio do code point e renderizaria caractere inválido.
     initial: ([...resolvedName][0] ?? DEFAULT_APP_NAME[0]!).toUpperCase(),

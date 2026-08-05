@@ -13,6 +13,7 @@ import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
+import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/client";
 import { getWahaClient, wahaFriendlyError } from "@/lib/waha/client";
 
 export const dynamic = "force-dynamic";
@@ -35,13 +36,55 @@ export async function POST(
   const supabase = await createClient();
   const { data: session } = await supabase
     .from("channel_sessions")
-    .select("id, waha_session_name, status")
+    .select("id, provider, external_session_name, waha_session_name, status")
     .eq("organization_id", activeOrg.orgId)
     .eq("id", id)
     .maybeSingle();
   if (!session) return fail("not_found", "Canal não encontrado.", 404, { requestId });
 
+  const evolution = getEvolutionClient();
   const waha = getWahaClient();
+  if (session.provider === "evolution") {
+    if (!evolution) {
+      return fail(
+        "evolution_not_configured",
+        "O serviÃ§o do WhatsApp (Evolution) nÃ£o estÃ¡ ativo. Suba o container e tente de novo.",
+        503,
+        { requestId },
+      );
+    }
+    try {
+      const instanceName = session.external_session_name || session.waha_session_name;
+      await evolution.restart(instanceName).catch(() => null);
+      const remote = await evolution.connect(instanceName);
+      await supabase
+        .from("channel_sessions")
+        .update({
+          status: "STARTING",
+          last_status_change_at: new Date().toISOString(),
+          consecutive_health_fails: 0,
+        })
+        .eq("organization_id", activeOrg.orgId)
+        .eq("id", id);
+      void audit({
+        action: "channel.reconnected",
+        actorUserId: user.id,
+        organizationId: activeOrg.orgId,
+        resourceType: "channel_session",
+        resourceId: id,
+        requestId,
+        metadata: { provider: "evolution", external_session_name: instanceName },
+      });
+      return ok({ id, status: remote.state }, { requestId });
+    } catch (err) {
+      return fail(
+        "evolution_error",
+        evolutionFriendlyError(err instanceof Error ? err.message : "unknown"),
+        502,
+        { requestId },
+      );
+    }
+  }
   if (!waha) {
     return fail(
       "waha_not_configured",

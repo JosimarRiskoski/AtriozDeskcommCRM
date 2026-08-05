@@ -1,43 +1,27 @@
 import { NextResponse } from "next/server";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import QRCode from "qrcode";
 
-/**
- * Proxy WAHA's QR endpoint so the browser can <img src="..." /> without
- * exposing the API key.
- *
- * WAHA Plus exposes: GET /api/{session}/auth/qr?format=image → image/png bytes.
- */
+import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { getEvolutionClient } from "@/lib/evolution/client";
+
 export async function GET() {
   const user = await loadAuthUser();
   if (!user) return new NextResponse(null, { status: 401 });
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) return new NextResponse(null, { status: 404 });
-
-  const baseUrl = process.env.WAHA_API_BASE_URL;
-  const apiKey = process.env.WAHA_API_KEY;
-  if (!baseUrl || !apiKey || apiKey === "dev_plaintext_change_me") {
-    return new NextResponse(null, { status: 503 });
-  }
-
-  const sessionName = `org_${activeOrg.orgId.slice(0, 8)}`;
-  const upstream = await fetch(
-    `${baseUrl}/api/${encodeURIComponent(sessionName)}/auth/qr?format=image`,
-    { headers: { "X-Api-Key": apiKey }, cache: "no-store" },
-  );
-  if (!upstream.ok) {
-    return new NextResponse(null, {
-      status: upstream.status,
-      headers: { "x-waha-status": String(upstream.status) },
+  const evolution = getEvolutionClient();
+  if (!evolution) return new NextResponse(null, { status: 503 });
+  try {
+    const remote = await evolution.connect(`org_${activeOrg.orgId.slice(0, 8)}`);
+    if (!remote.qrcode) return new NextResponse(null, { status: 202 });
+    const image = /^data:image\/\w+;base64,/.test(remote.qrcode)
+      ? Buffer.from(remote.qrcode.replace(/^data:image\/\w+;base64,/, ""), "base64")
+      : await QRCode.toBuffer(remote.qrcode, { width: 768, margin: 2 });
+    return new NextResponse(new Uint8Array(image), {
+      status: 200,
+      headers: { "content-type": "image/png", "cache-control": "no-store" },
     });
+  } catch {
+    return new NextResponse(null, { status: 502 });
   }
-
-  const ct = upstream.headers.get("content-type") ?? "image/png";
-  const buf = await upstream.arrayBuffer();
-  return new NextResponse(buf, {
-    status: 200,
-    headers: {
-      "content-type": ct,
-      "cache-control": "no-store, max-age=0",
-    },
-  });
 }

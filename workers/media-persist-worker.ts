@@ -13,6 +13,7 @@
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { storagePathFor } from "@/lib/messaging/media/types";
 import { fetchWahaMedia } from "@/lib/messaging/media/waha-source";
+import { fetchEvolutionMedia } from "@/lib/messaging/media/evolution-source";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -42,7 +43,9 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("messages")
-    .select("id, organization_id, conversation_id, media_url, media_mime, media_storage_path, metadata")
+    .select(
+      "id, organization_id, conversation_id, media_url, media_mime, media_storage_path, metadata",
+    )
     .eq("id", messageId)
     .eq("organization_id", row.organization_id)
     .maybeSingle();
@@ -52,7 +55,10 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
   if (!msg?.media_url) return { consumer_key, status: "skipped", detail: "no media_url" };
   if (msg.media_storage_path) return { consumer_key, status: "skipped", detail: "already stored" };
 
-  const markStatus = async (media_status: "stored" | "failed", patch: Record<string, unknown> = {}) => {
+  const markStatus = async (
+    media_status: "stored" | "failed",
+    patch: Record<string, unknown> = {},
+  ) => {
     const { error: updErr } = await admin
       .from("messages")
       .update({ metadata: { ...(msg.metadata ?? {}), media_status }, ...patch })
@@ -65,7 +71,10 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
 
   let media;
   try {
-    media = await fetchWahaMedia(msg.media_url, msg.media_mime);
+    media =
+      msg.metadata?.channel_provider === "evolution"
+        ? await fetchEvolutionMedia(msg.media_url, msg.media_mime)
+        : await fetchWahaMedia(msg.media_url, msg.media_mime);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     if (isLastAttempt) {
@@ -98,15 +107,22 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
 
   // Dispara a derivação textual (Onda 3) — fire-and-forget, mesmo padrão do
   // resto do repo: falha de emit não reverte a persistência já concluída.
-  const { error: emitErr } = await admin.rpc("emit_event" as never, {
-    p_event_type: "media.derive_requested",
-    p_entity_kind: "message",
-    p_entity_id: msg.id,
-    p_payload: { message_id: msg.id },
-    p_metadata: { source: "media_persist" },
-    p_organization_id: msg.organization_id,
-  } as never);
-  if (emitErr) logger.warn("[media-persist] emit_event failed (non-blocking)", { message_id: msg.id, detail: emitErr.message });
+  const { error: emitErr } = await admin.rpc(
+    "emit_event" as never,
+    {
+      p_event_type: "media.derive_requested",
+      p_entity_kind: "message",
+      p_entity_id: msg.id,
+      p_payload: { message_id: msg.id },
+      p_metadata: { source: "media_persist" },
+      p_organization_id: msg.organization_id,
+    } as never,
+  );
+  if (emitErr)
+    logger.warn("[media-persist] emit_event failed (non-blocking)", {
+      message_id: msg.id,
+      detail: emitErr.message,
+    });
 
   return { consumer_key, status: "ok" };
 }

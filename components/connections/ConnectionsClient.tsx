@@ -49,14 +49,14 @@ function statusInfo(status: string): { label: string; variant: Variant } {
 }
 
 function channelLabel(c: ChannelSession): string {
-  return c.display_name || c.phone_number || c.waha_session_name;
+  return c.display_name || c.phone_number || c.external_session_name;
 }
 
 function errMsg(err: unknown, fallback: string): string {
   return err instanceof ApiError && err.message ? err.message : fallback;
 }
 
-export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean }) {
+export function ConnectionsClient({ evolutionConfigured }: { evolutionConfigured: boolean }) {
   const qc = useQueryClient();
   const { data: sessions, isLoading } = useChannelSessions({ refetchInterval: 10_000 });
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -78,7 +78,7 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
   // pode estar velho se o WAHA caiu sem emitir evento).
   const runHealthCheck = useCallback(
     async (list: ChannelSession[]) => {
-      if (!wahaConfigured || list.length === 0) return;
+      if (!evolutionConfigured || list.length === 0) return;
       setChecking(true);
       try {
         await Promise.allSettled(
@@ -89,7 +89,7 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
         setChecking(false);
       }
     },
-    [wahaConfigured, invalidate],
+    [evolutionConfigured, invalidate],
   );
 
   const didInitialCheck = useRef(false);
@@ -128,6 +128,23 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
         setQr({ sessionId: c.id, title: `Reconectar ${channelLabel(c)}` });
       } catch (err) {
         toast.error(errMsg(err, "Não foi possível reconectar."));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [invalidate],
+  );
+
+  const handleMigration = useCallback(
+    async (c: ChannelSession) => {
+      setBusyId(c.id);
+      try {
+        await apiClient.post(`/api/v1/channel-sessions/${c.id}/migrate-evolution`, {});
+        invalidate();
+        setQr({ sessionId: c.id, title: `Conectar ${channelLabel(c)} na Evolution` });
+        toast.success("Conexão preparada na Evolution. Escaneie o QR Code.");
+      } catch (err) {
+        toast.error(errMsg(err, "Não foi possível migrar a conexão para a Evolution."));
       } finally {
         setBusyId(null);
       }
@@ -176,7 +193,7 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
             <Button
               variant="outline"
               size="sm"
-              disabled={checking || !wahaConfigured}
+              disabled={checking || !evolutionConfigured}
               onClick={() => void runHealthCheck(list)}
             >
               <ArrowsClockwise
@@ -189,7 +206,7 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
           )}
           <Button
             size="sm"
-            disabled={creating || !wahaConfigured}
+            disabled={creating || !evolutionConfigured}
             onClick={() => setNewConnectionOpen(true)}
           >
             {creating ? (
@@ -202,13 +219,10 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
         </div>
       </div>
 
-      {!wahaConfigured && (
+      {!evolutionConfigured && (
         <div className="rounded-md border border-warning bg-warning-bg p-4 text-sm text-warning-fg">
           <p className="font-medium">O serviço do WhatsApp não está ativo.</p>
-          <p className="mt-1">
-            Suba o container (<code>docker compose up -d waha</code>) para conectar e reconectar
-            números.
-          </p>
+          <p className="mt-1">Suba o serviço Evolution para conectar e reconectar números.</p>
         </div>
       )}
 
@@ -249,7 +263,9 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                   ) : null}
                   {c.purpose ? <Badge variant="outline">{c.purpose}</Badge> : null}
                   {c.phone_number ? (
-                    <Badge variant="outline">Final {c.phone_number.replace(/\D/g, "").slice(-4)}</Badge>
+                    <Badge variant="outline">
+                      Final {c.phone_number.replace(/\D/g, "").slice(-4)}
+                    </Badge>
                   ) : null}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
@@ -294,15 +310,17 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={busyId === c.id || !wahaConfigured}
-                    onClick={() => handleReconnect(c)}
+                    disabled={busyId === c.id || !evolutionConfigured}
+                    onClick={() =>
+                      c.provider === "evolution" ? handleReconnect(c) : handleMigration(c)
+                    }
                   >
                     {busyId === c.id ? (
                       <CircleNotch size={14} className="animate-spin" aria-hidden />
                     ) : (
                       <ArrowsClockwise size={14} aria-hidden />
                     )}
-                    Reconectar
+                    {c.provider === "evolution" ? "Reconectar" : "Migrar para Evolution"}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setAntiBanId(c.id)}>
                     <ShieldCheck size={14} aria-hidden />
@@ -346,7 +364,7 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
         <QrDialog
           sessionId={qr.sessionId}
           title={qr.title}
-          wahaConfigured={wahaConfigured}
+          evolutionConfigured={evolutionConfigured}
           onClose={() => setQr(null)}
           onConnected={handleConnected}
         />
@@ -516,7 +534,9 @@ function ManageConnectionDialog({
         <DialogHeader>
           <DialogTitle>Gerenciar conexão</DialogTitle>
           <DialogDescription>
-            {connection.phone_number || connection.waha_session_name}
+            {connection.phone_number ||
+              connection.external_session_name ||
+              connection.waha_session_name}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-5">
@@ -630,13 +650,13 @@ function ManageConnectionDialog({
 function QrDialog({
   sessionId,
   title,
-  wahaConfigured,
+  evolutionConfigured,
   onClose,
   onConnected,
 }: {
   sessionId: string;
   title: string;
-  wahaConfigured: boolean;
+  evolutionConfigured: boolean;
   onClose: () => void;
   onConnected: () => void;
 }) {
@@ -646,7 +666,7 @@ function QrDialog({
   const qrShown = useRef(false);
 
   useEffect(() => {
-    if (!wahaConfigured) return;
+    if (!evolutionConfigured) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -676,7 +696,7 @@ function QrDialog({
       cancelled = true;
       clearInterval(iv);
     };
-  }, [sessionId, wahaConfigured, onConnected]);
+  }, [sessionId, evolutionConfigured, onConnected]);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

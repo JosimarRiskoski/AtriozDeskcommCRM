@@ -1,46 +1,35 @@
 import { NextResponse } from "next/server";
-import { ok, fail } from "@/lib/api/wrappers";
+
+import { fail, ok } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
-import { getWahaClient } from "@/lib/waha/client";
+import { getEvolutionClient } from "@/lib/evolution/client";
 import { createClient } from "@/lib/supabase/server";
-
-/**
- * Onboarding WhatsApp session orchestration.
- *
- * GET  → returns current session status (status enum from WAHA: STARTING|SCAN_QR_CODE|WORKING|FAILED|STOPPED)
- * POST → starts session if not already running. Idempotent.
- *
- * The actual QR image is served via /api/v1/onboarding/whatsapp/qr (proxy
- * to WAHA so client can <img src="..." /> without exposing the API key).
- */
-
-interface WahaSessionResponse {
-  name?: string;
-  status?: string;
-  config?: Record<string, unknown>;
-  me?: { id?: string; pushName?: string };
-}
 
 function defaultSessionName(orgId: string): string {
   return `org_${orgId.slice(0, 8)}`;
 }
 
-async function ensureChannelSession(orgId: string, sessionName: string): Promise<string> {
+async function ensureChannelSession(orgId: string, sessionName: string) {
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("channel_sessions")
-    .select("id")
+    .select("id,webhook_path_token")
     .eq("organization_id", orgId)
-    .eq("waha_session_name", sessionName)
+    .eq("external_session_name", sessionName)
     .maybeSingle();
-  if (existing?.id) return existing.id as string;
+  if (existing?.id && existing.webhook_path_token)
+    return { id: existing.id, token: existing.webhook_path_token };
+
+  const token = crypto.randomUUID().replace(/-/g, "");
   const { data: created, error } = await supabase
     .from("channel_sessions")
     .insert({
       organization_id: orgId,
+      provider: "evolution",
+      external_session_name: sessionName,
       waha_session_name: sessionName,
-      engine: "NOWEB",
-      webhook_path_token: crypto.randomUUID().replace(/-/g, ""),
+      engine: "EVOLUTION",
+      webhook_path_token: token,
       webhook_secret_encrypted: Buffer.from([0]),
       status: "STARTING",
       last_status_change_at: new Date().toISOString(),
@@ -50,8 +39,9 @@ async function ensureChannelSession(orgId: string, sessionName: string): Promise
     })
     .select("id")
     .single();
-  if (error) throw new Error(`channel_session_insert_failed: ${error.message}`);
-  return created.id as string;
+  if (error || !created)
+    throw new Error(`channel_session_insert_failed: ${error?.message ?? "unknown"}`);
+  return { id: created.id, token };
 }
 
 export async function GET() {
@@ -59,16 +49,14 @@ export async function GET() {
   if (!user) return fail("unauthenticated", "Sessão expirada", 401);
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) return fail("tenant_not_found", "Sem organização ativa", 404);
-  const waha = getWahaClient();
-  if (!waha) return ok({ status: "WAHA_NOT_CONFIGURED", session: null });
+  const evolution = getEvolutionClient();
+  if (!evolution) return ok({ status: "EVOLUTION_NOT_CONFIGURED", session: null });
   const sessionName = defaultSessionName(activeOrg.orgId);
   try {
-    const remote = (await waha.getSessionQr(sessionName)) as WahaSessionResponse;
-    return ok({ status: remote.status ?? "UNKNOWN", session: sessionName });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "unknown";
-    if (msg.includes("404")) return ok({ status: "NOT_STARTED", session: sessionName });
-    return ok({ status: "ERROR", session: sessionName, error: msg });
+    const remote = await evolution.connectionState(sessionName);
+    return ok({ status: remote.state === "open" ? "WORKING" : remote.state, session: sessionName });
+  } catch {
+    return ok({ status: "NOT_STARTED", session: sessionName });
   }
 }
 
@@ -77,26 +65,33 @@ export async function POST() {
   if (!user) return fail("unauthenticated", "Sessão expirada", 401);
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) return fail("tenant_not_found", "Sem organização ativa", 404);
-  const waha = getWahaClient();
-  if (!waha) return fail("waha_not_configured", "Suba o Docker (docker compose up -d waha) e tente novamente.", 503);
+  const evolution = getEvolutionClient();
+  const webhookBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
+  if (!evolution || !webhookBase || !webhookSecret)
+    return fail(
+      "evolution_not_configured",
+      "Configure a Evolution e o webhook seguro antes de continuar.",
+      503,
+    );
+
   const sessionName = defaultSessionName(activeOrg.orgId);
-
-  // 1) Make sure we have a row in channel_sessions.
-  const channelSessionId = await ensureChannelSession(activeOrg.orgId, sessionName);
-
-  // 2) Start the session in WAHA. Idempotent — WAHA returns 422 if already started; treat as ok.
+  const channel = await ensureChannelSession(activeOrg.orgId, sessionName);
   try {
-    const remote = (await waha.startSession(sessionName)) as WahaSessionResponse;
-    return ok({ status: remote.status ?? "STARTING", session: sessionName, channel_session_id: channelSessionId });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "unknown";
-    if (msg.includes("422") || msg.includes("409")) {
-      // Session already exists — just fetch status.
-      const remote = (await waha.getSessionQr(sessionName)) as WahaSessionResponse;
-      return ok({ status: remote.status ?? "RUNNING", session: sessionName, channel_session_id: channelSessionId });
+    const remote = await evolution.createInstance({
+      instanceName: sessionName,
+      webhookUrl: `${webhookBase}/api/v1/webhooks/evolution/${channel.token}`,
+      webhookHeaders: { "x-atrios-evolution-secret": webhookSecret },
+    });
+    return ok({ status: remote.state, session: sessionName, channel_session_id: channel.id });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown";
+    if (message.includes("evolution_409")) {
+      const remote = await evolution.connect(sessionName);
+      return ok({ status: remote.state, session: sessionName, channel_session_id: channel.id });
     }
     return NextResponse.json(
-      { error: { code: "waha_start_failed", message: msg } },
+      { error: { code: "evolution_start_failed", message } },
       { status: 502 },
     );
   }

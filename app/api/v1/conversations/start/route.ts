@@ -8,6 +8,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getEvolutionClient } from "@/lib/evolution/client";
 import { getWahaClient } from "@/lib/waha/client";
 
 export const dynamic = "force-dynamic";
@@ -45,15 +46,23 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const { data: channel } = await supabase
     .from("channel_sessions")
-    .select("id,status,waha_session_name")
+    .select("id,provider,external_session_name,status,waha_session_name")
     .eq("id", parsed.data.channel_session_id)
     .eq("organization_id", authz.org.orgId)
     .maybeSingle();
   if (!channel || channel.status !== "WORKING")
     return fail("channel_unavailable", "Escolha uma conexão WhatsApp ativa.", 409, { requestId });
 
+  const evolution = getEvolutionClient();
   const waha = getWahaClient();
-  if (!waha)
+  if (channel.provider === "evolution" && !evolution)
+    return fail(
+      "channel_unavailable",
+      "NÃ£o foi possÃ­vel verificar o WhatsApp neste momento.",
+      503,
+      { requestId },
+    );
+  if (channel.provider !== "evolution" && !waha)
     return fail(
       "channel_unavailable",
       "Não foi possível verificar o WhatsApp neste momento.",
@@ -62,13 +71,26 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   let verifiedChatId: string | null = null;
   try {
-    const verification = await waha.checkNumberExists(
-      channel.waha_session_name,
-      contact.phone_number,
-    );
-    if (!verification.numberExists)
-      return fail("not_found", "Número não encontrado no WhatsApp.", 422, { requestId });
-    verifiedChatId = verification.chatId;
+    if (channel.provider === "evolution" && evolution) {
+      const result = await evolution.checkNumbers(
+        channel.external_session_name || channel.waha_session_name,
+        [contact.phone_number],
+      );
+      const row = (
+        Array.isArray(result) ? result[0] : (result as { data?: unknown[] }).data?.[0]
+      ) as { exists?: boolean; numberExists?: boolean; jid?: string; number?: string } | undefined;
+      if (!row || !(row.exists ?? row.numberExists))
+        return fail("not_found", "Número não encontrado no WhatsApp.", 422, { requestId });
+      verifiedChatId = row.jid ?? row.number ?? contact.phone_number;
+    } else if (waha) {
+      const verification = await waha.checkNumberExists(
+        channel.waha_session_name,
+        contact.phone_number,
+      );
+      if (!verification.numberExists)
+        return fail("not_found", "Número não encontrado no WhatsApp.", 422, { requestId });
+      verifiedChatId = verification.chatId;
+    }
   } catch {
     return fail(
       "channel_unavailable",

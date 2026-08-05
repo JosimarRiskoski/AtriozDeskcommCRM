@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendEmail } from "@/lib/email/resend";
-import { sendWAHA } from "@/lib/waha/send";
+import { sendWhatsAppText } from "@/lib/whatsapp/send";
 
 type Delivery = {
   id: string;
@@ -177,7 +177,7 @@ export async function runNotificationDeliveryTick(admin: SupabaseClient, limit =
         .maybeSingle(),
       admin
         .from("channel_sessions")
-        .select("waha_session_name,status")
+        .select("provider,external_session_name,waha_session_name,status")
         .eq("id", delivery.connection_id)
         .eq("organization_id", delivery.organization_id)
         .maybeSingle(),
@@ -264,8 +264,9 @@ export async function runNotificationDeliveryTick(admin: SupabaseClient, limit =
       template,
     );
     try {
-      const result = await sendWAHA({
-        sessionName: connection.waha_session_name,
+      const result = await sendWhatsAppText({
+        provider: connection.provider ?? "waha",
+        sessionName: connection.external_session_name || connection.waha_session_name,
         chatId: delivery.group_chat_id,
         text: message,
       });

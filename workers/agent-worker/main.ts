@@ -31,6 +31,7 @@ import { runDrainLoop } from '@/lib/agent-engine/edge/crm/drain';
 import { crmEdgeConfigFromEnv } from '@/lib/agent-engine/edge/crm/mcp-client';
 import { enforceHolds, sessionHealthMetrics } from '@/lib/agent-engine/edge/crm/session-watchdog';
 import { runSessionWatchdogLoop } from '@/lib/agent-engine/edge/crm/session-reconciler';
+import { runEvolutionSessionWatchdogLoop } from '@/lib/evolution/session-reconciler';
 import { runHealthLoop } from '@/lib/agent-engine/health/circuit';
 import { runFlywheelLoop } from '@/lib/agent-engine/flywheel/live';
 import { llmEdgeConfigFromEnv } from '@/lib/agent-engine/edge/llm/run-model-call';
@@ -201,7 +202,18 @@ export async function startWorker(
   // Watchdog de sessão (4A-2): reconcilia channel_sessions×WAHA + redrive de
   // queued. Liga só com as credenciais do WAHA no env (sem elas: warn + off).
   const sessionWatchdogLoop =
-    env.WAHA_API_BASE_URL !== undefined && env.WAHA_API_KEY !== undefined
+    env.EVOLUTION_API_BASE_URL !== undefined && env.EVOLUTION_API_KEY !== undefined
+      ? runEvolutionSessionWatchdogLoop(
+          pool,
+          {
+            baseUrl: env.EVOLUTION_API_BASE_URL,
+            apiKey: env.EVOLUTION_API_KEY,
+            intervalMs: env.WATCHDOG_INTERVAL_MS,
+          },
+          log,
+          loopsAbort.signal,
+        )
+      : env.WAHA_API_BASE_URL !== undefined && env.WAHA_API_KEY !== undefined
       ? runSessionWatchdogLoop(
           pool,
           {

@@ -14,9 +14,9 @@ export default async function ConnectionsPage() {
     redirect("/403");
   }
 
-  const key = process.env.WAHA_API_KEY;
-  const wahaConfigured = Boolean(
-    process.env.WAHA_API_BASE_URL && key && key !== "dev_plaintext_change_me",
+  const key = process.env.EVOLUTION_API_KEY;
+  const evolutionConfigured = Boolean(
+    process.env.EVOLUTION_API_BASE_URL && key && key !== "change_me",
   );
 
   return (
@@ -27,7 +27,7 @@ export default async function ConnectionsPage() {
           Verifique a saúde dos seus números de WhatsApp, reconecte os que caíram e adicione novos.
         </p>
       </header>
-      <ConnectionsClient wahaConfigured={wahaConfigured} />
+      <ConnectionsClient evolutionConfigured={evolutionConfigured} />
     </div>
   );
 }

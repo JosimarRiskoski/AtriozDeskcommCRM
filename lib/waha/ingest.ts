@@ -28,6 +28,8 @@ interface Session {
   id: string;
   organization_id: string;
   waha_session_name?: string | null;
+  provider?: "waha" | "evolution";
+  external_session_name?: string | null;
 }
 
 interface PendingInboundRow {
@@ -41,6 +43,8 @@ interface PendingInboundRow {
 }
 
 export interface WahaPayload {
+  /** Provedor de origem. Mantém o pipeline comercial único durante a migração. */
+  provider?: "waha" | "evolution";
   id?: string;
   from?: string;
   to?: string;
@@ -580,7 +584,8 @@ async function handleInbound(
       admin,
       organizationId: session.organization_id,
       sessionId: session.id,
-      sessionName: session.waha_session_name,
+      sessionName: session.external_session_name ?? session.waha_session_name,
+      provider: session.provider ?? p.provider ?? "waha",
       groupChatId: chatId,
       senderChatId: p.author ?? p.participant,
       body: p.body,
@@ -637,6 +642,7 @@ async function handleInbound(
       sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
       delivered_at: now,
       metadata: {
+        channel_provider: p.provider ?? "waha",
         raw_type: p.type,
         ack_name: p.ackName,
         ...(p._data?.poll_id ? { poll_id: p._data.poll_id } : {}),
@@ -826,7 +832,7 @@ async function handleOutboundFromUserPhone(
       media_mime: mediaMimeOf(p),
       sent_via: "external_device",
       sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
-      metadata: { raw_type: p.type, fromMe: true },
+      metadata: { channel_provider: p.provider ?? "waha", raw_type: p.type, fromMe: true },
     })
     .select("id")
     .maybeSingle();

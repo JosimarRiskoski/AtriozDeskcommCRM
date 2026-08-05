@@ -29,7 +29,8 @@ export default async function AcceptInvitePage({ params }: PageProps) {
       <Shell>
         <h1 className="text-xl font-semibold">Convite inválido ou expirado</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Este link não é válido ou já passou da janela de 24h. Peça um novo convite ao admin do tenant.
+          Este link não é válido ou já passou da janela de 24h. Peça um novo convite ao admin do
+          tenant.
         </p>
       </Shell>
     );
@@ -54,6 +55,12 @@ export default async function AcceptInvitePage({ params }: PageProps) {
           className="mt-4 inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
         >
           Fazer login
+        </Link>
+        <Link
+          href={`/team/accept-invite/${token}/signup`}
+          className="mt-3 block text-center text-sm font-medium underline underline-offset-4"
+        >
+          Ainda não tenho conta
         </Link>
       </Shell>
     );

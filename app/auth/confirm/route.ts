@@ -3,6 +3,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { ensureTenantForUser } from "@/lib/auth/provision";
+import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { audit } from "@/lib/audit";
 
 /**
@@ -45,6 +46,15 @@ export async function GET(request: NextRequest) {
 
   if (type === "recovery") {
     return redirectTo("/login/reset");
+  }
+
+  const inviteToken = url.searchParams.get("invite");
+  const invite = inviteToken ? verifyInviteToken(inviteToken) : null;
+  if (
+    invite &&
+    (data.user.email ?? "").trim().toLowerCase() === invite.email.trim().toLowerCase()
+  ) {
+    return redirectTo(`/team/accept-invite/${encodeURIComponent(inviteToken!)}`);
   }
 
   try {

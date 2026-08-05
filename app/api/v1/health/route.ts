@@ -12,9 +12,7 @@ const TIMEOUT_MS = 3_000;
 async function withTimeout<T>(p: Promise<T>, ms = TIMEOUT_MS): Promise<T> {
   return Promise.race([
     p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms),
-    ),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)),
   ]);
 }
 
@@ -90,18 +88,16 @@ async function checkRedis(): Promise<Check> {
   }
 }
 
-async function checkWaha(): Promise<Check> {
+async function checkEvolution(): Promise<Check> {
   const t0 = Date.now();
   try {
-    const base = env.WAHA_API_BASE_URL;
-    if (!base) {
+    const base = env.EVOLUTION_API_BASE_URL;
+    if (!base || !env.EVOLUTION_API_KEY) {
       return { status: "degraded", latency_ms: 0, error: "not_configured" };
     }
-    // /api/sessions valida conectividade E autenticação num tiro só. O WAHA Core não
-    // expõe /api/health (daria 404 mesmo autenticado).
     const res = await withTimeout(
-      fetch(`${base.replace(/\/$/, "")}/api/sessions`, {
-        headers: env.WAHA_API_KEY ? { "X-Api-Key": env.WAHA_API_KEY } : {},
+      fetch(`${base.replace(/\/$/, "")}/instance/fetchInstances`, {
+        headers: { apikey: env.EVOLUTION_API_KEY },
         cache: "no-store",
       }),
     );
@@ -123,13 +119,13 @@ async function checkWaha(): Promise<Check> {
 }
 
 export async function GET() {
-  const [supabase, redis, waha] = await Promise.all([
+  const [supabase, redis, evolution] = await Promise.all([
     checkSupabase(),
     checkRedis(),
-    checkWaha(),
+    checkEvolution(),
   ]);
 
-  const checks = { supabase, redis, waha };
+  const checks = { supabase, redis, evolution };
   const anyDown = Object.values(checks).some((c) => c.status === "down");
   const anyDegraded = Object.values(checks).some((c) => c.status === "degraded");
   const status: "healthy" | "degraded" | "unhealthy" = anyDown

@@ -156,6 +156,7 @@ export type AuditAction =
   | "ai_agent.run_failed"
   | "channel.connected"
   | "channel.reconnected"
+  | "channel.migrated_to_evolution"
   | "channel.updated"
   | "channel.archived"
   | "channel.restored"

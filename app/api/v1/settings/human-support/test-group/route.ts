@@ -3,7 +3,7 @@ import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendWAHA } from "@/lib/waha/send";
+import { sendWhatsAppText } from "@/lib/whatsapp/send";
 
 export async function POST() {
   const requestId = randomUUID();
@@ -21,7 +21,7 @@ export async function POST() {
     });
   const { data: connection } = await admin
     .from("channel_sessions")
-    .select("waha_session_name,status")
+    .select("provider,external_session_name,waha_session_name,status")
     .eq("id", settings.whatsapp_connection_id)
     .eq("organization_id", authz.org.orgId)
     .maybeSingle();
@@ -29,8 +29,9 @@ export async function POST() {
     return fail("connection_unavailable", "A conexão escolhida não está disponível.", 409, {
       requestId,
     });
-  const result = await sendWAHA({
-    sessionName: connection.waha_session_name,
+  const result = await sendWhatsAppText({
+    provider: connection.provider ?? "waha",
+    sessionName: connection.external_session_name || connection.waha_session_name,
     chatId: settings.whatsapp_group_chat_id,
     text: `✅ Teste do CRM ${authz.org.name}\nOs avisos aos gestores estão configurados para este grupo.`,
   });

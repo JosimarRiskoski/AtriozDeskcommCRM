@@ -9,7 +9,7 @@ x-runtime-environment: &runtime-environment
   SUPABASE_DB_URL: ${SUPABASE_DB_URL}
   NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
   NEXT_PUBLIC_ADMIN_URL: ${NEXT_PUBLIC_ADMIN_URL}
-  APP_NAME: ${APP_NAME:-DeskcommCRM}
+  APP_NAME: ${APP_NAME:-Atrios CRM Inteligente}
   APP_LOGO_URL: ${APP_LOGO_URL:-}
   INTERNAL_SECRET: ${INTERNAL_SECRET}
   INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET}
@@ -19,10 +19,9 @@ x-runtime-environment: &runtime-environment
   AI_CRED_AES_KEY: ${AI_CRED_AES_KEY}
   IMPERSONATE_COOKIE_SECRET: ${IMPERSONATE_COOKIE_SECRET}
   LGPD_SIGNING_KEY: ${LGPD_SIGNING_KEY}
-  WAHA_API_BASE_URL: http://waha:3000
-  WAHA_WEBHOOK_BASE_URL: http://app:3000
-  WAHA_API_KEY: ${WAHA_API_KEY}
-  WAHA_HMAC_SECRET: ${WAHA_HMAC_SECRET}
+  EVOLUTION_API_BASE_URL: http://evolution:8080
+  EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+  EVOLUTION_WEBHOOK_SECRET: ${EVOLUTION_WEBHOOK_SECRET}
   UPSTASH_REDIS_REST_URL: http://srh:80
   UPSTASH_REDIS_REST_TOKEN: ${SRH_TOKEN}
   AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
@@ -59,10 +58,16 @@ services:
     depends_on:
       srh:
         condition: service_started
-      waha:
+      evolution:
         condition: service_started
     healthcheck:
-      test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))",
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -78,7 +83,7 @@ services:
     depends_on:
       app:
         condition: service_healthy
-      waha:
+      evolution:
         condition: service_started
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8787/healthz"]
@@ -89,21 +94,50 @@ services:
     logging: *default-logging
     networks: [internal]
 
-  waha:
-    image: ${WAHA_IMAGE:-devlikeapro/waha}
+  evolution:
+    image: ${EVOLUTION_IMAGE:-evoapicloud/evolution-api:latest}
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      WAHA_API_KEY: sha512:${WAHA_API_KEY_SHA512}
-      WHATSAPP_HOOK_URL: http://app:3000/api/v1/webhooks/waha
-      # Inclui votos de enquetes: sem estes eventos, a resposta do contato nunca
-      # alcança o webhook do CRM, embora a enquete seja enviada normalmente.
-      WHATSAPP_HOOK_EVENTS: message,message.any,message.ack,poll.vote,poll.vote.failed,session.status,state.change
-      WHATSAPP_HOOK_HMAC: ${WAHA_HMAC_SECRET}
-      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-GOWS}
-      GODEBUG: ${WAHA_GODEBUG:-netdns=go}
-      WAHA_DASHBOARD_ENABLED: "false"
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: ${EVOLUTION_SERVER_URL:-http://evolution:8080}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${EVOLUTION_DB_USER:-evolution}:${EVOLUTION_DB_PASSWORD}@evolution-postgres:5432/${EVOLUTION_DB_NAME:-evolution}?schema=evolution_api
+      DATABASE_CONNECTION_CLIENT_NAME: atrios-crm-inteligente
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: atrios-evolution
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      TELEMETRY_ENABLED: "false"
+      LOG_LEVEL: ERROR,WARN,INFO
+      LOG_BAILEYS: error
+      DEL_INSTANCE: "false"
     volumes:
-      - waha-data:/app/.sessions
-      - waha-media:/app/.media
+      - evolution-instances:/evolution/instances
+    logging: *default-logging
+    networks: [internal]
+
+  evolution-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${EVOLUTION_DB_NAME:-evolution}
+      POSTGRES_USER: ${EVOLUTION_DB_USER:-evolution}
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD}
+    volumes:
+      - evolution-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     logging: *default-logging
     networks: [internal]
 
@@ -163,6 +197,8 @@ services:
 volumes:
   waha-data:
   waha-media:
+  evolution-instances:
+  evolution-postgres-data:
 
 networks:
   internal:

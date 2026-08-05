@@ -4,7 +4,7 @@ import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { enqueueJob } from "@/lib/agent-engine/queue/queue";
 import { markAwaitingLead, resolveCaseFromHuman } from "@/lib/agent-engine/agent/human-cases";
 import { parseManagerGroupCommand } from "@/lib/human-support/group-command-parser";
-import { sendWAHA } from "@/lib/waha/send";
+import { sendWhatsAppText, type WhatsAppProvider } from "@/lib/whatsapp/send";
 
 type Admin = ReturnType<typeof createAdminClient>;
 const digits = (value: string | null | undefined) => (value ?? "").replace(/\D/g, "");
@@ -15,6 +15,7 @@ export async function handleManagerGroupCommand(input: {
   organizationId: string;
   sessionId: string;
   sessionName: string | null | undefined;
+  provider?: WhatsAppProvider;
   groupChatId: string;
   senderChatId: string | null | undefined;
   body: string | null | undefined;
@@ -55,7 +56,8 @@ export async function handleManagerGroupCommand(input: {
       },
     });
     if (authorized && !parsed && input.sessionName) {
-      await sendWAHA({
+      await sendWhatsAppText({
+        provider: input.provider ?? "waha",
         sessionName: input.sessionName,
         chatId: input.groupChatId,
         text: "Comando não reconhecido. Use: CASO <id> RESOLVER <resposta> ou CASO <id> PEDIR <informação necessária>. Respostas livres não são enviadas ao cliente.",
