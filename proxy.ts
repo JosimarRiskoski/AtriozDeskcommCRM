@@ -22,6 +22,21 @@ export async function proxy(request: NextRequest) {
   response.headers.set("x-pathname", pathname);
   request.headers.set("x-pathname", pathname);
 
+  // Credenciais nunca podem existir na URL: ela pode ser gravada no historico
+  // do navegador, logs de proxy e cabecalho Referer. O login somente aceita
+  // email/senha no corpo do POST da Server Action. Caso alguem acesse um link
+  // malformado ou antigo, removemos imediatamente os parametros sensiveis.
+  if (pathname === "/login" && request.nextUrl.searchParams.has("password")) {
+    const cleanLoginUrl = new URL("/login", request.url);
+    for (const key of ["next", "reset", "error"]) {
+      const value = request.nextUrl.searchParams.get(key);
+      if (value) cleanLoginUrl.searchParams.set(key, value);
+    }
+    const cleanResponse = NextResponse.redirect(cleanLoginUrl, 302);
+    cleanResponse.headers.set("Referrer-Policy", "no-referrer");
+    return cleanResponse;
+  }
+
   // EPIC-11: in dev we route by path (`/admin/*`); in prod the
   // `admin.deskcomm.com` sub-domain is mapped via Vercel rewrites to the same
   // `/admin/*` paths. The host-based branch below stays a NOOP today and only
