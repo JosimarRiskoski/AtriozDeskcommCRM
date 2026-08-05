@@ -186,6 +186,62 @@ export async function archiveAgentAction(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+/** Troca o agente principal e libera o principal anterior para arquivamento. */
+export async function setDefaultAgentAction(id: string): Promise<ActionResult> {
+  if (!UUID_RX.test(id)) return { ok: false, error: "invalid_request" };
+  const guard = await ensureAdmin();
+  if (guard.kind === "fail") return guard.result;
+  const { authUser, activeOrg } = guard;
+  const admin = createAdminClient();
+
+  const { data: target } = await admin
+    .from("ai_agents")
+    .select("id,kind,archived_at,published_version_id")
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId)
+    .maybeSingle();
+  if (!target) return { ok: false, error: "not_found" };
+  if (target.archived_at) return { ok: false, error: "agent_archived" };
+  if (target.kind === "mcp_agent" && !target.published_version_id) {
+    return { ok: false, error: "publish_required", message: "Publique uma versão antes de defini-lo como principal." };
+  }
+
+  const { data: previous } = await admin
+    .from("ai_agents")
+    .select("id")
+    .eq("organization_id", activeOrg.orgId)
+    .eq("is_default", true)
+    .maybeSingle();
+  const now = new Date().toISOString();
+  const { error: clearError } = await admin
+    .from("ai_agents")
+    .update({ is_default: false, updated_at: now })
+    .eq("organization_id", activeOrg.orgId)
+    .eq("is_default", true);
+  if (clearError) return { ok: false, error: "internal_error", message: clearError.message };
+
+  const { error: setError } = await admin
+    .from("ai_agents")
+    .update({ is_default: true, updated_at: now })
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId);
+  if (setError) {
+    if (previous?.id) await admin.from("ai_agents").update({ is_default: true }).eq("id", previous.id);
+    return { ok: false, error: "internal_error", message: setError.message };
+  }
+
+  void audit({
+    action: "ai_agent.default_changed",
+    actorUserId: authUser.id,
+    organizationId: activeOrg.orgId,
+    resourceType: "ai_agent",
+    resourceId: id,
+    metadata: { previous_agent_id: previous?.id ?? null },
+  });
+  revalidatePath("/app/ai/agents");
+  return { ok: true };
+}
+
 export async function renameAgentAction(id: string, name: string): Promise<ActionResult> {
   if (!UUID_RX.test(id)) return { ok: false, error: "invalid_request" };
   const trimmed = (name ?? "").trim();

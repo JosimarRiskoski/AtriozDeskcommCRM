@@ -8,8 +8,8 @@ import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
 import { BackNavigation } from "@/components/shell/BackNavigation";
 
-import { AgentEditorClient } from "./_client";
 import { AgentTabs } from "./_components/AgentTabs";
+import { LegacyAgentUpgrade } from "./_components/LegacyAgentUpgrade";
 import type { ChannelSessionLite } from "./_components/AgentForm";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +51,7 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
     return (
       <div className="flex h-full flex-col gap-6 p-6">
         <BackNavigation fallbackHref="/app/ai" label="Voltar aos agentes" />
-        <AgentEditorClient agentId={agent.id} initialData={agent} readOnly={readOnly} />
+        <LegacyAgentUpgrade agent={agent} readOnly={readOnly} />
       </div>
     );
   }

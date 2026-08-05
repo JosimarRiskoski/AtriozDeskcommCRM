@@ -30,6 +30,16 @@ interface Session {
   waha_session_name?: string | null;
 }
 
+interface PendingInboundRow {
+  id: string;
+  organization_id: string;
+  channel_session_id: string;
+  external_id: string;
+  payload: WahaPayload;
+  lid: string;
+  attempts: number | null;
+}
+
 export interface WahaPayload {
   id?: string;
   from?: string;
@@ -195,6 +205,112 @@ async function reconcilePendingIdentity(
         .eq("id", item.id);
     }
   }
+}
+
+/**
+ * Reprocessa mensagens que chegaram com identidade @lid antes de o WhatsApp
+ * disponibilizar o telefone correspondente. A entrada normal continua sendo
+ * instantânea via webhook; este é apenas o cinto de segurança para não deixar
+ * uma mensagem real invisível até a próxima fala do mesmo contato.
+ */
+export async function reconcilePendingWahaInbound(
+  admin: Admin,
+  limit = 50,
+): Promise<{ scanned: number; reconciled: number; still_pending: number; failed: number }> {
+  const { data, error } = await admin
+    .from("whatsapp_inbound_pending")
+    .select("id,organization_id,channel_session_id,external_id,payload,lid,attempts")
+    .in("status", ["pending", "failed"])
+    .order("created_at", { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(`pending_inbound_query_failed: ${error.message}`);
+
+  const rows = (data ?? []) as unknown as PendingInboundRow[];
+  let reconciled = 0;
+  let stillPending = 0;
+  let failed = 0;
+
+  for (const row of rows) {
+    const { data: claimed } = await admin
+      .from("whatsapp_inbound_pending")
+      .update({
+        status: "reconciling",
+        attempts: Number(row.attempts ?? 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id)
+      .in("status", ["pending", "failed"])
+      .select("id")
+      .maybeSingle();
+    if (!claimed) continue;
+
+    const { data: session } = await admin
+      .from("channel_sessions")
+      .select("id,organization_id,waha_session_name")
+      .eq("id", row.channel_session_id)
+      .eq("organization_id", row.organization_id)
+      .maybeSingle();
+    if (!session) {
+      failed++;
+      await admin
+        .from("whatsapp_inbound_pending")
+        .update({
+          status: "failed",
+          last_error: "conexão WhatsApp não encontrada",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
+      continue;
+    }
+
+    try {
+      await handleInbound(admin, session, row.payload, `pending-${row.id}`, true);
+      const { data: message } = await admin
+        .from("messages")
+        .select("contact_id,conversation_id")
+        .eq("organization_id", row.organization_id)
+        .eq("external_id", row.external_id)
+        .maybeSingle();
+
+      if (!message) {
+        stillPending++;
+        await admin
+          .from("whatsapp_inbound_pending")
+          .update({
+            status: "pending",
+            last_error: "aguardando identificação do WhatsApp",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", row.id);
+        continue;
+      }
+
+      reconciled++;
+      await admin
+        .from("whatsapp_inbound_pending")
+        .update({
+          status: "reconciled",
+          reconciled_contact_id: message.contact_id,
+          reconciled_conversation_id: message.conversation_id,
+          reconciled_at: new Date().toISOString(),
+          last_error: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
+    } catch (error) {
+      failed++;
+      await admin
+        .from("whatsapp_inbound_pending")
+        .update({
+          status: "failed",
+          last_error: error instanceof Error ? error.message.slice(0, 500) : "erro desconhecido",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
+    }
+  }
+
+  return { scanned: rows.length, reconciled, still_pending: stillPending, failed };
 }
 
 async function resolveLidIdentity(session: Session, parsed: ChatIdentity): Promise<ChatIdentity> {

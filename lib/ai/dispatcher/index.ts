@@ -73,6 +73,7 @@ interface EventRow {
 
 interface CandidateRow {
   id: string;
+  is_default: boolean;
   priority: number;
   created_at: string;
   archived_at: string | null;
@@ -392,11 +393,12 @@ async function loadCandidates(
   const { data, error } = await admin
     .from("ai_agents")
     .select(
-      "id, organization_id, priority, created_at, archived_at, published_version_id, version:ai_agent_versions!ai_agents_published_version_id_fkey(id, organization_id, status, channel_session_id, trigger_config)",
+      "id, organization_id, is_default, priority, created_at, archived_at, published_version_id, version:ai_agent_versions!ai_agents_published_version_id_fkey(id, organization_id, status, channel_session_id, trigger_config)",
     )
     .eq("organization_id", orgId)
     .is("archived_at", null)
     .not("published_version_id", "is", null)
+    .order("is_default", { ascending: false })
     .order("priority", { ascending: false })
     .order("created_at", { ascending: true });
 

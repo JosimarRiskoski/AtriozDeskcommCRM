@@ -502,7 +502,9 @@ export async function createMcpAgentAction(
       system_prompt: parsed.data.version.system_prompt,
       kind: "mcp_agent",
       priority: parsed.data.priority,
-      is_active: false,
+        // Rascunhos não entram na seleção sem versão publicada. Mantê-lo ativo
+        // garante que apareça no seletor assim que a publicação for concluída.
+        is_active: true,
       is_default: false,
       created_by: authUser.id,
     })
@@ -560,4 +562,98 @@ export async function createMcpAgentAction(
 
   revalidatePath("/app/ai/agents");
   return { ok: true, data: { agent_id: agentRow.id } };
+}
+
+/**
+ * Converte o agente legado (rag_bot) no mesmo registro versionado usado pelos
+ * provedores BYOK. A versão nasce como rascunho: nunca ativa uma IA nova sem o
+ * administrador revisar e publicar.
+ */
+export async function upgradeLegacyAgentAction(
+  agentId: string,
+  payload: unknown,
+): Promise<ActionResult<{ version_id: string }>> {
+  if (!UUID_RX.test(agentId)) return { ok: false, error: "invalid_request" };
+  const guard = await ensureAdmin();
+  if (!guard.ok) return guard;
+  const { authUser, activeOrg } = guard;
+  const parsed = versionCreateSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { ok: false, error: "validation_failed", details: parsed.error.flatten() };
+  }
+
+  const admin = createAdminClient();
+  const { data: agent } = await admin
+    .from("ai_agents")
+    .select("id,kind,archived_at")
+    .eq("id", agentId)
+    .eq("organization_id", activeOrg.orgId)
+    .maybeSingle();
+  if (!agent) return { ok: false, error: "not_found" };
+  if (agent.archived_at) return { ok: false, error: "agent_archived" };
+  if (agent.kind === "mcp_agent") return { ok: false, error: "already_upgraded" };
+
+  const v = parsed.data;
+  const { data: lastVersion } = await admin
+    .from("ai_agent_versions")
+    .select("version_number")
+    .eq("organization_id", activeOrg.orgId)
+    .eq("agent_id", agentId)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { data: version, error: versionError } = await admin
+    .from("ai_agent_versions")
+    .insert({
+      organization_id: activeOrg.orgId,
+      agent_id: agentId,
+      version_number: (lastVersion?.version_number ?? 0) + 1,
+      system_prompt: v.system_prompt,
+      provider: v.provider,
+      model: v.model,
+      credential_id: v.credential_id,
+      tool_ids: v.tool_ids,
+      contact_field_access: v.contact_field_access,
+      trigger_config: v.trigger_config ?? undefined,
+      channel_session_id: v.channel_session_id,
+      max_steps: v.max_steps,
+      token_budget: v.token_budget,
+      cost_budget_cents: v.cost_budget_cents,
+      history_message_window: v.history_message_window,
+      history_token_window: v.history_token_window,
+      handoff_keywords: v.handoff_keywords,
+      handoff_tool_enabled: v.handoff_tool_enabled,
+      cases_enabled: v.cases_enabled,
+      followup: v.followup,
+      status: "draft",
+      created_by: authUser.id,
+    })
+    .select("id")
+    .single();
+  if (versionError || !version) {
+    return { ok: false, error: "internal_error", message: versionError?.message };
+  }
+
+  const { error: upgradeError } = await admin
+    .from("ai_agents")
+    .update({ kind: "mcp_agent", model: `${v.provider}/${v.model}`, is_active: true })
+    .eq("id", agentId)
+    .eq("organization_id", activeOrg.orgId);
+  if (upgradeError) {
+    await admin.from("ai_agent_versions").delete().eq("id", version.id).eq("status", "draft");
+    return { ok: false, error: "internal_error", message: upgradeError.message };
+  }
+
+  void audit({
+    action: "ai_agent.legacy_upgraded",
+    actorUserId: authUser.id,
+    organizationId: activeOrg.orgId,
+    resourceType: "ai_agent",
+    resourceId: agentId,
+    requestId: randomUUID(),
+    metadata: { version_id: version.id, provider: v.provider, model: v.model },
+  });
+  revalidatePath(`/app/ai/agents/${agentId}`);
+  revalidatePath("/app/ai/agents");
+  return { ok: true, data: { version_id: version.id } };
 }

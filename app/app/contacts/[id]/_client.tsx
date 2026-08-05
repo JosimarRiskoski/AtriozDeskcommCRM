@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ShieldCheck, PencilSimple, Trash } from "@/lib/ui/icons";
+import { ShieldCheck, PencilSimple, Trash, ChatCircle } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import { DeleteContactDialog } from "@/components/contacts/DeleteContactDialog";
 import { ContactOriginsCard } from "@/components/contacts/ContactOriginsCard";
 import { CommunicationPrivacyCard } from "@/components/contacts/CommunicationPrivacyCard";
 import { DuplicateContactCard } from "@/components/contacts/DuplicateContactCard";
+import { StartContactConversationDialog } from "@/components/contacts/StartContactConversationDialog";
 
 interface Props {
   contactId: string;
@@ -31,6 +32,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [anonOpen, setAnonOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [startConversationOpen, setStartConversationOpen] = useState(false);
 
   if (q.isLoading) {
     return (
@@ -115,6 +117,12 @@ export function ContactDetailClient({ contactId }: Props) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {!contact.is_anonymized && !contact.is_blocked && contact.phone_number ? (
+            <Button onClick={() => setStartConversationOpen(true)}>
+              <ChatCircle size={16} weight="bold" aria-hidden />
+              <span>Iniciar conversa</span>
+            </Button>
+          ) : null}
           {!contact.is_anonymized && (
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <PencilSimple size={16} weight="bold" aria-hidden />
@@ -264,6 +272,12 @@ export function ContactDetailClient({ contactId }: Props) {
         contactName={displayName}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
+      />
+      <StartContactConversationDialog
+        contactId={contactId}
+        contactName={displayName}
+        open={startConversationOpen}
+        onOpenChange={setStartConversationOpen}
       />
     </div>
   );

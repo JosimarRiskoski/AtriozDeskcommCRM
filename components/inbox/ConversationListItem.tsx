@@ -72,10 +72,13 @@ export function ConversationListItem({ conversation, isSelected, onSelect, queue
       type="button"
       onClick={() => onSelect(conversation.id)}
       className={cn(
-        "hover:bg-accent/40 group flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left transition-colors",
-        isSelected && "bg-accent/60",
+        "hover:bg-accent/40 group relative flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left transition-colors",
+        // A cor vem do token --primary, que acompanha a aparência escolhida
+        // pela organização. O destaque não depende do status ou de não lidas.
+        isSelected && "z-10 border-primary bg-primary/10 ring-2 ring-inset ring-primary/70",
       )}
       aria-current={isSelected ? "true" : undefined}
+      aria-label={isSelected ? `Conversa selecionada: ${displayName}` : `Abrir conversa: ${displayName}`}
     >
       <div className="relative shrink-0">
         <Avatar className="h-10 w-10">

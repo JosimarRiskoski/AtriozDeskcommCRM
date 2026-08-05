@@ -22,13 +22,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { DotsThree, PencilSimple, Copy, Pause, Play, Archive } from "@/lib/ui/icons";
+import { DotsThree, PencilSimple, Copy, Pause, Play, Archive, Check } from "@/lib/ui/icons";
 import { deriveAgentStatus } from "./AgentStatusBadge";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import {
   archiveAgentAction,
   duplicateAgentAction,
   pauseAgentAction,
+  setDefaultAgentAction,
   unpauseAgentAction,
 } from "../_actions";
 import { RenameAgentDialog } from "./RenameAgentDialog";
@@ -42,6 +43,7 @@ export function AgentRowMenu({ agent }: Props) {
   const [isPending, startTransition] = useTransition();
   const [renameOpen, setRenameOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [defaultOpen, setDefaultOpen] = useState(false);
 
   const status = deriveAgentStatus(agent);
   const isPaused = status === "paused" || status === "draft";
@@ -113,6 +115,17 @@ export function AgentRowMenu({ agent }: Props) {
               <Pause size={14} aria-hidden className="mr-2" /> Pausar
             </DropdownMenuItem>
           )}
+          {!agent.is_default && (
+            <DropdownMenuItem
+              disabled={isArchived}
+              onSelect={(e) => {
+                e.preventDefault();
+                setDefaultOpen(true);
+              }}
+            >
+              <Check size={14} aria-hidden className="mr-2" /> Definir como principal
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={isArchived}
@@ -132,6 +145,24 @@ export function AgentRowMenu({ agent }: Props) {
         open={renameOpen}
         onOpenChange={setRenameOpen}
       />
+
+      <AlertDialog open={defaultOpen} onOpenChange={setDefaultOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Definir &ldquo;{agent.name}&rdquo; como principal?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ele passa a ser a escolha automática preferencial quando nenhuma regra mais específica
+              estiver definida. O agente principal atual poderá ser arquivado depois.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => run("Agente principal atualizado.", () => setDefaultAgentAction(agent.id))}>
+              Definir como principal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
         <AlertDialogContent>

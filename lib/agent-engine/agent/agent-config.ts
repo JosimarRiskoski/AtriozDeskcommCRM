@@ -173,6 +173,7 @@ export async function loadPublishedAgentConfig(
        )
      order by
        case when a.id = (select agent_id from agent_choice) then 0 else 1 end,
+       case when (select agent_id from agent_choice) is null and a.is_default then 0 else 1 end,
        a.priority desc, a.created_at asc
      limit 1`,
     [organizationId, channelSessionId, conversationId ?? null],
