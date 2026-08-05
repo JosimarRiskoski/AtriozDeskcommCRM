@@ -87,11 +87,14 @@ export class EvolutionClient {
         instanceName: input.instanceName,
         integration: "WHATSAPP-BAILEYS",
         qrcode: true,
+        syncFullHistory: true,
         webhook: {
           enabled: true,
           url: input.webhookUrl,
           byEvents: false,
-          base64: false,
+          // O CRM persiste mídia a partir do payload do webhook. Sem base64,
+          // fotos, áudios e documentos recebidos não chegam ao worker.
+          base64: true,
           events: EVOLUTION_WEBHOOK_EVENTS,
           headers: input.webhookHeaders ?? {},
         },
@@ -145,8 +148,8 @@ export class EvolutionClient {
         webhook: {
           enabled: true,
           url: input.webhookUrl,
-          webhookByEvents: false,
-          webhookBase64: true,
+          byEvents: false,
+          base64: true,
           events: EVOLUTION_WEBHOOK_EVENTS,
           headers: input.webhookHeaders ?? {},
         },

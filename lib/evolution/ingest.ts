@@ -51,9 +51,25 @@ function mediaFromMessage(message: Json): {
   body?: string;
   mediaUrl?: string;
   mime?: string;
+  pollVote?: boolean;
 } {
   const text = string(message.conversation) ?? string(object(message.extendedTextMessage).text);
   if (text) return { type: "chat", body: text };
+
+  const selectedOptions = object(object(message.pollUpdateMessage).vote).selectedOptions;
+  if (Array.isArray(selectedOptions)) {
+    const names = selectedOptions.filter(
+      (option): option is string => typeof option === "string" && Boolean(option.trim()),
+    );
+    if (names.length > 0) {
+      return { type: "chat", body: `Resposta de enquete: ${names.join(", ")}`, pollVote: true };
+    }
+  }
+
+  // A Evolution anexa o binário baixado em `message.base64` (no nível da
+  // mensagem), não dentro de `imageMessage`/`audioMessage`.
+  const downloadedBase64 = string(message.base64);
+  const downloadedUrl = string(message.mediaUrl);
 
   const candidates: Array<[string, Json]> = [
     ["image", object(message.imageMessage)],
@@ -65,8 +81,8 @@ function mediaFromMessage(message: Json): {
   for (const [type, item] of candidates) {
     if (Object.keys(item).length === 0) continue;
     const mime = string(item.mimetype);
-    const base64 = string(item.base64) ?? string(item.media);
-    const url = string(item.url);
+    const base64 = downloadedBase64 ?? string(item.base64) ?? string(item.media);
+    const url = downloadedUrl ?? string(item.url);
     const mediaUrl = base64
       ? base64.startsWith("data:")
         ? base64
@@ -104,6 +120,7 @@ function normalizeMessage(data: Json): WahaPayload | null {
     _data: {
       pushName: string(data.pushName),
       message: messageData(data),
+      ...(parsed.pollVote ? { poll_vote: true } : {}),
     },
   };
 }
@@ -143,7 +160,10 @@ export async function dispatchEvolutionEvent(
   let outbound = false;
 
   for (const data of values) {
-    if (event === "MESSAGES_UPSERT") {
+    // `MESSAGES_SET` é usado pela Evolution ao sincronizar mensagens já
+    // existentes após a conexão; precisa passar pelo mesmo caminho idempotente
+    // para não deixar o Inbox desatualizado.
+    if (event === "MESSAGES_UPSERT" || event === "MESSAGES_SET") {
       const payload = normalizeMessage(data);
       if (!payload) continue;
       inbound ||= !payload.fromMe;
