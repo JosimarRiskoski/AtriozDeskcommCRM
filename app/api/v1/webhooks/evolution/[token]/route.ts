@@ -9,6 +9,7 @@ import {
   type EvolutionSession,
   type EvolutionWebhookEnvelope,
 } from "@/lib/evolution/ingest";
+import { compactEvolutionWebhookLog } from "@/lib/evolution/webhook-log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const data = Array.isArray(envelope.data) ? envelope.data[0] : envelope.data;
   const key =
     data && typeof data === "object" ? (data as { key?: { id?: string } }).key : undefined;
+  const compactLog = compactEvolutionWebhookLog(envelope, rawBody);
   const { data: logged } = await admin
     .from("webhook_events_log")
     .insert({
@@ -68,8 +70,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       webhook_path_token: token,
       http_method: "POST",
       headers,
-      raw_body: rawBody,
-      payload_parsed: envelope as unknown as Record<string, unknown>,
+      raw_body: compactLog.rawBody,
+      payload_parsed: compactLog.payloadParsed,
       valid_signature: true,
       event_type: String(envelope.event ?? "unknown"),
       external_id: key?.id ?? null,
