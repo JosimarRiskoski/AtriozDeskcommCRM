@@ -20,11 +20,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ActionResult<T = void> =
-  | { ok: true; data?: T }
-  | { ok: false; error: string; message?: string };
+  { ok: true; data?: T } | { ok: false; error: string; message?: string };
 
 type AdminGuard =
-  | { kind: "ok"; authUser: { id: string }; activeOrg: { orgId: string; role: "viewer" | "agent" | "manager" | "admin" } }
+  | {
+      kind: "ok";
+      authUser: { id: string };
+      activeOrg: { orgId: string; role: "viewer" | "agent" | "manager" | "admin" };
+    }
   | { kind: "fail"; result: { ok: false; error: string } };
 
 async function ensureAdmin(): Promise<AdminGuard> {
@@ -53,10 +56,12 @@ export async function pauseAgentAction(id: string): Promise<ActionResult> {
     .maybeSingle();
 
   if (!existing) return { ok: false, error: "not_found" };
-  if (existing.archived_at) return { ok: false, error: "state_conflict", message: "Agent arquivado." };
+  if (existing.archived_at)
+    return { ok: false, error: "state_conflict", message: "Agent arquivado." };
 
   const requestId = randomUUID();
-  const previousVersionId = (existing as { published_version_id: string | null }).published_version_id;
+  const previousVersionId = (existing as { published_version_id: string | null })
+    .published_version_id;
 
   if (previousVersionId) {
     await admin
@@ -158,13 +163,12 @@ export async function archiveAgentAction(id: string): Promise<ActionResult> {
       message: "Este é o agente padrão. Defina outro agente como padrão antes de arquivá-lo.",
     };
 
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (existing.kind === "mcp_agent") {
-    updates.archived_at = new Date().toISOString();
-    updates.published_version_id = null;
-  } else {
-    updates.is_active = false;
-  }
+  const updates: Record<string, unknown> = {
+    archived_at: new Date().toISOString(),
+    is_active: false,
+    updated_at: new Date().toISOString(),
+  };
+  if (existing.kind === "mcp_agent") updates.published_version_id = null;
 
   const { error } = await admin
     .from("ai_agents")
@@ -203,7 +207,11 @@ export async function setDefaultAgentAction(id: string): Promise<ActionResult> {
   if (!target) return { ok: false, error: "not_found" };
   if (target.archived_at) return { ok: false, error: "agent_archived" };
   if (target.kind === "mcp_agent" && !target.published_version_id) {
-    return { ok: false, error: "publish_required", message: "Publique uma versão antes de defini-lo como principal." };
+    return {
+      ok: false,
+      error: "publish_required",
+      message: "Publique uma versão antes de defini-lo como principal.",
+    };
   }
 
   const { data: previous } = await admin
@@ -229,7 +237,8 @@ export async function setDefaultAgentAction(id: string): Promise<ActionResult> {
     .eq("id", id)
     .eq("organization_id", activeOrg.orgId);
   if (setError) {
-    if (previous?.id) await admin.from("ai_agents").update({ is_default: true }).eq("id", previous.id);
+    if (previous?.id)
+      await admin.from("ai_agents").update({ is_default: true }).eq("id", previous.id);
     return { ok: false, error: "internal_error", message: setError.message };
   }
 

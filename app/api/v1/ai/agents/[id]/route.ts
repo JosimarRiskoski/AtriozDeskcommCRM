@@ -90,12 +90,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   let priorityPatch: number | null = null;
   if (rawBody !== null && typeof rawBody === "object" && "priority" in rawBody) {
     const p = (rawBody as { priority?: unknown }).priority;
-    if (
-      typeof p !== "number" ||
-      !Number.isInteger(p) ||
-      p < 0 ||
-      p > 1000
-    ) {
+    if (typeof p !== "number" || !Number.isInteger(p) || p < 0 || p > 1000) {
       return fail("validation_failed", "priority inválido (0..1000).", 422, { requestId });
     }
     priorityPatch = p;
@@ -201,20 +196,17 @@ export async function DELETE(_req: NextRequest, ctx: RouteCtx): Promise<Response
     return fail("not_found", "Agent não encontrado.", 404, { requestId });
   }
   if (existing.is_default) {
-    return fail(
-      "state_conflict",
-      "Não é possível desativar o agent default da organização.",
-      409,
-      { requestId },
-    );
+    return fail("state_conflict", "Não é possível desativar o agent default da organização.", 409, {
+      requestId,
+    });
   }
 
-  // mcp_agent: soft archive via archived_at + clear published_version_id (pausa
-  // dispatcher). rag_bot legado mantém comportamento is_active=false.
+  // Todo agente sai das listas ativas via soft archive. Para mcp_agent também
+  // removemos a versão publicada do dispatcher; o histórico permanece para auditoria.
   const isMcp = existing.kind === "mcp_agent";
   const patch: Record<string, unknown> = isMcp
     ? { archived_at: new Date().toISOString(), published_version_id: null, is_active: false }
-    : { is_active: false };
+    : { archived_at: new Date().toISOString(), is_active: false };
 
   const { error: updErr } = await admin
     .from("ai_agents")
@@ -236,5 +228,5 @@ export async function DELETE(_req: NextRequest, ctx: RouteCtx): Promise<Response
     metadata: { kind: existing.kind },
   });
 
-  return ok({ id, archived: isMcp, is_active: false }, { requestId });
+  return ok({ id, archived: true, is_active: false }, { requestId });
 }
