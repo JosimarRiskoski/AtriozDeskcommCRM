@@ -46,6 +46,7 @@ export function ChatThread({ conversationId }: Props) {
   const notes = useConversationNotes(conversationId);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const followLatestRef = useRef(true);
   const pagesSeen = useRef(0);
   const activeOrg = useActiveOrg();
   const currentUser = useUser();
@@ -67,6 +68,7 @@ export function ChatThread({ conversationId }: Props) {
 
   useEffect(() => {
     pagesSeen.current = 0;
+    followLatestRef.current = true;
   }, [conversationId]);
 
   // Rola ao fim na primeira carga e quando chega mensagem nova, mas preserva a
@@ -77,10 +79,7 @@ export function ChatThread({ conversationId }: Props) {
     pagesSeen.current = pages;
     if (loadedOlder) return;
 
-    if (!firstLoad) {
-      const scroller = scrollerRef.current;
-      if (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 120) return;
-    }
+    if (!firstLoad && !followLatestRef.current) return;
 
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [items.length, conversationId, pages]);
@@ -134,7 +133,15 @@ export function ChatThread({ conversationId }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto py-2">
+      <div
+        ref={scrollerRef}
+        className="flex-1 overflow-y-auto py-2"
+        onScroll={(event) => {
+          const scroller = event.currentTarget;
+          followLatestRef.current =
+            scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 120;
+        }}
+      >
         {q.hasNextPage && (
           <div className="flex justify-center py-2">
             <Button
