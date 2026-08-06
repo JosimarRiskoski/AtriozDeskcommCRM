@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { env } from "@/lib/env";
 import { getEvolutionClient } from "@/lib/evolution/client";
 import { createClient } from "@/lib/supabase/server";
 
@@ -66,7 +67,7 @@ export async function POST() {
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) return fail("tenant_not_found", "Sem organização ativa", 404);
   const evolution = getEvolutionClient();
-  const webhookBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  const webhookBase = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
   const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
   if (!evolution || !webhookBase || !webhookSecret)
     return fail(

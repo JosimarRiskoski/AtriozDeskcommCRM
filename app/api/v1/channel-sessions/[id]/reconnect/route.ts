@@ -12,6 +12,7 @@ import type { NextRequest } from "next/server";
 import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/client";
 import { getWahaClient, wahaFriendlyError } from "@/lib/waha/client";
@@ -56,7 +57,7 @@ export async function POST(
     try {
       const instanceName = session.external_session_name || session.waha_session_name;
       await evolution.restart(instanceName).catch(() => null);
-      const webhookBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+      const webhookBase = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
       const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
       if (!webhookBase || !webhookSecret || !session.webhook_path_token) {
         return fail(

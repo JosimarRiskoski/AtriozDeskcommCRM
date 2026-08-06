@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { audit } from "@/lib/audit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { env } from "@/lib/env";
 import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/client";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,7 +25,7 @@ export async function POST(
   if (!authz.ok) return authz.response;
 
   const evolution = getEvolutionClient();
-  const webhookBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  const webhookBase = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
   const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
   if (!evolution || !webhookBase || !webhookSecret) {
     return fail(

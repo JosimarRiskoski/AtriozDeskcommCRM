@@ -13,6 +13,7 @@ import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { env } from "@/lib/env";
 import { createChannelSchema } from "@/lib/schemas/channels";
 import { createClient } from "@/lib/supabase/server";
 import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/client";
@@ -122,7 +123,10 @@ export async function POST(req: NextRequest): Promise<Response> {
   // Nome de sessão único por canal — o hardcode `org_<8>` era 1 número por org.
   const sessionName = `org_${activeOrg.orgId.slice(0, 8)}_${randomUUID().replace(/-/g, "").slice(0, 6)}`;
   const webhookToken = randomUUID().replace(/-/g, "");
-  const webhookBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  // `NEXT_PUBLIC_*` é substituída pelo Next durante o build da imagem. A
+  // imagem self-hosted é genérica, então a URL real precisa vir do parser de
+  // ambiente em runtime; caso contrário a Evolution recebe placeholder.invalid.
+  const webhookBase = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
   const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
   if (!webhookBase || !webhookSecret) {
     return fail("evolution_not_configured", "A URL pública do CRM não está configurada.", 503, {
