@@ -52,7 +52,7 @@ describe("EvolutionClient webhook configuration", () => {
       "http://evolution:8080/webhook/set/crm-1",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining('"byEvents":false'),
+        body: expect.stringMatching(/"webhook":\{.*"enabled":true.*"byEvents":false/),
       }),
     );
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));

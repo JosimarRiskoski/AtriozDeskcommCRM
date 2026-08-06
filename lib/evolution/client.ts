@@ -152,14 +152,17 @@ export class EvolutionClient {
     await this.request<unknown>(`/webhook/set/${encodeURIComponent(instanceName)}`, {
       method: "POST",
       body: JSON.stringify({
-        // `webhook/set` recebe a configuração plana. O objeto aninhado
-        // `webhook` só é usado em `instance/create`.
-        enabled: true,
-        url: input.webhookUrl,
-        byEvents: false,
-        base64: true,
-        events: EVOLUTION_WEBHOOK_EVENTS,
-        headers: input.webhookHeaders ?? {},
+        // A Evolution 2.3.x valida `webhook/set` com o mesmo objeto aninhado
+        // usado na criação da instância. O formato plano é ignorado/rejeitado
+        // e deixa a URL anterior da instância ativa.
+        webhook: {
+          enabled: true,
+          url: input.webhookUrl,
+          byEvents: false,
+          base64: true,
+          events: EVOLUTION_WEBHOOK_EVENTS,
+          headers: input.webhookHeaders ?? {},
+        },
       }),
     });
   }
