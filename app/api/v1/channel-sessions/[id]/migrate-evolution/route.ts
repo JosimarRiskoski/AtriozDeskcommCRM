@@ -68,6 +68,18 @@ export async function POST(
     }
   }
 
+  // A instância pode já existir de uma tentativa anterior. Reaplicamos o
+  // webhook sempre para garantir que mensagens recebidas cheguem ao CRM.
+  try {
+    await evolution.setWebhook(instanceName, {
+      webhookUrl: `${webhookBase}/api/v1/webhooks/evolution/${session.webhook_path_token}`,
+      webhookHeaders: { "x-atrios-evolution-secret": webhookSecret },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown";
+    return fail("evolution_webhook_error", evolutionFriendlyError(message), 502, { requestId });
+  }
+
   const { error } = await supabase
     .from("channel_sessions")
     .update({

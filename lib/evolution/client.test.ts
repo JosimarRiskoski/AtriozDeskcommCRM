@@ -56,9 +56,10 @@ describe("EvolutionClient webhook configuration", () => {
       }),
     );
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body.webhook).toMatchObject({ base64: true, enabled: true });
-    expect(body.webhook).not.toHaveProperty("webhookByEvents");
-    expect(body.webhook).not.toHaveProperty("webhookBase64");
+    expect(body).toMatchObject({ base64: true, enabled: true, byEvents: false });
+    expect(body).not.toHaveProperty("webhook");
+    expect(body).not.toHaveProperty("webhookByEvents");
+    expect(body).not.toHaveProperty("webhookBase64");
   });
 });
 

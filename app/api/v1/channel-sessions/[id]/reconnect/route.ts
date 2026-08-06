@@ -36,7 +36,7 @@ export async function POST(
   const supabase = await createClient();
   const { data: session } = await supabase
     .from("channel_sessions")
-    .select("id, provider, external_session_name, waha_session_name, status")
+    .select("id, provider, external_session_name, waha_session_name, webhook_path_token, status")
     .eq("organization_id", activeOrg.orgId)
     .eq("id", id)
     .maybeSingle();
@@ -56,6 +56,20 @@ export async function POST(
     try {
       const instanceName = session.external_session_name || session.waha_session_name;
       await evolution.restart(instanceName).catch(() => null);
+      const webhookBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+      const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
+      if (!webhookBase || !webhookSecret || !session.webhook_path_token) {
+        return fail(
+          "evolution_webhook_not_configured",
+          "O webhook seguro da Evolution ainda não está configurado para esta conexão.",
+          503,
+          { requestId },
+        );
+      }
+      await evolution.setWebhook(instanceName, {
+        webhookUrl: `${webhookBase}/api/v1/webhooks/evolution/${session.webhook_path_token}`,
+        webhookHeaders: { "x-atrios-evolution-secret": webhookSecret },
+      });
       const remote = await evolution.connect(instanceName);
       await supabase
         .from("channel_sessions")

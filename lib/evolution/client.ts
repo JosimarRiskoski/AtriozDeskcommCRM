@@ -152,17 +152,14 @@ export class EvolutionClient {
     await this.request<unknown>(`/webhook/set/${encodeURIComponent(instanceName)}`, {
       method: "POST",
       body: JSON.stringify({
-        // Evolution 2.3.x requer as opções aninhadas em `webhook`; versões
-        // anteriores aceitavam a forma plana. A forma aninhada é compatível
-        // com a versão oficial usada no compose desta migração.
-        webhook: {
-          enabled: true,
-          url: input.webhookUrl,
-          byEvents: false,
-          base64: true,
-          events: EVOLUTION_WEBHOOK_EVENTS,
-          headers: input.webhookHeaders ?? {},
-        },
+        // `webhook/set` recebe a configuração plana. O objeto aninhado
+        // `webhook` só é usado em `instance/create`.
+        enabled: true,
+        url: input.webhookUrl,
+        byEvents: false,
+        base64: true,
+        events: EVOLUTION_WEBHOOK_EVENTS,
+        headers: input.webhookHeaders ?? {},
       }),
     });
   }
