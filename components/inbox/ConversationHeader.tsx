@@ -12,6 +12,7 @@ import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { useConversationAiControl } from "@/hooks/inbox/useConversationAiControl";
+import { useAiAutomation } from "@/hooks/ai/useAiAutomation";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
 import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
@@ -47,6 +48,7 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
   const release = useReleaseConversation();
   const close = useCloseConversation();
   const aiControl = useConversationAiControl(conversation.id);
+  const aiAutomation = useAiAutomation();
   const members = useAssignableMembers(Boolean(conversation.assigned_to_user_id));
   const channels = useChannelSessions();
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -69,6 +71,7 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
   );
   const aiForcedActive = conversation.ai_control_mode === "force_active";
   const humanAttending = conversation.assignee_kind === "user";
+  const aiEnabledForAll = aiAutomation.data?.enabled_for_all ?? false;
   const assignee = members.data?.find(
     (member) => member.user_id === conversation.assigned_to_user_id,
   );
@@ -87,9 +90,12 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
     ? "IA pausada nesta conversa"
     : humanAttending
       ? "IA autorizada — aguardando liberação do humano"
-      : aiForcedActive
-        ? "IA responderá novas mensagens"
-        : "IA seguindo a regra geral";
+      : aiEnabledForAll
+        ? "IA automática ligada"
+        : aiForcedActive
+          ? "IA responderá novas mensagens"
+          : "IA desligada nesta conversa";
+  const showAiMenu = !aiEnabledForAll || aiPaused;
 
   return (
     <div className="flex flex-col gap-2 border-b border-border bg-background px-4 py-3">
@@ -134,67 +140,89 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
         <Button size="sm" variant="outline" onClick={() => setAgentDialogOpen(true)}>
           Agente: {selectedAgentName}
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              variant={aiForcedActive ? "default" : "outline"}
-              disabled={aiControl.setMode.isPending}
-              title="Definir como a IA deve agir somente nesta conversa"
-            >
-              {aiPaused ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}
-              {aiStateLabel}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80 p-1.5">
-            <DropdownMenuLabel>
-              <span className="block">Controle da IA nesta conversa</span>
-              <span className="text-xs font-normal text-muted-foreground">
-                Não inicia follow-up. A IA só responde quando não houver uma pessoa responsável.
-              </span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="items-start py-2.5"
-              onSelect={() => aiControl.setMode.mutate("inherit")}
-            >
-              <span>
-                <span className="block">Seguir configuração geral</span>
-                <span className="text-xs text-muted-foreground">
-                  Usa a regra de agente configurada para a organização.
-                </span>
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="items-start py-2.5"
-              onSelect={() => aiControl.setMode.mutate("force_active")}
-            >
-              <Play size={14} aria-hidden />
-              <span>
+        {showAiMenu ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant={aiForcedActive ? "default" : "outline"}
+                disabled={aiControl.setMode.isPending}
+                title="Definir como a IA deve agir somente nesta conversa"
+              >
+                {aiPaused ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}
+                {aiStateLabel}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 p-1.5">
+              <DropdownMenuLabel>
                 <span className="block">
-                  {aiPaused ? "Devolver para IA" : "Ativar IA somente neste contato"}
+                  {aiEnabledForAll
+                    ? "Atendimento humano em andamento"
+                    : "IA de teste neste contato"}
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  {humanAttending
-                    ? "A IA fica autorizada, mas só responde depois de usar “Liberar atendimento”."
-                    : "A IA pode responder aqui. Nenhuma cadência será iniciada."}
+                <span className="text-xs font-normal text-muted-foreground">
+                  {aiEnabledForAll
+                    ? "A IA geral está ligada, mas permanece pausada enquanto houver atendimento humano."
+                    : "A IA geral está desligada. Ative somente os contatos que deseja testar; isso não inicia follow-up."}
                 </span>
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="items-start py-2.5"
-              onSelect={() => aiControl.setMode.mutate("force_paused")}
-            >
-              <Pause size={14} aria-hidden />
-              <span>
-                <span className="block">Pausar IA neste contato</span>
-                <span className="text-xs text-muted-foreground">
-                  O atendimento fica com a equipe até usar “Devolver para IA”.
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {!aiEnabledForAll ? (
+                <DropdownMenuItem
+                  className="items-start py-2.5"
+                  onSelect={() => aiControl.setMode.mutate("inherit")}
+                >
+                  <span>
+                    <span className="block">Desativar IA neste contato</span>
+                    <span className="text-xs text-muted-foreground">
+                      Remove a exceção manual e volta para a IA geral desligada.
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                className="items-start py-2.5"
+                onSelect={() => aiControl.setMode.mutate("force_active")}
+              >
+                <Play size={14} aria-hidden />
+                <span>
+                  <span className="block">
+                    {aiPaused ? "Devolver para IA" : "Ativar IA somente neste contato"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {humanAttending
+                      ? "A IA fica autorizada, mas só responde depois de usar “Liberar atendimento”."
+                      : "A IA pode responder aqui. Nenhuma cadência será iniciada."}
+                  </span>
                 </span>
-              </span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              </DropdownMenuItem>
+              {!aiEnabledForAll ? (
+                <DropdownMenuItem
+                  className="items-start py-2.5"
+                  onSelect={() => aiControl.setMode.mutate("force_paused")}
+                >
+                  <Pause size={14} aria-hidden />
+                  <span>
+                    <span className="block">Pausar IA neste contato</span>
+                    <span className="text-xs text-muted-foreground">
+                      O atendimento fica com a equipe até usar “Devolver para IA”.
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            size="sm"
+            variant="default"
+            disabled
+            title="A IA geral está ligada para conversas elegíveis"
+          >
+            <Play size={14} aria-hidden />
+            {aiStateLabel}
+          </Button>
+        )}
         {isAvailable && (
           <Button
             size="sm"

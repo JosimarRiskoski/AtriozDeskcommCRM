@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import { AgentsList } from "./_components/AgentsList";
 import { AgentAssignmentRules } from "./_components/AgentAssignmentRules";
+import { AiAutomationControl } from "./_components/AiAutomationControl";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function AgentsListPage() {
           </p>
         </div>
       </header>
+      <AiAutomationControl canWrite={canWrite} />
       <AgentsList initialData={agents} canWrite={canWrite} />
       <AgentAssignmentRules canWrite={canWrite} />
     </div>

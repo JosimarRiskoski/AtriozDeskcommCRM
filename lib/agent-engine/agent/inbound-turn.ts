@@ -28,6 +28,8 @@
  * main.ts não completa nem re-tenta). PII nunca entra em log/erro de job.
  */
 import type pg from "pg";
+
+import { decideInboundAiPolicy, type ConversationAiMode } from "./ai-automation-policy";
 import { z } from "zod";
 import type { ChannelAdapter, ChannelSendResult } from "../channel-adapter";
 
@@ -625,6 +627,20 @@ export async function runAgentTurn(
   };
   // Contexto do RUN em toda linha de log do turno (F2-16): job_id É o run id.
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId });
+
+  // A chave geral controla respostas a mensagens recebidas. Follow-ups possuem
+  // inscrição e publicação próprias e não podem ser ligados/desligados por ela.
+  if (job.kind === "inbound_turn") {
+    const aiPolicy = await getConversationAiPolicy(pool, tenantId, input.conversationId);
+    const policyDecision = decideInboundAiPolicy(aiPolicy);
+    if (!policyDecision.allowed) {
+      runLog.info("turno pulado pela política de IA", {
+        kind: job.kind,
+        reason: policyDecision.reason,
+      });
+      return;
+    }
+  }
 
   // F4-06 (acceptance 2): lead em handoff humano → NO-OP no INÍCIO do turno, antes de
   // qualquer chamada de modelo/CRM. O bot silenciou (bot_silenced_until='infinity', cache
@@ -1813,6 +1829,43 @@ export async function runAgentTurn(
     messages_sent: outcomes.length,
     model: turn.model,
   });
+}
+
+type ConversationAiPolicy = {
+  mode: ConversationAiMode;
+  enabledForAll: boolean;
+  humanAttending: boolean;
+};
+
+/**
+ * Única regra de entrada da IA: a chave da organização habilita todos; quando
+ * desligada, apenas a exceção force_active do Inbox pode criar um turno.
+ */
+async function getConversationAiPolicy(
+  db: pg.Pool,
+  organizationId: string,
+  conversationId: string,
+): Promise<ConversationAiPolicy> {
+  const { rows } = await db.query<{
+    ai_control_mode: ConversationAiPolicy["mode"];
+    enabled_for_all: boolean;
+    human_attending: boolean;
+  }>(
+    `select c.ai_control_mode,
+            coalesce((o.settings->'ai_automation'->>'enabled_for_all')::boolean, false) as enabled_for_all,
+            c.assignee_kind = 'user' as human_attending
+       from conversations c
+       join organizations o on o.id = c.organization_id
+      where c.organization_id = $1 and c.id = $2`,
+    [organizationId, conversationId],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("conversa inexistente ao resolver política de IA");
+  return {
+    mode: row.ai_control_mode,
+    enabledForAll: row.enabled_for_all,
+    humanAttending: row.human_attending,
+  };
 }
 
 /**

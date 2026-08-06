@@ -6,6 +6,8 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { dispatchWahaEvent, type WahaEnvelope, type WahaPayload } from "@/lib/waha/ingest";
 
+import { resolveEvolutionRemoteJid } from "./message-identity";
+
 type Admin = ReturnType<typeof createAdminClient>;
 type Json = Record<string, unknown>;
 
@@ -98,11 +100,20 @@ function mediaFromMessage(message: Json): {
   return { type: "chat" };
 }
 
-function normalizeMessage(data: Json): WahaPayload | null {
+/**
+ * A Evolution/Baileys pode entregar a mesma conversa com um LID em
+ * `remoteJid` e o telefone canônico em `remoteJidAlt`. O LID não é roteável
+ * pelo CRM como telefone e, se o ignorarmos, a mensagem fica pendente mesmo
+ * quando já existe um contato com o número correto.
+ */
+export function normalizeEvolutionMessage(data: Json): WahaPayload | null {
   const key = object(data.key);
   const id = string(key.id) ?? string(data.id);
   const fromMe = key.fromMe === true;
-  const remoteJid = string(key.remoteJid) ?? string(data.remoteJid);
+  const rawRemoteJid = string(key.remoteJid) ?? string(data.remoteJid);
+  const remoteJidAlt = string(key.remoteJidAlt) ?? string(data.remoteJidAlt);
+  const identity = resolveEvolutionRemoteJid({ remoteJid: rawRemoteJid, remoteJidAlt });
+  const remoteJid = identity.remoteJid;
   if (!id || !remoteJid || remoteJid === "status@broadcast") return null;
   const parsed = mediaFromMessage(messageData(data));
   return {
@@ -120,6 +131,11 @@ function normalizeMessage(data: Json): WahaPayload | null {
     _data: {
       pushName: string(data.pushName),
       message: messageData(data),
+      // Mantemos a identidade original somente para auditoria/depuração. O
+      // pipeline usa `from` já resolvido para não criar contato duplicado.
+      ...(identity.usedAlternatePhone
+        ? { original_remote_jid: rawRemoteJid, remote_jid_alt: remoteJidAlt ?? null }
+        : {}),
       ...(parsed.pollVote ? { poll_vote: true } : {}),
     },
   };
@@ -164,7 +180,7 @@ export async function dispatchEvolutionEvent(
     // existentes após a conexão; precisa passar pelo mesmo caminho idempotente
     // para não deixar o Inbox desatualizado.
     if (event === "MESSAGES_UPSERT" || event === "MESSAGES_SET") {
-      const payload = normalizeMessage(data);
+      const payload = normalizeEvolutionMessage(data);
       if (!payload) continue;
       inbound ||= !payload.fromMe;
       outbound ||= Boolean(payload.fromMe);

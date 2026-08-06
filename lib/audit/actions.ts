@@ -82,6 +82,7 @@ export type AuditAction =
   | "ai.reactivated_by_agent"
   | "ai.paused_by_agent"
   | "ai.contact_control_changed"
+  | "ai.automation_config_changed"
   | "campaign.created"
   | "campaign.recipient_connection_reassigned"
   | "campaign.worker_run"

@@ -25,6 +25,15 @@ export type AiDispatchMode = (typeof AI_DISPATCH_MODES)[number];
 export const aiDispatchModeSchema = z.enum(AI_DISPATCH_MODES).catch("native");
 
 /**
+ * Controle comercial simples da automação: desligado = somente exceções
+ * escolhidas manualmente no Inbox; ligado = atendimento automático normal.
+ */
+export const aiAutomationSchema = z.object({
+  enabled_for_all: z.boolean(),
+});
+export type AiAutomationInput = z.infer<typeof aiAutomationSchema>;
+
+/**
  * G3-05: vocabulário canônico de tags de conversa, persistido em
  * organizations.settings.canonical_conversation_tags (spec 13 §3.3 — org-scoped,
  * não pipeline-scoped). Schema declarativo; usado para validar o que o inbox lê

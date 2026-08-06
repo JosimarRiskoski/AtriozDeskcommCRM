@@ -148,6 +148,7 @@ async function reconcilePendingIdentity(
   session: Session,
   lid: string,
   requestId: string,
+  resolvedPhone?: string,
 ): Promise<void> {
   const { data: pending, error } = await admin
     .from("whatsapp_inbound_pending")
@@ -172,7 +173,21 @@ async function reconcilePendingIdentity(
       .in("status", ["pending", "failed"]);
 
     try {
-      await handleInbound(admin, session, item.payload as unknown as WahaPayload, requestId, true);
+      const pendingPayload = item.payload as unknown as WahaPayload;
+      const replayPayload =
+        session.provider === "evolution" && resolvedPhone
+          ? {
+              ...pendingPayload,
+              provider: "evolution" as const,
+              from: `${resolvedPhone.replace(/\D/g, "")}@s.whatsapp.net`,
+              _data: {
+                ...pendingPayload._data,
+                original_remote_jid: `${lid}@lid`,
+                remote_jid_alt: `${resolvedPhone.replace(/\D/g, "")}@s.whatsapp.net`,
+              },
+            }
+          : pendingPayload;
+      await handleInbound(admin, session, replayPayload, requestId, true);
       const { data: reconciledMessage } = await admin
         .from("messages")
         .select("contact_id,conversation_id")
@@ -322,8 +337,30 @@ export async function reconcilePendingWahaInbound(
   return { scanned: rows.length, reconciled, still_pending: stillPending, failed };
 }
 
-async function resolveLidIdentity(session: Session, parsed: ChatIdentity): Promise<ChatIdentity> {
+function evolutionIdentityFromPayload(
+  parsed: ChatIdentity,
+  payload?: WahaPayload,
+): ChatIdentity | null {
+  if (parsed.kind !== "phone" || payload?.provider !== "evolution") return null;
+  const original = payload._data?.original_remote_jid;
+  const alternate = payload._data?.remote_jid_alt;
+  if (typeof original !== "string" || !original.endsWith("@lid") || typeof alternate !== "string") {
+    return null;
+  }
+  const alternateIdentity = parseChatId(alternate);
+  if (alternateIdentity.kind !== "phone" || alternateIdentity.phone !== parsed.phone) return null;
+  return { kind: "resolved", phone: parsed.phone, lid: original.replace(/@.*$/, "") };
+}
+
+async function resolveLidIdentity(
+  session: Session,
+  parsed: ChatIdentity,
+  payload?: WahaPayload,
+): Promise<ChatIdentity> {
+  const evolutionIdentity = evolutionIdentityFromPayload(parsed, payload);
+  if (evolutionIdentity) return evolutionIdentity;
   if (parsed.kind !== "lid" || !session.waha_session_name) return parsed;
+  if (session.provider === "evolution" || payload?.provider === "evolution") return parsed;
   const client = getWahaClient();
   if (!client) return parsed;
 
@@ -453,7 +490,10 @@ async function upsertContact(
 ): Promise<string | null> {
   if (parsed.kind === "group") return null;
   const phone = parsed.kind === "phone" || parsed.kind === "resolved" ? parsed.phone : null;
-  if (phone) {
+  // Quando o provedor entregou LID + telefone, a RPC precisa executar mesmo
+  // que o contato pelo telefone já exista: é ela que grava o alias durável e
+  // permite reprocessar mensagens antigas que ficaram pendentes.
+  if (phone && parsed.kind !== "resolved") {
     const identity = await findActiveContactByPhone(admin, orgId, phone);
     if (identity.kind === "ambiguous") {
       console.error("[waha.ingest] identidade de telefone ambigua", {
@@ -578,7 +618,7 @@ async function handleInbound(
   reconciling = false,
 ): Promise<void> {
   const chatId = p.from ?? "";
-  const parsed = await resolveLidIdentity(session, parseChatId(chatId));
+  const parsed = await resolveLidIdentity(session, parseChatId(chatId), p);
   if (parsed.kind === "group") {
     await handleManagerGroupCommand({
       admin,
@@ -619,7 +659,7 @@ async function handleInbound(
   if (!conversationId) return;
 
   if (!reconciling && parsed.kind === "resolved") {
-    await reconcilePendingIdentity(admin, session, parsed.lid, requestId);
+    await reconcilePendingIdentity(admin, session, parsed.lid, requestId, parsed.phone);
   }
 
   const now = new Date().toISOString();
@@ -657,7 +697,22 @@ async function handleInbound(
     console.error("[waha.ingest] message insert failed", insertErr.message);
     return;
   }
-  if (insertErr?.code === "23505") return;
+  // Mesmo em uma reentrega do webhook, ainda precisamos garantir que o pedido
+  // de resposta da IA foi registrado. Antes retornávamos aqui: se a mensagem
+  // tinha sido salva mas a emissão do dispatch tivesse falhado, ela aparecia no
+  // Inbox sem nunca chegar à fila da IA.
+  const inboundMessageId =
+    insertedMessage?.id ??
+    (
+      await admin
+        .from("messages")
+        .select("id")
+        .eq("organization_id", session.organization_id)
+        .eq("external_id", p.id)
+        .eq("direction", "inbound")
+        .maybeSingle()
+    ).data?.id;
+  if (!inboundMessageId) return;
 
   await markConversation(
     admin,
@@ -714,51 +769,46 @@ async function handleInbound(
     metadata: { conversation_id: conversationId, type: p.type, external_id: p.id },
   });
 
-  // Dispara o agent-dispatcher worker (fire-and-forget; falha não quebra o 200).
-  if (insertedMessage?.id) {
-    const inboundMessageId = insertedMessage.id;
-    admin
-      .rpc(
-        "emit_event" as never,
-        {
-          p_event_type: "ai_agent.dispatch_requested",
-          p_entity_kind: "message",
-          p_entity_id: inboundMessageId,
-          p_payload: {
-            organization_id: session.organization_id,
-            conversation_id: conversationId,
-            contact_id: contactId,
-            channel_session_id: session.id,
-            inbound_message_id: inboundMessageId,
-          },
-          p_metadata: { source: "waha_webhook", request_id: requestId },
-          p_organization_id: session.organization_id,
-        } as never,
-      )
-      .then(({ error }) => {
-        if (error) console.error("[waha.ingest] emit dispatch_requested failed", error.message);
-      });
+  // A emissão para a IA é await + idempotente. Isso faz a rota responder 500
+  // em uma falha real, permitindo que a Evolution reentregue o evento; a
+  // migration 0117 garante que a reentrega não duplica a resposta.
+  // Mensagem histórica reconciliada deve aparecer no Inbox, mas não pode
+  // disparar várias respostas atrasadas da IA. A mensagem nova que revelou o
+  // vínculo LID continua seguindo o fluxo normal logo depois.
+  if (!reconciling) {
+    const { error: dispatchError } = await admin.rpc(
+      "fn_emit_ai_agent_dispatch_once" as never,
+      {
+        p_organization_id: session.organization_id,
+        p_message_id: inboundMessageId,
+        p_conversation_id: conversationId,
+        p_contact_id: contactId,
+        p_channel_session_id: session.id,
+        p_metadata: { source: "whatsapp_webhook", request_id: requestId },
+      } as never,
+    );
+    if (dispatchError) {
+      throw new Error(`ai_dispatch_emit_failed:${dispatchError.message}`);
+    }
+  }
 
-    admin
-      .rpc(
-        "emit_event" as never,
-        {
-          p_event_type: "message.received",
-          p_entity_kind: "message",
-          p_entity_id: inboundMessageId,
-          p_payload: {
-            conversation_id: conversationId,
-            contact_id: contactId,
-            channel_session_id: session.id,
-            body_preview: (p.body ?? "").slice(0, 280),
-          },
-          p_metadata: { source: "waha_webhook", request_id: requestId },
-          p_organization_id: session.organization_id,
-        } as never,
-      )
-      .then(({ error }) => {
-        if (error) console.error("[waha.ingest] emit message.received failed", error.message);
-      });
+  if (!insertErr) {
+    await admin.rpc(
+      "emit_event" as never,
+      {
+        p_event_type: "message.received",
+        p_entity_kind: "message",
+        p_entity_id: inboundMessageId,
+        p_payload: {
+          conversation_id: conversationId,
+          contact_id: contactId,
+          channel_session_id: session.id,
+          body_preview: (p.body ?? "").slice(0, 280),
+        },
+        p_metadata: { source: "waha_webhook", request_id: requestId },
+        p_organization_id: session.organization_id,
+      } as never,
+    );
 
     if (mediaUrlOf(p)) {
       admin
@@ -793,7 +843,7 @@ async function handleOutboundFromUserPhone(
   requestId: string,
 ): Promise<void> {
   const chatId = outboundChatIdOf(p);
-  const parsed = await resolveLidIdentity(session, parseChatId(chatId));
+  const parsed = await resolveLidIdentity(session, parseChatId(chatId), p);
   if (parsed.kind === "group") return;
   if (!p.id || !chatId) return;
   if (!p.body && !mediaUrlOf(p) && !p.hasMedia) return;

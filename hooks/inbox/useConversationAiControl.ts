@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { toast } from "sonner";
 
 export function useConversationAiControl(conversationId: string) {
   const queryClient = useQueryClient();
@@ -32,7 +33,16 @@ export function useConversationAiControl(conversationId: string) {
   const setMode = useMutation({
     mutationFn: (mode: "inherit" | "force_active" | "force_paused") =>
       apiClient.post(`/api/v1/conversations/${conversationId}/ai-control`, { mode }),
-    onSuccess: refresh,
+    onSuccess: (_data, mode) => {
+      refresh();
+      toast.success(
+        mode === "force_active"
+          ? "Conversa devolvida para a IA."
+          : mode === "force_paused"
+            ? "IA pausada neste contato."
+            : "Conversa voltou para a regra geral da IA.",
+      );
+    },
     onError: (error) => {
       refresh();
       showApiError(error);
