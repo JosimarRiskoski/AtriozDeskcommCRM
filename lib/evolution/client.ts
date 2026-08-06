@@ -57,6 +57,16 @@ function firstObject(value: unknown): Json {
   return asObject(obj.instance ?? obj.data ?? obj);
 }
 
+function qrCodeFrom(value: unknown): string | undefined {
+  const root = asObject(value);
+  const payload = asObject(root.instance ?? root.data ?? root);
+  const nestedQr = asObject(payload.qrcode);
+  for (const candidate of [payload.qrcode, payload.base64, nestedQr.base64, nestedQr.code]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+  }
+  return undefined;
+}
+
 export class EvolutionClient {
   constructor(
     private readonly baseUrl: string,
@@ -216,12 +226,7 @@ export class EvolutionClient {
       // instance/connect. Algumas versoes e proxies usam `qrcode`, por isso
       // aceitamos os dois formatos antes de a rota do CRM transformar o valor
       // em uma imagem PNG segura para o navegador.
-      qrcode:
-        typeof raw.qrcode === "string"
-          ? raw.qrcode
-          : typeof raw.base64 === "string"
-            ? raw.base64
-            : undefined,
+      qrcode: qrCodeFrom(value),
       raw,
     };
   }

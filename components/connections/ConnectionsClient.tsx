@@ -306,7 +306,7 @@ export function ConnectionsClient({ evolutionConfigured }: { evolutionConfigured
                     {pacing?.channel_session.daily_message_limit ?? c.daily_message_limit} mensagens
                   </span>
                 </div>
-                <div className="mt-auto flex gap-2">
+                <div className="mt-auto flex flex-wrap items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -662,12 +662,33 @@ function QrDialog({
 }) {
   const [status, setStatus] = useState<string>("STARTING");
   const [tick, setTick] = useState(0);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
   const done = useRef(false);
-  const qrShown = useRef(false);
+  const qrLoaded = useRef(false);
 
   useEffect(() => {
     if (!evolutionConfigured) return;
     let cancelled = false;
+    let objectUrl: string | null = null;
+
+    const loadQr = async () => {
+      if (qrLoaded.current || cancelled) return;
+      try {
+        const response = await fetch(`/api/v1/channel-sessions/${sessionId}/qr?t=${Date.now()}`, {
+          cache: "no-store",
+        });
+        if (!response.ok || cancelled) return;
+        const image = await response.blob();
+        if (cancelled || !image.size) return;
+        objectUrl = URL.createObjectURL(image);
+        qrLoaded.current = true;
+        setQrUrl(objectUrl);
+        setTick((value) => value + 1);
+      } catch {
+        // A Evolution pode levar alguns segundos para disponibilizar o QR.
+      }
+    };
+
     const poll = async () => {
       try {
         const res = await apiClient.get<{ data: { status: string } }>(
@@ -678,10 +699,7 @@ function QrDialog({
         setStatus(s);
         // NOWEB: o QR é estável até conectar — carrega a imagem UMA vez ao entrar
         // em SCAN_QR_CODE (evita o flash branco de recarregar a cada poll).
-        if (s === "SCAN_QR_CODE" && !qrShown.current) {
-          qrShown.current = true;
-          setTick((t) => t + 1);
-        }
+        if (s !== "WORKING" && s !== "FAILED" && s !== "STOPPED") void loadQr();
         if (s === "WORKING" && !done.current) {
           done.current = true;
           onConnected();
@@ -695,6 +713,7 @@ function QrDialog({
     return () => {
       cancelled = true;
       clearInterval(iv);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [sessionId, evolutionConfigured, onConnected]);
 
@@ -708,11 +727,11 @@ function QrDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-[16rem] flex-col items-center justify-center gap-3 py-2">
-          {status === "SCAN_QR_CODE" ? (
+          {qrUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               key={tick}
-              src={`/api/v1/channel-sessions/${sessionId}/qr?t=${tick}`}
+              src={qrUrl}
               alt="QR Code para conectar WhatsApp"
               className="h-64 w-64 rounded-md border bg-white p-2"
             />

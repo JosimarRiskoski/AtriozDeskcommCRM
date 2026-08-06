@@ -87,4 +87,21 @@ describe("Evolution helpers", () => {
       expect.anything(),
     );
   });
+
+  it("reads the nested QR returned during instance creation", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ qrcode: { base64: "data:image/png;base64,NESTED", count: 1 } }),
+        { status: 200 },
+      ),
+    );
+    const client = new EvolutionClient("http://evolution:8080", "secret");
+
+    const connection = await client.createInstance({
+      instanceName: "crm-1",
+      webhookUrl: "https://crm.example.com/webhook",
+    });
+
+    expect(connection.qrcode).toBe("data:image/png;base64,NESTED");
+  });
 });
