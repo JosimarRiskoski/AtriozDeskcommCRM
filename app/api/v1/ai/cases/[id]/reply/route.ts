@@ -27,6 +27,7 @@ import { z } from "zod";
 
 import {
   resolveCaseFromHuman,
+  cancelCaseFromHuman,
   markAwaitingLead,
   escalateCase,
   buildCaseSummary,
@@ -47,7 +48,7 @@ interface RouteParams {
 
 const bodySchema = z
   .object({
-    action: z.enum(["resolved", "need_lead_info", "escalate"]),
+    action: z.enum(["resolved", "need_lead_info", "escalate", "cancelled"]),
     body: z.string().trim().min(1).max(4000),
   })
   .strict();
@@ -56,6 +57,7 @@ const NEW_STATUS: Record<z.infer<typeof bodySchema>["action"], string> = {
   resolved: "resolved",
   need_lead_info: "awaiting_lead",
   escalate: "escalated",
+  cancelled: "cancelled",
 };
 
 interface CaseRow {
@@ -108,7 +110,12 @@ export async function POST(req: NextRequest, { params }: RouteParams): Promise<R
   if (caseRow === undefined) {
     return fail("not_found", "Caso não encontrado.", 404, { requestId });
   }
-  if (!["awaiting_human", "escalated"].includes(caseRow.status)) {
+  const canCancel =
+    action === "cancelled" &&
+    ["awaiting_human", "awaiting_lead", "escalated"].includes(caseRow.status);
+  const canReply =
+    action !== "cancelled" && ["awaiting_human", "escalated"].includes(caseRow.status);
+  if (!canCancel && !canReply) {
     return fail(
       "invalid_state",
       "O caso não está aguardando resposta do atendente (awaiting_human).",
@@ -116,14 +123,21 @@ export async function POST(req: NextRequest, { params }: RouteParams): Promise<R
       { requestId },
     );
   }
-  if (caseRow.contact_id === null) {
+  if (action !== "cancelled" && caseRow.contact_id === null) {
     return fail("unprocessable_entity", "Conversa do caso sem contato associado.", 422, {
       requestId,
     });
   }
   const { conversation_id: conversationId, contact_id: contactId } = caseRow;
 
-  if (action === "escalate") {
+  if (action === "cancelled") {
+    const cancelled = await cancelCaseFromHuman(pool, org.orgId, caseId, user.id, body);
+    if (!cancelled) {
+      return fail("invalid_state", "Este caso já foi alterado por outra pessoa.", 409, {
+        requestId,
+      });
+    }
+  } else if (action === "escalate" && contactId !== null) {
     // O handoff roda ANTES de fechar o caso, e nesta ordem de propósito: ele é
     // idempotente (re-executar é no-op) e recebe um pg.Pool próprio, então não
     // entra na transação abaixo. Se ele falhar, o caso continua `awaiting_human`
@@ -147,7 +161,7 @@ export async function POST(req: NextRequest, { params }: RouteParams): Promise<R
         requestId,
       });
     }
-  } else {
+  } else if (contactId !== null) {
     // Transição e enqueue no MESMO commit (mesmo princípio do completeJob do
     // engine): sem isso, um enqueue que falhasse depois da transição deixaria o
     // caso fora de `awaiting_human` e sem job — o lead nunca seria avisado e a

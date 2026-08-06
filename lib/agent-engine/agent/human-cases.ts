@@ -262,6 +262,31 @@ export async function resolveCaseFromHuman(
   return transitioned(rowCount);
 }
 
+/** Cancela um caso aberto sem enviar mensagem ao cliente. */
+export async function cancelCaseFromHuman(
+  db: Queryable,
+  tenantId: string,
+  caseId: string,
+  actorUserId: string,
+  reason: string,
+): Promise<boolean> {
+  const { rowCount } = await db.query(
+    `with updated as (
+       update agent_cases
+          set status = 'cancelled', closed_at = now(), resolution_note = $4,
+              first_human_response_at=coalesce(first_human_response_at,now()), updated_at = now()
+        where organization_id = $1 and id = $2
+          and status in ('awaiting_human','awaiting_lead','escalated')
+        returning id
+     )
+     insert into agent_case_events
+       (organization_id, case_id, kind, actor_kind, actor_user_id, body)
+     select $1::uuid, id, 'cancelled', 'human', $3::uuid, $4::text from updated`,
+    [tenantId, caseId, actorUserId, reason],
+  );
+  return transitioned(rowCount);
+}
+
 /**
  * awaiting_human -> awaiting_lead (o humano precisa de mais info do lead).
  * Eventos: 'human_replied' (human_action='need_lead_info') + 'lead_asked'.

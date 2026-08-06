@@ -28,7 +28,8 @@ export const STATUS_BADGE_VARIANT: Record<CaseStatus, "warning" | "info" | "succ
  * Sem entrada para `awaiting_human` de propósito — ali o painel está ativo.
  */
 export const CASE_REPLY_DISABLED_REASON: Partial<Record<CaseStatus, string>> = {
-  awaiting_lead: "Aguardando o cliente responder — a IA avisa você quando tiver a informação.",
+  awaiting_lead:
+    "Aguardando o cliente responder. Se o caso foi aberto por engano, você pode cancelá-lo abaixo.",
   resolved: "Este caso já foi concluído.",
   cancelled: "Este caso foi cancelado.",
 };
@@ -56,6 +57,11 @@ export const CASE_ACTIONS: CaseActionOption[] = [
     label: "Não consigo — passar pra humano",
     help: "Sai da IA: a conversa vira um atendimento humano de verdade.",
   },
+  {
+    action: "cancelled",
+    label: "Cancelar caso",
+    help: "Fecha um caso aberto por engano sem enviar mensagem ao cliente.",
+  },
 ];
 
 const EVENT_LABEL: Record<CaseEvent["kind"], string> = {
@@ -73,6 +79,7 @@ const HUMAN_ACTION_LABEL: Record<CaseHumanAction, string> = {
   resolved: "Você concluiu o caso",
   need_lead_info: "Você pediu uma informação ao cliente",
   escalate: "Você decidiu passar para atendimento humano",
+  cancelled: "Você cancelou o caso",
 };
 
 /** Traduz um evento da timeline pra uma frase pt-br — nunca o enum cru. */

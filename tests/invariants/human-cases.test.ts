@@ -6,6 +6,7 @@ import {
   openCase,
   provideCaseUpdate,
   resolveCaseFromHuman,
+  cancelCaseFromHuman,
   markAwaitingLead,
   escalateCase,
   buildCaseSummary,
@@ -216,6 +217,33 @@ describe("wave 2 — human-cases repositório", () => {
       caseId,
     ]);
     expect(eventsAfter.rows[0].n).toBe(3);
+  });
+
+  it("cancelCaseFromHuman fecha caso aguardando cliente sem responder pela IA", async () => {
+    const opened = await openCase(pool, ids(ORG_A, CONV_A), {
+      title: "Caso aberto por engano",
+      summary: "A conversa não precisava de intervenção humana.",
+      blocker: "Falso positivo do guardrail.",
+    });
+    if (!opened.ok) throw new Error("setup falhou");
+
+    await markAwaitingLead(pool, ORG_A, opened.caseId, ACTOR_A, "Pergunta desnecessária");
+    const cancelled = await cancelCaseFromHuman(
+      pool,
+      ORG_A,
+      opened.caseId,
+      ACTOR_A,
+      "Aberto por engano",
+    );
+    expect(cancelled).toBe(true);
+
+    const row = await pool.query(
+      `select status, closed_at, resolution_note from agent_cases where id = $1`,
+      [opened.caseId],
+    );
+    expect(row.rows[0]).toMatchObject({ status: "cancelled", resolution_note: "Aberto por engano" });
+    expect(row.rows[0].closed_at).not.toBeNull();
+    expect(await hasOpenCaseForContact(pool, ORG_A, CONV_A)).toBe(false);
   });
 
   it("escalateCase transiciona awaiting_human->escalated com closed_at", async () => {

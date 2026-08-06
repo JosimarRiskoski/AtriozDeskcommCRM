@@ -23,7 +23,7 @@ export type CaseEventKind =
 export type CaseActorKind = "agent" | "human" | "system" | "lead";
 
 /** A ação que o humano toma ao responder um caso — POST .../reply. */
-export type CaseHumanAction = "resolved" | "need_lead_info" | "escalate";
+export type CaseHumanAction = "resolved" | "need_lead_info" | "escalate" | "cancelled";
 
 export interface CaseListItem {
   id: string;

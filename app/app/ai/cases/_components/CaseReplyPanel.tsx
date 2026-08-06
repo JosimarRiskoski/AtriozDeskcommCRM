@@ -22,9 +22,12 @@ export function CaseReplyPanel({ caseId, status }: { caseId: string; status: Cas
   const [body, setBody] = useState("");
   const reply = useReplyCase();
 
-  const disabled = status !== "awaiting_human" && status !== "escalated";
+  const terminal = status === "resolved" || status === "cancelled";
   const disabledReason = CASE_REPLY_DISABLED_REASON[status];
-  const canSubmit = !disabled && action !== null && body.trim().length > 0 && !reply.isPending;
+  const actionAllowed =
+    action === "cancelled" || status === "awaiting_human" || status === "escalated";
+  const canSubmit =
+    !terminal && action !== null && actionAllowed && body.trim().length > 0 && !reply.isPending;
 
   function handleSubmit() {
     if (action === null) return;
@@ -32,7 +35,7 @@ export function CaseReplyPanel({ caseId, status }: { caseId: string; status: Cas
       { id: caseId, action, body: body.trim() },
       {
         onSuccess: () => {
-          toast.success("Resposta enviada.");
+          toast.success(action === "cancelled" ? "Caso cancelado." : "Resposta enviada.");
           setBody("");
           setAction(null);
         },
@@ -44,16 +47,23 @@ export function CaseReplyPanel({ caseId, status }: { caseId: string; status: Cas
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
       <h3 className="text-sm font-semibold">O que você quer fazer?</h3>
-      {disabled ? <p className="text-xs text-muted-foreground">{disabledReason}</p> : null}
+      {terminal || status === "awaiting_lead" ? (
+        <p className="text-xs text-muted-foreground">{disabledReason}</p>
+      ) : null}
 
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="O que você quer fazer?">
-        {CASE_ACTIONS.filter((opt) => status !== "escalated" || opt.action !== "escalate").map(
+        {CASE_ACTIONS.filter((opt) => {
+          if (terminal) return true;
+          if (status === "awaiting_lead") return opt.action === "cancelled";
+          if (status === "escalated") return opt.action !== "escalate";
+          return true;
+        }).map(
           (opt) => (
             <button
               key={opt.action}
               type="button"
               role="radio"
-              disabled={disabled}
+              disabled={terminal}
               aria-checked={action === opt.action}
               onClick={() => setAction(opt.action)}
               className={cn(
@@ -61,7 +71,7 @@ export function CaseReplyPanel({ caseId, status }: { caseId: string; status: Cas
                 action === opt.action
                   ? "border-accent bg-accent-soft"
                   : "border-border hover:border-border-strong",
-                disabled && "cursor-not-allowed opacity-55",
+                terminal && "cursor-not-allowed opacity-55",
               )}
             >
               <p className="text-sm font-medium">{opt.label}</p>
@@ -74,15 +84,19 @@ export function CaseReplyPanel({ caseId, status }: { caseId: string; status: Cas
       <Textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        disabled={disabled}
-        placeholder="Escreva sua resposta para a IA..."
+        disabled={terminal}
+        placeholder={
+          action === "cancelled"
+            ? "Explique por que o caso está sendo cancelado..."
+            : "Escreva sua resposta para a IA..."
+        }
         rows={3}
       />
-      {!disabled && action === null ? (
+      {!terminal && action === null ? (
         <p className="text-xs text-muted-foreground">Escolha uma das opções acima para enviar.</p>
       ) : null}
       <Button onClick={handleSubmit} disabled={!canSubmit}>
-        {reply.isPending ? "Enviando..." : "Enviar"}
+        {reply.isPending ? "Salvando..." : action === "cancelled" ? "Cancelar caso" : "Enviar"}
       </Button>
     </div>
   );
