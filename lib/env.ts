@@ -168,12 +168,12 @@ export const env = parsed.data;
 // should know when the bot is silent for config reasons).
 if (!env.AI_GATEWAY_API_KEY && !env.ANTHROPIC_API_KEY) {
   console.warn(
-    "[env] No AI_GATEWAY_API_KEY or ANTHROPIC_API_KEY set — ai-response-worker will skip with reason='ai_gateway_key_missing'.",
+    "[env] Platform AI fallback is not configured. Validated BYO credentials saved in the CRM remain available to published agents.",
   );
 }
 if (!env.OPENAI_API_KEY) {
   console.warn(
-    "[env] No OPENAI_API_KEY set — RAG embedding will be unavailable; bot answers without retrieved context.",
+    "[env] Server OPENAI_API_KEY is not configured. The RAG embedding pipeline is unavailable, but published agents can still answer with a validated BYO credential saved in the CRM.",
   );
 }
 if (!env.IMPERSONATE_COOKIE_SECRET || env.IMPERSONATE_COOKIE_SECRET.length < 32) {

@@ -87,12 +87,16 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
       p_organization_id: org.orgId,
     });
     if (emitErr) {
-      return fail(
-        "internal_error",
-        "IA ativada, mas o sinal de retomada do follow-up falhou — tente novamente.",
-        500,
-        { requestId },
-      );
+      // A mudanca principal ja foi confirmada atomicamente pela RPC acima.
+      // Nao devolvemos 500 depois do commit: isso faria a interface dizer que
+      // a IA continuou pausada quando o banco ja esta em `force_active`.
+      // Follow-up e independente da IA; uma falha no sinal de retomada fica
+      // registrada para diagnostico, sem mentir sobre o estado da conversa.
+      console.error("[conversation.ai-control] handoff resume event failed", {
+        requestId,
+        conversationId: id,
+        error: emitErr.message,
+      });
     }
   }
 

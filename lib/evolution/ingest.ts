@@ -129,7 +129,11 @@ export function normalizeEvolutionMessage(data: Json): WahaPayload | null {
     mediaUrl: parsed.mediaUrl,
     mimetype: parsed.mime,
     _data: {
-      pushName: string(data.pushName),
+      // Em mensagens `fromMe`, a Evolution/Baileys informa no `pushName` o
+      // nome da conta conectada (o operador), e nao o nome do destinatario.
+      // Reaproveitar esse valor no upsert faria contatos reais herdarem o nome
+      // do proprio usuario durante a sincronizacao do historico.
+      pushName: fromMe ? undefined : string(data.pushName),
       message: messageData(data),
       // Mantemos a identidade original somente para auditoria/depuração. O
       // pipeline usa `from` já resolvido para não criar contato duplicado.
