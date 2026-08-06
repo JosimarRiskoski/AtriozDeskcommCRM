@@ -477,6 +477,12 @@ function notifyNameOf(p: WahaPayload): string | null {
   return p._data?.notifyName ?? p._data?.pushName ?? null;
 }
 
+function exactProviderPhone(chatId: string): string | undefined {
+  if (!/@(?:c\.us|s\.whatsapp\.net)$/.test(chatId)) return undefined;
+  const digits = chatId.replace(/@.*$/, "").replace(/\D/g, "");
+  return digits ? `+${digits}` : undefined;
+}
+
 /**
  * Upsert atômico de contato pela identidade canônica. Retorna null se a
  * identidade for de grupo ou a RPC falhar.
@@ -494,7 +500,12 @@ async function upsertContact(
   // que o contato pelo telefone já exista: é ela que grava o alias durável e
   // permite reprocessar mensagens antigas que ficaram pendentes.
   if (phone && parsed.kind !== "resolved") {
-    const identity = await findActiveContactByPhone(admin, orgId, phone);
+    const identity = await findActiveContactByPhone(
+      admin,
+      orgId,
+      phone,
+      exactProviderPhone(chatId),
+    );
     if (identity.kind === "ambiguous") {
       console.error("[waha.ingest] identidade de telefone ambigua", {
         organization_id: orgId,

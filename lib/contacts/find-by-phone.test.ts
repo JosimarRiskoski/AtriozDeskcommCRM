@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { findActiveContactByPhone } from "@/lib/contacts/find-by-phone";
 
-function fakeClient(rows: Array<{ id: string }>) {
+function fakeClient(rows: Array<{ id: string; phone_number?: string }>) {
   const calls: Array<{ method: string; value: unknown }> = [];
   const chain = {
     select: () => chain,
@@ -46,5 +46,20 @@ describe("findActiveContactByPhone", () => {
       kind: "ambiguous",
       contactIds: ["contact-1", "contact-2"],
     });
+  });
+
+  it("prioriza a representacao exata entregue pelo provedor", async () => {
+    const fake = fakeClient([
+      { id: "canonical", phone_number: "+5511988765432" },
+      { id: "legacy", phone_number: "+551188765432" },
+    ]);
+    await expect(
+      findActiveContactByPhone(
+        fake.client as never,
+        "org-1",
+        "+5511988765432",
+        "+551188765432",
+      ),
+    ).resolves.toEqual({ kind: "found", contactId: "legacy" });
   });
 });
