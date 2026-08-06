@@ -57,6 +57,16 @@ function firstObject(value: unknown): Json {
   return asObject(obj.instance ?? obj.data ?? obj);
 }
 
+function instanceListFrom(value: unknown): Json[] {
+  if (Array.isArray(value)) return value.map(asObject).filter((item) => Object.keys(item).length > 0);
+  const root = asObject(value);
+  for (const candidate of [root.instances, root.data, root.instance]) {
+    if (Array.isArray(candidate))
+      return candidate.map(asObject).filter((item) => Object.keys(item).length > 0);
+  }
+  return Object.keys(root).length > 0 ? [root] : [];
+}
+
 function qrCodeFrom(value: unknown): string | undefined {
   const root = asObject(value);
   const payload = asObject(root.instance ?? root.data ?? root);
@@ -120,9 +130,26 @@ export class EvolutionClient {
   }
 
   async connectionState(instanceName: string): Promise<EvolutionConnection> {
-    return this.connectionFrom(
-      await this.request<unknown>(`/instance/connectionState/${encodeURIComponent(instanceName)}`),
-    );
+    try {
+      return this.connectionFrom(
+        await this.request<unknown>(`/instance/connectionState/${encodeURIComponent(instanceName)}`),
+      );
+    } catch (error) {
+      // Algumas imagens 2.x em producao nao expoem `connectionState`, embora
+      // `fetchInstances` continue sendo suportado e informe `connectionStatus`.
+      // Sem este fallback o CRM grava "Caiu" para uma sessao que esta aberta.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("evolution_404")) throw error;
+
+      const instances = instanceListFrom(await this.request<unknown>("/instance/fetchInstances"));
+      const compatibleNames = new Set([instanceName, `evo_${instanceName}`]);
+      const match = instances.find((item) => {
+        const name = item.name ?? item.instanceName;
+        return typeof name === "string" && compatibleNames.has(name);
+      });
+      if (!match) throw error;
+      return this.connectionFrom(match);
+    }
   }
 
   async restart(instanceName: string): Promise<EvolutionConnection> {

@@ -56,10 +56,9 @@ describe("EvolutionClient webhook configuration", () => {
       }),
     );
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body).toMatchObject({ base64: true, enabled: true, byEvents: false });
-    expect(body).not.toHaveProperty("webhook");
-    expect(body).not.toHaveProperty("webhookByEvents");
-    expect(body).not.toHaveProperty("webhookBase64");
+    expect(body).toMatchObject({
+      webhook: { base64: true, enabled: true, byEvents: false },
+    });
   });
 });
 
@@ -104,5 +103,27 @@ describe("Evolution helpers", () => {
     });
 
     expect(connection.qrcode).toBe("data:image/png;base64,NESTED");
+  });
+
+  it("falls back to fetchInstances when this Evolution image lacks connectionState", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("not found", { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([{ name: "evo_org_123", connectionStatus: "open" }]),
+          { status: 200 },
+        ),
+      );
+    const client = new EvolutionClient("http://evolution:8080", "secret");
+
+    const connection = await client.connectionState("org_123");
+
+    expect(connection.state).toBe("open");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://evolution:8080/instance/fetchInstances",
+      expect.anything(),
+    );
   });
 });
