@@ -10,6 +10,7 @@ import { type NextRequest } from "next/server";
 import { PACING_DEFAULTS } from "@/lib/agent-engine/pacing/defaults";
 import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { visibleRetentionTraces } from "@/lib/inbox/retention-visibility";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -71,14 +72,14 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // contexto pra dizer QUAL janela segurou o envio, não a genérica.
   const { data: knobs } = await supabase
     .from("channel_knobs")
-    .select("window_start_hour, window_end_hour, allow_sunday, timezone")
+    .select("window_start_hour, window_end_hour, allow_sunday, timezone, updated_at")
     .eq("organization_id", activeOrg.orgId)
     .eq("channel_session_id", conv.channel_session_id)
     .maybeSingle();
 
   return ok(
     {
-      retentions: traces ?? [],
+      retentions: visibleRetentionTraces(traces ?? [], knobs?.updated_at),
       context: {
         window_start_hour: knobs?.window_start_hour ?? PACING_DEFAULTS.windowStartHour,
         window_end_hour: knobs?.window_end_hour ?? PACING_DEFAULTS.windowEndHour,

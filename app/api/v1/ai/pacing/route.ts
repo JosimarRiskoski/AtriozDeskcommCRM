@@ -129,6 +129,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
         organization_id: org.orgId,
         channel_session_id,
         ...knobFields,
+        updated_at: new Date().toISOString(),
       },
       { onConflict: "organization_id,channel_session_id" },
     );

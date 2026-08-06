@@ -31,9 +31,20 @@ const TARGET =
  */
 const gap = (n: number): string => `[^.!?\\n]{0,${n}}?`;
 
+/**
+ * Oferta de escolha ao cliente não é promessa de retaguarda. Exemplo real:
+ * "Se preferir falar com um atendente humano, escreva atendente". Removemos
+ * somente essa oração antes de avaliar as promessas; uma promessa verdadeira
+ * em outra frase do mesmo texto continua sendo detectada.
+ */
+const OPTIONAL_HANDOFF_OFFER =
+  /\bse\s+(?:voce\s+)?(?:preferir|quiser|desejar)\s+(?:falar|conversar)\s+com\s+(?:(?:um|uma|o|a)\s+)?(?:atendente|humano|pessoa|equipe)[^.!?\n]*[.!?]?/g;
+
 const PATTERNS: readonly RegExp[] = [
   // (1a) encaminhar/passar/acionar/... → alvo humano: "encaminhar pro setor", "acionar o responsavel".
-  new RegExp(`\\b(?:encaminh|repass|transfer|acion|escal|direcion|pass|cham)\\w*${gap(20)}\\b${TARGET}\\b`),
+  new RegExp(
+    `\\b(?:encaminh|repass|transfer|acion|escal|direcion|pass|cham)\\w*${gap(20)}\\b${TARGET}\\b`,
+  ),
   // (1a-bis) mesmo verbo de encaminhamento, mas o ALVO é retomado por PRONOME (eles/elas)
   // em vez do substantivo — achado na prova E2E da Wave 7 real: "já passo o pedido pra
   // eles resolverem" escapava (1a) porque "eles" não é TARGET). Exige um verbo de
@@ -45,9 +56,13 @@ const PATTERNS: readonly RegExp[] = [
   ),
   // (1b) verbo de CONSULTA + "com" + alvo humano: "verificar com a equipe", "falar com o pessoal".
   //      Exige "com <humano>": "verificar seu pedido no sistema" (sem "com equipe") NÃO casa.
-  new RegExp(`\\b(?:verific|fal|confer|confirm|consult|alinh|valid|chec)\\w*${gap(15)}\\bcom\\b${gap(15)}\\b${TARGET}\\b`),
+  new RegExp(
+    `\\b(?:verific|fal|confer|confirm|consult|alinh|valid|chec)\\w*${gap(15)}\\bcom\\b${gap(15)}\\b${TARGET}\\b`,
+  ),
   // (1c) pedir/solicitar pra/ao alvo humano: "vou pedir pra equipe liberar".
-  new RegExp(`\\b(?:ped|solicit)\\w*${gap(12)}\\b(?:pra|para|pro|ao|aos|a|as|com)\\b${gap(10)}\\b${TARGET}\\b`),
+  new RegExp(
+    `\\b(?:ped|solicit)\\w*${gap(12)}\\b(?:pra|para|pro|ao|aos|a|as|com)\\b${gap(10)}\\b${TARGET}\\b`,
+  ),
   // (2) "<alvo humano> vai/pode <resolver/retornar/...>": "nosso time vai resolver", "um responsavel vai te retornar".
   //     "nossa equipe ESTA a disposicao" NÃO casa ("esta" fora do grupo vai/vao/pode).
   new RegExp(
@@ -68,10 +83,7 @@ const PATTERNS: readonly RegExp[] = [
 
 /** Minúsculas + remove diacríticos (NFD) — casa acento/caixa uniformemente. */
 function normalize(body: string): string {
-  return body
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+  return body.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
 /**
@@ -80,6 +92,6 @@ function normalize(body: string): string {
  */
 export function detectHumanPromise(body: string): boolean {
   if (body.trim() === "") return false;
-  const text = normalize(body);
+  const text = normalize(body).replace(OPTIONAL_HANDOFF_OFFER, " ");
   return PATTERNS.some((re) => re.test(text));
 }

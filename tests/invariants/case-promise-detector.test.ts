@@ -41,6 +41,8 @@ const NON_PROMISES: readonly string[] = [
   "vou anotar aqui",
   // pronome sem verbo de resolução depois — só "passar pra eles" não é promessa de AÇÃO.
   "vou passar o recado pra eles mais tarde",
+  "Se preferir falar com um atendente humano, escreva atendente e eu informo os próximos passos.",
+  "Se quiser conversar com uma pessoa, diga atendente.",
 ];
 
 describe("detectHumanPromise — calibração (spec 15 §10.2)", () => {
@@ -59,5 +61,13 @@ describe("detectHumanPromise — calibração (spec 15 §10.2)", () => {
 
   it("no-op em string vazia", () => {
     expect(detectHumanPromise("")).toBe(false);
+  });
+
+  it("não deixa uma oferta opcional esconder uma promessa real em outra frase", () => {
+    expect(
+      detectHumanPromise(
+        "Se preferir falar com um atendente humano, escreva atendente. Vou verificar com a equipe.",
+      ),
+    ).toBe(true);
   });
 });

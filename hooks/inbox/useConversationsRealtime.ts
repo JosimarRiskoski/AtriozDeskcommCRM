@@ -67,7 +67,7 @@ export function useConversationsRealtime(filters: ConversationsFilters, orgId: s
     // rede de segurança para sessões em que o socket aparece conectado, mas a
     // mudança é filtrada silenciosamente pela autenticação/RLS. Sem ele, a
     // mensagem já gravada no banco só surgia após F5 ou outra ação na tela.
-    refetchInterval: 3_000,
+    refetchInterval: 2_000,
     refetchIntervalInBackground: false,
   });
 
