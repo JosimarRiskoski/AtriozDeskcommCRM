@@ -37,6 +37,10 @@ export function useMessagesRealtime(conversationId: string | null) {
     },
     getNextPageParam: (last) =>
       last.meta?.has_more && last.meta.cursor ? last.meta.cursor : undefined,
+    // Degradação controlada: se o evento Realtime se perder, a conversa aberta
+    // converge em no máximo poucos segundos, sem exigir F5 do operador.
+    refetchInterval: 3_000,
+    refetchIntervalInBackground: false,
   });
 
   const onChange = useCallback(() => {

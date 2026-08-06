@@ -673,6 +673,14 @@ export async function runAgentTurn(
   // Sem isso, self-host que configurou tudo pela tela (que não preenche default_model)
   // morria no primeiro classificador: "modelo LLM não definido".
   const agentModel = agentConfig?.model;
+  // Toda chamada auxiliar deste turno deve usar a MESMA credencial da versão
+  // publicada. Passar apenas o nome do modelo fazia classificadores voltarem
+  // ao provider padrão da organização (Anthropic) e matarem um agente OpenAI
+  // antes mesmo da resposta principal.
+  const agentLlmOverride =
+    agentConfig !== null
+      ? { provider: agentConfig.provider, credentialId: agentConfig.credentialId }
+      : undefined;
   const turnContextKnobs =
     agentConfig !== null
       ? { historyLimit: agentConfig.historyMessageWindow, maxTokens: deps.knobs.maxContextTokens }
@@ -795,7 +803,11 @@ export async function runAgentTurn(
         },
         notesIndexMaxTokens: deps.knobs.notesIndexMaxTokens,
       },
-      { registry: deps.registry, log: runLog },
+      {
+        registry: deps.registry,
+        log: runLog,
+        ...(agentLlmOverride !== undefined ? { llmOverride: agentLlmOverride } : {}),
+      },
     );
     if (compacted !== null) {
       // Só o rolling_summary é sobrescrito (o resumo compactado carrega compromissos/
@@ -902,7 +914,11 @@ export async function runAgentTurn(
                 ? { model: (deps.knobs.promiseSemantic?.model ?? agentModel) as string }
                 : {}),
             },
-            { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog },
+            {
+              ...(deps.registry !== undefined ? { registry: deps.registry } : {}),
+              log: runLog,
+              ...(agentLlmOverride !== undefined ? { llmOverride: agentLlmOverride } : {}),
+            },
           )
       : undefined;
   let outOfTablePromiseAttempted = false;
@@ -1545,7 +1561,11 @@ export async function runAgentTurn(
           ? { model: (deps.knobs.stageClassifier.model ?? agentModel) as string }
           : {}),
       },
-      { registry: deps.registry, log: runLog },
+      {
+        registry: deps.registry,
+        log: runLog,
+        ...(agentLlmOverride !== undefined ? { llmOverride: agentLlmOverride } : {}),
+      },
     );
     if (stageSuggestion !== null) {
       stageHintBlock = renderStageHint(stageSuggestion, currentStage);
@@ -1568,7 +1588,11 @@ export async function runAgentTurn(
           ? { model: (deps.knobs.jailbreak.model ?? agentModel) as string }
           : {}),
       },
-      { registry: deps.registry, log: runLog },
+      {
+        registry: deps.registry,
+        log: runLog,
+        ...(agentLlmOverride !== undefined ? { llmOverride: agentLlmOverride } : {}),
+      },
     );
     jailbreakLevel = verdict.level;
     if (verdict.flag) {
@@ -1657,7 +1681,10 @@ export async function runAgentTurn(
           }
         : {}),
     },
-    { registry: deps.registry, log: runLog },
+    {
+      registry: deps.registry,
+      log: runLog,
+    },
   );
 
   // F4-04: correlação dos dois sinais do MESMO turno — jailbreak ALTO + tentativa de

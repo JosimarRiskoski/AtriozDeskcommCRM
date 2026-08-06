@@ -63,6 +63,12 @@ export function useConversationsRealtime(filters: ConversationsFilters, orgId: s
     },
     getNextPageParam: (last) =>
       last.meta?.has_more && last.meta.cursor ? last.meta.cursor : undefined,
+    // O Realtime continua sendo o caminho principal. Este refetch curto é a
+    // rede de segurança para sessões em que o socket aparece conectado, mas a
+    // mudança é filtrada silenciosamente pela autenticação/RLS. Sem ele, a
+    // mensagem já gravada no banco só surgia após F5 ou outra ação na tela.
+    refetchInterval: 3_000,
+    refetchIntervalInBackground: false,
   });
 
   const onChange = useCallback(() => {

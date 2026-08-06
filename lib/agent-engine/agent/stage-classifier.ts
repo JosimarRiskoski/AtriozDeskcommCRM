@@ -21,16 +21,17 @@
  *
  * tenant_id/lead_id vêm da ROW do job (closure do run), nunca do payload (regra dura 1).
  */
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 
-import type pg from 'pg';
+import type pg from "pg";
 
-import type { Logger } from '../obs/logger';
-import type { ProviderRegistry } from '../edge/llm/providers';
-import { runModelCall, type LlmEdgeConfig } from '../edge/llm/run-model-call';
-import type { LeadContext } from '../edge/crm/get-lead-context';
-import { LEAD_STAGES, type LeadStage } from './lead-state';
+import type { Logger } from "../obs/logger";
+import type { ProviderRegistry } from "../edge/llm/providers";
+import { runModelCall, type LlmEdgeConfig } from "../edge/llm/run-model-call";
+import type { LlmResolveOverride } from "../edge/llm/credentials";
+import type { LeadContext } from "../edge/crm/get-lead-context";
+import { LEAD_STAGES, type LeadStage } from "./lead-state";
 
 /** Knobs do classificador (env STAGE_CLASSIFIER_*; defaults conservadores no .env.example). */
 export interface StageClassifierKnobs {
@@ -44,28 +45,28 @@ export interface StageClassifierKnobs {
 
 /** Instrução FIXA do classificador — marcador estável (como CHECKPOINT_INSTRUCTION) p/ os testes. */
 export const STAGE_CLASSIFIER_INSTRUCTION =
-  'Você é um classificador auxiliar de estágio de funil de vendas (NÃO responde ao lead). ' +
-  'Com base na conversa acima e no estágio atual, indique em que estágio a conversa está AGORA. ' +
-  'Definições dos estágios:\n' +
+  "Você é um classificador auxiliar de estágio de funil de vendas (NÃO responde ao lead). " +
+  "Com base na conversa acima e no estágio atual, indique em que estágio a conversa está AGORA. " +
+  "Definições dos estágios:\n" +
   '- new: lead recém-chegado, ainda sem diálogo real (só um primeiro "oi"/pergunta genérica, sem contexto).\n' +
-  '- contacted: já houve troca inicial e rapport, mas o lead ainda não revelou necessidade ou dor concreta.\n' +
-  '- qualifying: o lead está revelando necessidade, contexto, dores ou tamanho da operação (descoberta em curso).\n' +
-  '- qualified: orçamento, autoridade de decisão, necessidade e prazo (BANT) já confirmados — pronto para proposta.\n' +
-  '- negotiating: há proposta/preço/condições na mesa e o lead está discutindo valor, desconto, parcelamento.\n' +
-  '- won: o lead fechou/aceitou explicitamente (vai assinar, pagar, emitir nota).\n' +
-  '- lost: o lead recusou, desistiu ou pediu para parar de ser contatado.\n' +
-  'Responda SOMENTE com uma palavra — o nome exato do estágio, em inglês. Sem explicação, sem pontuação.';
+  "- contacted: já houve troca inicial e rapport, mas o lead ainda não revelou necessidade ou dor concreta.\n" +
+  "- qualifying: o lead está revelando necessidade, contexto, dores ou tamanho da operação (descoberta em curso).\n" +
+  "- qualified: orçamento, autoridade de decisão, necessidade e prazo (BANT) já confirmados — pronto para proposta.\n" +
+  "- negotiating: há proposta/preço/condições na mesa e o lead está discutindo valor, desconto, parcelamento.\n" +
+  "- won: o lead fechou/aceitou explicitamente (vai assinar, pagar, emitir nota).\n" +
+  "- lost: o lead recusou, desistiu ou pediu para parar de ser contatado.\n" +
+  "Responda SOMENTE com uma palavra — o nome exato do estágio, em inglês. Sem explicação, sem pontuação.";
 
 function buildClassifierMessage(context: LeadContext, currentStage: LeadStage): string {
   return [
-    '## Estágio atual do funil (registro)',
+    "## Estágio atual do funil (registro)",
     currentStage,
-    '',
-    '## Conversa a classificar (transcript)',
+    "",
+    "## Conversa a classificar (transcript)",
     JSON.stringify(context),
-    '',
+    "",
     STAGE_CLASSIFIER_INSTRUCTION,
-  ].join('\n');
+  ].join("\n");
 }
 
 /**
@@ -93,7 +94,7 @@ export async function classifyStage(
   cfg: LlmEdgeConfig,
   ids: { tenantId: string; leadId: string; jobId?: string },
   args: { context: LeadContext; currentStage: LeadStage; model?: string },
-  deps: { registry?: ProviderRegistry; log: Logger },
+  deps: { registry?: ProviderRegistry; log: Logger; llmOverride?: LlmResolveOverride },
 ): Promise<LeadStage | null> {
   const call = await runModelCall(
     db,
@@ -102,16 +103,21 @@ export async function classifyStage(
       tenantId: ids.tenantId,
       leadId: ids.leadId,
       ...(ids.jobId !== undefined ? { jobId: ids.jobId } : {}),
-      purpose: 'stage_classifier',
+      purpose: "stage_classifier",
       ...(args.model !== undefined ? { model: args.model } : {}),
-      messages: [{ role: 'user', content: buildClassifierMessage(args.context, args.currentStage) }],
+      ...(deps.llmOverride !== undefined ? { llmOverride: deps.llmOverride } : {}),
+      messages: [
+        { role: "user", content: buildClassifierMessage(args.context, args.currentStage) },
+      ],
     },
     { registry: deps.registry, log: deps.log },
   );
   const suggestion = parseStageSuggestion(call.result.text);
   if (suggestion === null) {
     // aux batch sem estágio reconhecível NÃO é incidente do turno: sem PII, só o aviso.
-    deps.log.warn('stage-classifier: saída do modelo auxiliar sem estágio reconhecível — turno segue sem hint');
+    deps.log.warn(
+      "stage-classifier: saída do modelo auxiliar sem estágio reconhecível — turno segue sem hint",
+    );
   }
   return suggestion;
 }
@@ -123,12 +129,12 @@ export async function classifyStage(
  */
 export function renderStageHint(suggestion: LeadStage, currentStage: LeadStage): string {
   return [
-    '## Sugestão automática de estágio (classificador auxiliar — apenas uma DICA)',
+    "## Sugestão automática de estágio (classificador auxiliar — apenas uma DICA)",
     `Um classificador barato estima que a conversa está no estágio "${suggestion}" ` +
       `(o registro atual do funil é "${currentStage}"). Isso é só uma sugestão: VOCÊ decide. ` +
-      'Se concordar que houve avanço REAL, confirme com a tool update_lead_state (só o próximo ' +
-      'estágio válido, com evidência). Se não houve avanço, ignore a sugestão.',
-  ].join('\n');
+      "Se concordar que houve avanço REAL, confirme com a tool update_lead_state (só o próximo " +
+      "estágio válido, com evidência). Se não houve avanço, ignore a sugestão.",
+  ].join("\n");
 }
 
 export interface StageDivergence {
@@ -147,14 +153,20 @@ export interface StageDivergence {
  */
 export async function recordStageDivergenceCandidate(
   dir: string,
-  trace: { tenantId: string; leadId: string; jobId: string; signal: string; divergence: StageDivergence },
+  trace: {
+    tenantId: string;
+    leadId: string;
+    jobId: string;
+    signal: string;
+    divergence: StageDivergence;
+  },
   log: Logger,
 ): Promise<void> {
   const { suggested, confirmed } = trace.divergence;
   await mkdir(dir, { recursive: true });
   const record = {
     recorded_at: new Date().toISOString(),
-    source: 'stage_classifier_divergence',
+    source: "stage_classifier_divergence",
     note:
       `divergência classificador×modelo: o classificador sugeriu "${suggested}" e o modelo confirmou ` +
       `"${confirmed}" via update_lead_state — candidato ao golden set para curadoria humana (SalesGPT).`,
@@ -167,9 +179,9 @@ export async function recordStageDivergenceCandidate(
     signal: trace.signal,
   };
   const file = path.join(dir, `stage-divergence_${trace.jobId}.json`);
-  await writeFile(file, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  await writeFile(file, `${JSON.stringify(record, null, 2)}\n`, "utf8");
   // PII fora do log: só os nomes dos estágios (não o sinal).
-  log.info('candidato ao golden set registrado (divergência de estágio classificador×modelo)', {
+  log.info("candidato ao golden set registrado (divergência de estágio classificador×modelo)", {
     suggested,
     confirmed,
   });
