@@ -65,7 +65,7 @@ export const crmSearchContacts: McpToolDefinition<typeof searchInputShape> = {
     return {
       contacts: result.contacts.map((c) => ({
         id: c.id,
-        ...(canRead(ctx, "name") ? { name: c.display_name ?? c.name } : {}),
+        ...(canRead(ctx, "name") ? { name: c.name ?? c.display_name } : {}),
         ...(canRead(ctx, "phone_number") ? { phone: c.phone_number } : {}),
         ...(canRead(ctx, "email") ? { email: c.email } : {}),
         ...(canRead(ctx, "company") ? { company: c.company } : {}),
@@ -202,7 +202,7 @@ export const crmUpdateContact: McpToolDefinition<typeof updateInputShape> = {
     return {
       contact: {
         id: contact.id,
-        name: contact.display_name ?? contact.name,
+        name: contact.name ?? contact.display_name,
         email: contact.email,
         phone: contact.phone_number,
         company: contact.company,

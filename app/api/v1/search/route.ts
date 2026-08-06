@@ -115,7 +115,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const payload: GlobalSearchPayload = {
     contacts: (contactsResult.data ?? []).map((contact) => ({
       id: contact.id,
-      title: contact.display_name || contact.name || contact.phone_number || "Contato sem nome",
+      title: contact.name || contact.display_name || contact.phone_number || "Contato sem nome",
       description: [contact.phone_number, contact.email, contact.company].filter(Boolean).join(" · ") || "Contato",
     })),
     conversations: (conversationsResult.data ?? []).map((conversation) => ({

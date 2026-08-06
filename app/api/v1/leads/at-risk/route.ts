@@ -226,7 +226,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       }
     }
     for (const p of contacts.data ?? []) {
-      nameByContact.set(p.id, p.display_name ?? p.name ?? null);
+      nameByContact.set(p.id, p.name ?? p.display_name ?? null);
     }
   }
 

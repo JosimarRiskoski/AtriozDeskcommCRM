@@ -97,7 +97,7 @@ export function DuplicateContactCard({
           >
             <div>
               <p className="font-medium">
-                {candidate.display_name || candidate.name || "Sem nome"}
+                {candidate.name || candidate.display_name || "Sem nome"}
               </p>
               <p className="text-muted-foreground">
                 {candidate.phone_number || "Sem telefone"} · origem {candidate.source}
@@ -151,7 +151,7 @@ export function DuplicateContactCard({
                   onChange={() => setPrimaryId(selected.id)}
                 />
                 <span>
-                  <strong>{selected.display_name || selected.name || selected.phone_number}</strong>
+                  <strong>{selected.name || selected.display_name || selected.phone_number}</strong>
                   <span className="block text-muted-foreground">
                     Manter o contato encontrado como principal
                   </span>

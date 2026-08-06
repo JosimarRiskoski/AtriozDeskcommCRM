@@ -55,7 +55,7 @@ function waitingLabel(conversation: ConversationWithContact): string {
 
 export function ConversationListItem({ conversation, isSelected, onSelect, queuePosition }: Props) {
   const c = conversation.contacts ?? null;
-  const displayName = c?.display_name?.trim() || c?.name?.trim() || c?.phone_number || "Sem nome";
+  const displayName = c?.name?.trim() || c?.display_name?.trim() || c?.phone_number || "Sem nome";
   const phoneFallback = c?.phone_number ?? "??";
   const tags = c?.tags ?? [];
   const visibleTags = tags.slice(0, 2);

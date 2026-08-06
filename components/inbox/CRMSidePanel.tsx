@@ -182,7 +182,7 @@ export function CRMSidePanel({ conversation }: Props) {
 
   const tags = contact?.tags ?? [];
   const displayName =
-    contact?.display_name?.trim() || contact?.name?.trim() || contact?.phone_number || "—";
+    contact?.name?.trim() || contact?.display_name?.trim() || contact?.phone_number || "—";
   const channel = channels.data?.find((item) => item.id === conversation?.channel_session_id);
   const incomplete = contact?.source_metadata?.cadastro_incompleto === true;
   const consentStatus =

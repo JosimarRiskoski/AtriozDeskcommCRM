@@ -235,7 +235,7 @@ export async function getLeadContext(
     {
       lead_id: input.leadId,
       contact: {
-        name: contact.display_name ?? contact.name,
+        name: contact.name ?? contact.display_name,
         phone: contact.phone_number,
         email: contact.email,
         tags: contact.tags ?? [],

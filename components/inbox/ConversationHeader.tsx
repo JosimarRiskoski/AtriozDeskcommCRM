@@ -57,7 +57,7 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
   const agents = useAssignableAgents(Boolean(conversation.selected_agent_id || agentDialogOpen));
 
   const c = conversation.contacts ?? null;
-  const displayName = c?.display_name?.trim() || c?.name?.trim() || c?.phone_number || "Sem nome";
+  const displayName = c?.name?.trim() || c?.display_name?.trim() || c?.phone_number || "Sem nome";
   const phone = c?.phone_number ?? null;
   const status = conversation.status;
   const isMineAssigned = conversation.assigned_to_user_id === user.id;

@@ -58,7 +58,9 @@ export function ContactDetailClient({ contactId }: Props) {
     user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager);
   const canDelete = canManageFollowups;
 
-  const displayName = contact.display_name?.trim() || contact.name?.trim() || "Sem nome";
+  // O nome editado pela equipe e a fonte da verdade. `display_name` e apenas
+  // o nome informado pelo WhatsApp e pode vir contaminado em eventos fromMe.
+  const displayName = contact.name?.trim() || contact.display_name?.trim() || "Sem nome";
 
   return (
     <div className="space-y-4 p-6">

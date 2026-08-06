@@ -104,7 +104,7 @@ export async function POST(request: Request): Promise<Response> {
       eligible.push({
         lead_id: lead.id,
         contact_id: lead.contact_id!,
-        name: contact!.display_name || contact!.name || contact!.phone_number || "Contato",
+        name: contact!.name || contact!.display_name || contact!.phone_number || "Contato",
       });
     }
   }

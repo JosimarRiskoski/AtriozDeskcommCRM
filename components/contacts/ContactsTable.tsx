@@ -18,7 +18,7 @@ interface Props {
 }
 
 function displayName(c: Contact): string {
-  return c.display_name?.trim() || c.name?.trim() || "—";
+  return c.name?.trim() || c.display_name?.trim() || "—";
 }
 
 export function ContactsTable({ contacts }: Props) {

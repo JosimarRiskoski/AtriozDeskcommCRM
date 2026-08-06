@@ -67,7 +67,7 @@ interface ContactRow {
 
 function resolveContactName(c: ContactRow | null): string {
   if (!c) return "Contato removido";
-  return c.display_name?.trim() || c.name?.trim() || c.phone_number || "Contato sem nome";
+  return c.name?.trim() || c.display_name?.trim() || c.phone_number || "Contato sem nome";
 }
 
 function embedded<T>(v: T | T[] | null): T | null {

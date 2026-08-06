@@ -61,7 +61,7 @@ async function loadContext(
         `${message.direction === "inbound" ? "Cliente" : "Atendimento"}: ${message.body ?? "[mídia]"}`,
     )
     .join("\n");
-  const contactName = row.contacts?.display_name ?? row.contacts?.name ?? "cliente";
+  const contactName = row.contacts?.name ?? row.contacts?.display_name ?? "cliente";
   return {
     ...row,
     summary,
