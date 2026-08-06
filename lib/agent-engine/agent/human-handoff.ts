@@ -18,15 +18,15 @@
  * tenant/lead/conversation vêm da ROW do job (closure do run), NUNCA do payload (regra dura 1).
  * O resumo vai ao inbox (é PARA o humano assumir) — mas NUNCA a log (PII fora de log, regra 8).
  */
-import { z } from 'zod';
-import type pg from 'pg';
+import { z } from "zod";
+import type pg from "pg";
 
-import type { Logger } from '../obs/logger';
-import { cancelPendingCronsForLead } from '../cron/scheduler';
-import { findForbiddenKey, zodIssuesSummary } from './lead-state';
+import type { Logger } from "../obs/logger";
+import { cancelPendingCronsForLead } from "../cron/scheduler";
+import { findForbiddenKey, zodIssuesSummary } from "./lead-state";
 
 /** Postgres `infinity`: o bot nunca reassume após handoff. */
-const SILENCE_INFINITY = 'infinity';
+const SILENCE_INFINITY = "infinity";
 
 /**
  * Normaliza para a detecção determinística: minúsculas + sem acento (NFD) — os padrões
@@ -35,8 +35,8 @@ const SILENCE_INFINITY = 'infinity';
 function normalize(text: string): string {
   return text
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/gu, '');
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/gu, "");
 }
 
 /**
@@ -45,15 +45,18 @@ function normalize(text: string): string {
  * sobre o texto normalizado (sem acento).
  */
 const HUMAN_HANDOFF_PATTERNS: readonly RegExp[] = [
-  /\b(?:falar|conversar)\s+com\s+(?:um[a]?\s+)?(?:atendente|humano|pessoa|gente|consultor|vendedor|representante|responsavel)\b/,
+  /\b(?:falar|conversar)\s+com\s+(?:um[a]?\s+)?(?:atendente|humano|pessoa|alguem|gente|consultor|vendedor|representante|responsavel)\b/,
   /\bme\s+(?:passa|passe|transfere|transfira|encaminha|encaminhe|manda|mande)\s+(?:pra|para|pro)\s+(?:um[a]?\s+)?(?:atendente|humano|pessoa|gente|setor|comercial)\b/,
   /\batendimento\s+humano\b/,
   /\b(?:atendente|humano|pessoa)\s+de\s+verdade\b/,
+  // A própria IA orienta o cliente a escrever "atendente". Essa palavra/frase
+  // inequívoca precisa acionar o handoff antes do modelo, não virar outro turno.
+  /^(?:(?:quero|preciso|chama|chame)\s+(?:de\s+)?)?(?:um[a]?\s+)?(?:atendente|humano|pessoa)(?:\s+por\s+favor)?[.!?]*$/,
 ];
 
 /** True se a mensagem do lead é um pedido explícito de atendimento humano (determinístico). */
 export function detectHumanHandoffRequest(message: string): boolean {
-  if (message.trim() === '') return false;
+  if (message.trim() === "") return false;
   const normalized = normalize(message);
   return HUMAN_HANDOFF_PATTERNS.some((re) => re.test(normalized));
 }
@@ -65,14 +68,14 @@ export function detectHumanHandoffRequest(message: string): boolean {
  * ("vou parar por aqui, valeu" não casa; "PARAR" sozinho casa).
  */
 const OPTOUT_KEYWORDS: ReadonlySet<string> = new Set([
-  'stop',
-  'parar',
-  'pare',
-  'sair',
-  'cancelar',
-  'descadastrar',
-  'remover',
-  'unsubscribe',
+  "stop",
+  "parar",
+  "pare",
+  "sair",
+  "cancelar",
+  "descadastrar",
+  "remover",
+  "unsubscribe",
 ]);
 
 /**
@@ -103,10 +106,10 @@ const AMBIGUOUS_OPTOUT_PATTERNS: readonly RegExp[] = [
  */
 export function detectAmbiguousOptOut(message: string): boolean {
   const trimmed = message.trim();
-  if (trimmed === '') return false;
+  if (trimmed === "") return false;
   const normalized = normalize(trimmed);
   // palavra-chave isolada: só letras (remove pontuação de borda como "STOP." / "SAIR!")
-  const bareWord = normalized.replace(/[^a-z]/gu, '');
+  const bareWord = normalized.replace(/[^a-z]/gu, "");
   if (OPTOUT_KEYWORDS.has(bareWord)) return true;
   return AMBIGUOUS_OPTOUT_PATTERNS.some((re) => re.test(normalized));
 }
@@ -117,7 +120,11 @@ export function detectAmbiguousOptOut(message: string): boolean {
  * futuro — 'infinity' sempre vale). Lido no INÍCIO do turno, antes de qualquer chamada
  * de modelo. Só o humano (via CRM) libera.
  */
-export async function isLeadInHandoff(db: pg.Pool, tenantId: string, leadId: string): Promise<boolean> {
+export async function isLeadInHandoff(
+  db: pg.Pool,
+  tenantId: string,
+  leadId: string,
+): Promise<boolean> {
   const { rows } = await db.query<{ handoff: boolean }>(
     `select (
        c.force_human
@@ -185,7 +192,7 @@ export async function performHumanHandoff(
      )`,
     [
       ids.tenantId,
-      opts.inboxTitle ?? 'Handoff humano solicitado — assumir a conversa',
+      opts.inboxTitle ?? "Handoff humano solicitado — assumir a conversa",
       `Motivo: ${opts.reason}. Resumo da conversa até aqui:\n${opts.conversationSummary}`,
       ids.leadId,
     ],
@@ -210,14 +217,14 @@ export async function performHumanHandoff(
     [
       ids.tenantId,
       ids.conversationId,
-      opts.inboxTitle ?? 'Atendimento humano solicitado',
+      opts.inboxTitle ?? "Atendimento humano solicitado",
       opts.conversationSummary,
       opts.reason,
     ],
   );
 
   // PII fora do log: só ids/motivo — nunca o resumo da conversa (regra dura 8).
-  opts.log.info('handoff humano aplicado (force_human + silêncio + crons cancelados + inbox)', {
+  opts.log.info("handoff humano aplicado (force_human + silêncio + crons cancelados + inbox)", {
     reason: opts.reason,
   });
 }
@@ -228,12 +235,12 @@ export const requestHumanHandoffInputSchema = z.strictObject({
 });
 
 const PAYLOAD_TEACHING =
-  'Campo aceito: reason (por que passar ao humano) — opcional, nada além. Lead, organização e ' +
-  'conversa vêm do runtime, nunca do payload da tool.';
+  "Campo aceito: reason (por que passar ao humano) — opcional, nada além. Lead, organização e " +
+  "conversa vêm do runtime, nunca do payload da tool.";
 
 export type RequestHumanHandoffResult =
-  | { ok: true; status: 'handoff_solicitado'; message: string }
-  | { ok: false; error: { code: 'invalid_payload'; message: string } };
+  | { ok: true; status: "handoff_solicitado"; message: string }
+  | { ok: false; error: { code: "invalid_payload"; message: string } };
 
 /**
  * Wrapper da tool request_human_handoff exposta ao modelo. Valida o payload e delega a
@@ -248,25 +255,37 @@ export async function applyRequestHumanHandoff(
 ): Promise<RequestHumanHandoffResult> {
   const forbidden = findForbiddenKey(rawInput);
   if (forbidden !== null) {
-    return { ok: false, error: { code: 'invalid_payload', message: `campos não reconhecidos: ${forbidden}. ${PAYLOAD_TEACHING}` } };
+    return {
+      ok: false,
+      error: {
+        code: "invalid_payload",
+        message: `campos não reconhecidos: ${forbidden}. ${PAYLOAD_TEACHING}`,
+      },
+    };
   }
   const parsed = requestHumanHandoffInputSchema.safeParse(rawInput);
   if (!parsed.success) {
-    return { ok: false, error: { code: 'invalid_payload', message: `payload inválido em request_human_handoff (${zodIssuesSummary(parsed.error)}). ${PAYLOAD_TEACHING}` } };
+    return {
+      ok: false,
+      error: {
+        code: "invalid_payload",
+        message: `payload inválido em request_human_handoff (${zodIssuesSummary(parsed.error)}). ${PAYLOAD_TEACHING}`,
+      },
+    };
   }
 
   await performHumanHandoff(db, ids, {
-    reason: parsed.data.reason ?? 'requested_human',
+    reason: parsed.data.reason ?? "requested_human",
     conversationSummary: opts.conversationSummary,
     log: opts.log,
   });
 
   return {
     ok: true,
-    status: 'handoff_solicitado',
+    status: "handoff_solicitado",
     message:
-      'Handoff humano acionado: um atendente vai assumir a conversa. Encerre o turno AGORA, ' +
-      'sem enviar mais mensagens ao lead.',
+      "Handoff humano acionado: um atendente vai assumir a conversa. Encerre o turno AGORA, " +
+      "sem enviar mais mensagens ao lead.",
   };
 }
 
@@ -283,14 +302,15 @@ export function buildHandoffSummary(
   } | null,
 ): string {
   if (previous === null) {
-    return 'Sem resumo acumulado ainda (conversa recente) — abra a conversa no CRM para o contexto completo.';
+    return "Sem resumo acumulado ainda (conversa recente) — abra a conversa no CRM para o contexto completo.";
   }
   const parts: string[] = [];
-  if (previous.rolling_summary.trim() !== '') parts.push(previous.rolling_summary.trim());
-  if (previous.commitments.length > 0) parts.push(`Compromissos: ${previous.commitments.join('; ')}`);
-  if (previous.objections.length > 0) parts.push(`Objeções: ${previous.objections.join('; ')}`);
+  if (previous.rolling_summary.trim() !== "") parts.push(previous.rolling_summary.trim());
+  if (previous.commitments.length > 0)
+    parts.push(`Compromissos: ${previous.commitments.join("; ")}`);
+  if (previous.objections.length > 0) parts.push(`Objeções: ${previous.objections.join("; ")}`);
   if (previous.next_action) parts.push(`Próxima ação: ${previous.next_action}`);
   return parts.length === 0
-    ? 'Sem resumo acumulado ainda (conversa recente) — abra a conversa no CRM para o contexto completo.'
-    : parts.join('\n');
+    ? "Sem resumo acumulado ainda (conversa recente) — abra a conversa no CRM para o contexto completo."
+    : parts.join("\n");
 }
