@@ -496,6 +496,7 @@ async function upsertContact(
 ): Promise<string | null> {
   if (parsed.kind === "group") return null;
   const phone = parsed.kind === "phone" || parsed.kind === "resolved" ? parsed.phone : null;
+  const normalizedNotifyName = notifyName?.trim() || null;
   // Quando o provedor entregou LID + telefone, a RPC precisa executar mesmo
   // que o contato pelo telefone já exista: é ela que grava o alias durável e
   // permite reprocessar mensagens antigas que ficaram pendentes.
@@ -513,7 +514,11 @@ async function upsertContact(
       });
       return null;
     }
-    if (identity.kind === "found") return identity.contactId;
+    // Sem nome novo, o contato encontrado já resolve a identidade. Quando o
+    // provedor finalmente entrega o pushName, porém, a RPC precisa rodar para
+    // trocar apenas nomes provisórios ("Contato 5793") pelo nome real. O atalho
+    // antigo retornava aqui e tornava o cadastro incompleto permanente.
+    if (identity.kind === "found" && !normalizedNotifyName) return identity.contactId;
   }
   const { data, error } = await admin.rpc(
     "fn_upsert_wa_contact" as never,
@@ -523,7 +528,7 @@ async function upsertContact(
       p_phone: phone,
       p_lid: parsed.kind === "lid" || parsed.kind === "resolved" ? parsed.lid : null,
       p_chat_id: chatId,
-      p_notify: notifyName,
+      p_notify: normalizedNotifyName,
     } as never,
   );
   if (error) {

@@ -4,7 +4,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 
 import { dispatchWahaEvent } from "@/lib/waha/ingest";
 
-function fakeAdmin() {
+function fakeAdmin(contactRows: Array<{ id: string; phone_number: string }> = []) {
   const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
   const tableCalls: Array<{ table: string; operation: string; payload: unknown }> = [];
   const table = {
@@ -29,6 +29,15 @@ function fakeAdmin() {
     tableCalls,
     admin: {
       from: (name: string) => {
+        if (name === "contacts") {
+          const contactChain = {
+            eq: () => contactChain,
+            in: () => contactChain,
+            is: () => contactChain,
+            limit: async () => ({ data: contactRows, error: null }),
+          };
+          return { select: () => contactChain };
+        }
         if (name !== "whatsapp_inbound_pending") return table;
         const chain = {
           eq: () => chain,
@@ -151,6 +160,41 @@ describe("ingestao de contato @lid", () => {
         lid: "203392655843435",
         status: "pending",
       }),
+    });
+  });
+
+  it("reexecuta o upsert para enriquecer contato existente quando chega pushName", async () => {
+    const { admin, calls } = fakeAdmin([
+      { id: "contact-existing", phone_number: "+5547999585793" },
+    ]);
+
+    await dispatchWahaEvent(
+      admin as never,
+      {
+        id: "session-id",
+        organization_id: "org-id",
+        waha_session_name: "org_session",
+        is_warmup_complete: true,
+        warmup_started_at: null,
+      },
+      {
+        event: "message",
+        payload: {
+          id: "message-id-name",
+          from: "5547999585793@c.us",
+          fromMe: false,
+          body: "ola",
+          _data: { pushName: "  Chico  " },
+        },
+      },
+      "request-id",
+    );
+
+    const upsert = calls.find((call) => call.fn === "fn_upsert_wa_contact");
+    expect(upsert?.args).toMatchObject({
+      p_kind: "phone",
+      p_phone: "+5547999585793",
+      p_notify: "Chico",
     });
   });
 });
