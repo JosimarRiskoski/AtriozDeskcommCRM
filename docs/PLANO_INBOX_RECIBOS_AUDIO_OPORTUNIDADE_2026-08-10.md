@@ -1,7 +1,7 @@
 # Plano completo — Inbox, recibos, áudio e oportunidade
 
 **Data:** 10/08/2026
-**Status:** implementação local concluída; aguardando banco, deploy e validação real
+**Status:** banco e deploy concluídos; validação real parcialmente aprovada
 **Canal WhatsApp definido:** Evolution API exclusivamente
 
 ## 1. Objetivo
@@ -347,15 +347,26 @@ O plano só estará concluído quando:
 - Build de produção Next.js: aprovado.
 - Busca operacional por `WAHA`, clientes, webhooks e variáveis legadas: zero ocorrências nas áreas ativas auditadas.
 
+### Banco, deploy e validações publicadas concluídas
+
+1. As migrations `0122`, `0123` e `0124` foram aplicadas no banco publicado, na ordem prevista.
+2. Aplicação e workers foram publicados pelo EasyPanel no commit `7539d401`.
+3. O deploy terminou com sucesso em 10/08/2026 e recriou aplicação, worker e Evolution.
+4. O endpoint público de saúde respondeu HTTP 200, com Supabase, Redis e Evolution em estado `ok`.
+5. A conexão `WhatsApp 7653` aparece conectada e disponível para Inbox, atendimento humano, IA e follow-ups.
+6. Ao abrir uma conversa com mensagens não lidas, o contador desapareceu sem F5 e a conversa permaneceu visualmente selecionada.
+7. O compositor publicado apresenta ações distintas para `Anexar` e `Respostas rápidas`.
+8. O botão `Criar oportunidade` abriu o formulário já vinculado ao contato e à conversa, sem criar dados durante a inspeção.
+9. Um áudio recebido carregou pela nova rota de mídia Evolution com duração reconhecida, `readyState = 4` e sem erro de reprodução.
+10. Nenhum erro ou aviso foi observado no console do navegador durante essas validações.
+
 ### Pendente antes do aceite final
 
-1. Aplicar, nesta ordem:
-   - `20260810110000_0122_inbox_read_and_receipt_progression.sql`;
-   - `20260810120000_0123_one_open_opportunity_per_contact.sql`;
-   - `20260810130000_0124_remove_waha_session_legacy.sql`.
-2. Publicar aplicação e workers.
-3. Confirmar healthchecks da aplicação, worker, Supabase e Evolution.
-4. Executar os 12 testes reais da Fase 8, com evidência nos dois sentidos.
-5. Executar o teste de baseline/banco efêmero quando o Docker Desktop estiver disponível; nesta execução o daemon local estava desligado.
+1. Enviar uma nova mensagem real após este deploy e confirmar progressão `enviada → entregue → lida` informada pela Evolution.
+2. Gravar/enviar um áudio pelo CRM, reproduzi-lo no celular e confirmar o estado reproduzido no CRM.
+3. Criar uma oportunidade de teste, confirmar o cartão no Kanban e tentar uma segunda criação para provar o bloqueio de duplicidade no banco publicado.
+4. Executar uma campanha controlada com texto e áudio usando somente Evolution.
+5. Remover no host Docker o contêiner órfão legado `josimaratrioz_deskcomm-waha-1`; ele não integra mais o Compose nem o código ativo, mas ainda existe fisicamente no servidor.
+6. Executar o teste de baseline/banco efêmero quando o Docker Desktop estiver disponível; nesta execução o daemon local estava desligado.
 
 O plano não deve ser marcado como concluído apenas porque o build passou. O aceite final continua condicionado ao banco publicado e aos testes reais descritos acima.
