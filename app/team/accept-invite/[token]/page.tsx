@@ -9,6 +9,7 @@
  *                                    membership and redirects to /app/inbox
  */
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { createClient } from "@/lib/supabase/server";
@@ -18,10 +19,12 @@ export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ error?: string }>;
 }
 
-export default async function AcceptInvitePage({ params }: PageProps) {
+export default async function AcceptInvitePage({ params, searchParams }: PageProps) {
   const { token } = await params;
+  const { error: actionError } = await searchParams;
   const payload = verifyInviteToken(token);
 
   if (!payload) {
@@ -89,7 +92,12 @@ export default async function AcceptInvitePage({ params }: PageProps) {
 
   async function accept() {
     "use server";
-    await acceptInviteAction(token);
+    const result = await acceptInviteAction(token);
+    if (!result.ok) {
+      redirect(
+        `/team/accept-invite/${encodeURIComponent(token)}?error=${encodeURIComponent(result.error)}`,
+      );
+    }
   }
 
   return (
@@ -99,6 +107,14 @@ export default async function AcceptInvitePage({ params }: PageProps) {
         Você foi convidado para entrar como <strong>{payload.role}</strong>. Confirme abaixo para
         ativar seu acesso.
       </p>
+      {actionError ? (
+        <p
+          className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          {inviteActionErrorMessage(actionError)}
+        </p>
+      ) : null}
       <form action={accept} className="mt-4">
         <button
           type="submit"
@@ -109,6 +125,13 @@ export default async function AcceptInvitePage({ params }: PageProps) {
       </form>
     </Shell>
   );
+}
+
+function inviteActionErrorMessage(error: string): string {
+  if (error === "invalid_or_expired") return "Este convite expirou ou já foi utilizado.";
+  if (error === "email_mismatch") return "Entre com o mesmo e-mail que recebeu o convite.";
+  if (error === "not_authenticated") return "Faça login antes de aceitar o convite.";
+  return "Não foi possível aceitar o convite agora. Tente novamente ou peça um novo convite.";
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

@@ -274,7 +274,7 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
         {/* Footer */}
         <View style={styles.footer} fixed>
           <Text>
-            DeskcommCRM · Relatório LGPD Art. 18 II · DPO: contato via canal oficial
+            Átrioz CRM · Relatório LGPD Art. 18 II · DPO: contato via canal oficial
             do controlador · Validade do link de download conforme email recebido
           </Text>
         </View>

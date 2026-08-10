@@ -35,7 +35,7 @@ function getClient(): Resend | null {
 }
 
 function fromAddress(): string {
-  return process.env.RESEND_FROM_EMAIL || "Deskcomm <noreply@deskcomm.app>";
+  return process.env.RESEND_FROM_EMAIL || "Átrioz CRM <noreply@deskcomm.app>";
 }
 
 export async function sendEmail(args: SendArgs): Promise<SendResult> {

@@ -16,8 +16,10 @@
  * runtime em vez de lida do bundle.
  */
 
-export const DEFAULT_APP_NAME = "Atrios CRM Inteligente";
+export const DEFAULT_APP_NAME = "Átrioz CRM";
 export const DEFAULT_APP_LOGO_URL = "/icon";
+
+const LEGACY_APP_NAME = /deskcomm|\bteste\b/i;
 
 export type Branding = {
   /** Nome exibido na interface e nos títulos de página. */
@@ -40,8 +42,14 @@ export function resolveBranding(
   name: string | undefined | null,
   logoUrl: string | undefined | null,
 ): Branding {
-  const resolvedName = (name ?? "").trim() || DEFAULT_APP_NAME;
-  const resolvedLogo = (logoUrl ?? "").trim() || DEFAULT_APP_LOGO_URL;
+  const configuredName = (name ?? "").trim();
+  // Instalações antigas podem manter APP_NAME=Atrioz Deskcomm Teste no
+  // EasyPanel. Não deixamos esse valor legado reaparecer enquanto a variável
+  // não é atualizada; marcas white-label válidas continuam funcionando.
+  const usesDefaultBrand = !configuredName || LEGACY_APP_NAME.test(configuredName);
+  const resolvedName = usesDefaultBrand ? DEFAULT_APP_NAME : configuredName;
+  const configuredLogo = (logoUrl ?? "").trim();
+  const resolvedLogo = configuredLogo || (usesDefaultBrand ? DEFAULT_APP_LOGO_URL : null);
   return {
     name: resolvedName,
     logoUrl: resolvedLogo,

@@ -13,8 +13,11 @@ import {
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 
-const STORAGE_KEY = "deskcomm-theme";
-const PALETTE_STORAGE_KEY = "deskcomm-palette";
+const STORAGE_KEY = "atrioz-crm-theme";
+const LEGACY_STORAGE_KEY = "deskcomm-theme";
+const PALETTE_STORAGE_KEY = "atrioz-crm-palette";
+const LEGACY_PALETTE_STORAGE_KEY = "deskcomm-palette";
+const ORGANIZATION_PALETTE_STORAGE_KEY = "atrioz-crm-organization-palette";
 
 type ThemeContextValue = {
   /** User preference: light, dark, or system. */
@@ -35,7 +38,9 @@ const ThemeContext = React.createContext<ThemeContextValue | null>(null);
 function readStoredTheme(): Theme {
   if (typeof window === "undefined") return "system";
   try {
-    const v = window.localStorage.getItem(STORAGE_KEY);
+    const v =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (v === "light" || v === "dark" || v === "system") return v;
   } catch {
     // localStorage indisponível (modo privado, sandbox) — segue com default.
@@ -56,10 +61,22 @@ function applyTheme(resolved: ResolvedTheme) {
 function readStoredPalette(): PalettePreference {
   if (typeof window === "undefined") return "organization";
   try {
-    const value = window.localStorage.getItem(PALETTE_STORAGE_KEY);
+    const value =
+      window.localStorage.getItem(PALETTE_STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_PALETTE_STORAGE_KEY);
     return value === "organization" || isAppearancePalette(value) ? value : "organization";
   } catch {
     return "organization";
+  }
+}
+
+function readStoredOrganizationPalette(): AppearancePalette {
+  if (typeof window === "undefined") return DEFAULT_ORGANIZATION_PALETTE;
+  try {
+    const value = window.localStorage.getItem(ORGANIZATION_PALETTE_STORAGE_KEY);
+    return isAppearancePalette(value) ? value : DEFAULT_ORGANIZATION_PALETTE;
+  } catch {
+    return DEFAULT_ORGANIZATION_PALETTE;
   }
 }
 
@@ -112,7 +129,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     readStoredPalette(),
   );
   const [organizationPalette, setOrganizationPalette] = React.useState<AppearancePalette>(
-    DEFAULT_ORGANIZATION_PALETTE,
+    () => readStoredOrganizationPalette(),
   );
 
   // Listener pra mudanças do prefers-color-scheme.

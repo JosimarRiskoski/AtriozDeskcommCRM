@@ -5,6 +5,8 @@ import { branding } from "@/lib/branding";
 import { ThemeProvider } from "@/lib/theme";
 import { Providers } from "./providers";
 import { PublicEnvScript } from "./public-env-script";
+import { appearanceInitScript } from "@/components/theme/organization-appearance-script";
+import { DEFAULT_ORGANIZATION_PALETTE } from "@/lib/appearance";
 import "./globals.css";
 
 const atkinson = Atkinson_Hyperlegible({
@@ -39,6 +41,11 @@ export function generateMetadata(): Metadata {
     description:
       "Centralize o atendimento por WhatsApp num funil só. Agentes de IA resolvem o que dá pra resolver e passam para o time humano o que importa — com tudo registrado. Multi-tenant, LGPD-nativo, feito para operações brasileiras.",
     applicationName: name,
+    icons: {
+      icon: [{ url: "/icon", type: "image/png", sizes: "64x64" }],
+      shortcut: "/icon",
+      apple: "/icon",
+    },
     authors: [{ name }],
     keywords: [
       "CRM",
@@ -61,7 +68,7 @@ export const viewport: Viewport = {
 
 // Inline FOUC-prevention. Conteúdo é string literal estática (zero input do usuário),
 // portanto seguro. Lê localStorage + prefers-color-scheme antes do primeiro paint.
-const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem('deskcomm-theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;var r=(s==='dark'||s==='light')?s:((s==='system'||!s)&&d?'dark':'light');document.documentElement.setAttribute('data-theme',r);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
+const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem('atrioz-crm-theme')||localStorage.getItem('deskcomm-theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;var r=(s==='dark'||s==='light')?s:((s==='system'||!s)&&d?'dark':'light');document.documentElement.setAttribute('data-theme',r);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
 
 export default function RootLayout({
   children,
@@ -77,6 +84,11 @@ export default function RootLayout({
         {/* Config pública do Supabase em runtime (imagem genérica self-host). */}
         <PublicEnvScript />
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: appearanceInitScript(DEFAULT_ORGANIZATION_PALETTE),
+          }}
+        />
       </head>
       <body className="min-h-screen bg-bg font-sans text-text antialiased">
         <Providers>

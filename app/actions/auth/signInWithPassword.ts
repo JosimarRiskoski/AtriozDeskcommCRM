@@ -14,6 +14,18 @@ export type SignInResult = {
   challengeId?: string;
 };
 
+function safeNextPath(next?: string): string {
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/app/inbox";
+  try {
+    const parsed = new URL(next, "https://atrioz.invalid");
+    return parsed.origin === "https://atrioz.invalid"
+      ? `${parsed.pathname}${parsed.search}`
+      : "/app/inbox";
+  } catch {
+    return "/app/inbox";
+  }
+}
+
 /**
  * Sign in with password.
  *
@@ -80,5 +92,5 @@ export async function signInWithPassword(
   });
 
   // Server-side redirect ensures fresh session cookie is sent to browser.
-  redirect(next || "/app/inbox");
+  redirect(safeNextPath(next));
 }

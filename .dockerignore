@@ -9,6 +9,8 @@ test-results
 tests
 playwright.config.ts
 *.png
+!logo/favicon-64.png
+!logo/logo-256.png
 *.log
 .lina
 docs

@@ -9,6 +9,11 @@ export function OrganizationAppearanceSync({ palette }: { palette: AppearancePal
   const { setOrganizationPalette } = useTheme();
 
   useLayoutEffect(() => {
+    try {
+      window.localStorage.setItem("atrioz-crm-organization-palette", palette);
+    } catch {
+      // Persistência é apenas uma otimização visual para a próxima navegação.
+    }
     setOrganizationPalette(palette);
   }, [palette, setOrganizationPalette]);
 

@@ -10,8 +10,8 @@ describe("resolveBranding", () => {
   it("cai no padrão quando não há marca configurada", () => {
     expect(resolveBranding(undefined, undefined)).toEqual({
       name: DEFAULT_APP_NAME,
-      logoUrl: null,
-      initial: "D",
+      logoUrl: "/icon",
+      initial: "Á",
     });
   });
 
@@ -21,7 +21,7 @@ describe("resolveBranding", () => {
     // isso como marca válida deixaria a interface sem nome nenhum.
     expect(resolveBranding("", "").name).toBe(DEFAULT_APP_NAME);
     expect(resolveBranding("   ", "   ").name).toBe(DEFAULT_APP_NAME);
-    expect(resolveBranding("   ", "   ").logoUrl).toBeNull();
+    expect(resolveBranding("   ", "   ").logoUrl).toBe("/icon");
   });
 
   it("usa a marca configurada e deriva a inicial", () => {
@@ -29,6 +29,11 @@ describe("resolveBranding", () => {
     expect(b.name).toBe("Vendas Turbo");
     expect(b.logoUrl).toBe("https://cdn.exemplo.com/logo.svg");
     expect(b.initial).toBe("V");
+  });
+
+  it("substitui nomes legados da instalação pela marca atual", () => {
+    expect(resolveBranding("Atrioz Deskcomm Teste", undefined).name).toBe(DEFAULT_APP_NAME);
+    expect(resolveBranding("DeskcommCRM", undefined).name).toBe(DEFAULT_APP_NAME);
   });
 
   it("mantém o nome mas dispensa o logo quando só o nome é configurado", () => {

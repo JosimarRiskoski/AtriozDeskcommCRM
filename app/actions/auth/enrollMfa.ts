@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { DEFAULT_APP_NAME } from "@/lib/branding";
 
 export type EnrollMfaResult =
   | { ok: true; factor_id: string; qr_data_url: string; uri: string; secret: string }
@@ -34,7 +35,7 @@ export async function enrollMfa(): Promise<EnrollMfaResult> {
 
   const { data, error } = await supabase.auth.mfa.enroll({
     factorType: "totp",
-    friendlyName: `DeskcommCRM ${new Date().toISOString().slice(0, 10)}`,
+    friendlyName: `${DEFAULT_APP_NAME} ${new Date().toISOString().slice(0, 10)}`,
   });
   if (error || !data) {
     return { ok: false, error: "enroll_failed", message: error?.message };

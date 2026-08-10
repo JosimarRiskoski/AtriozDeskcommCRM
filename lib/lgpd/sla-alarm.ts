@@ -16,6 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/resend";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
+import { DEFAULT_APP_NAME } from "@/lib/branding";
 import type { LgpdRequest } from "./types";
 
 export type AlarmThreshold = "data_request_d5" | "redact_d10";
@@ -98,7 +99,7 @@ export async function triggerSlaAlarm(
   } else {
     try {
       const shortId = request.id.slice(0, 8);
-      const orgName = organizationName ?? "DeskcommCRM";
+      const orgName = organizationName ?? DEFAULT_APP_NAME;
       const appUrl = env.NEXT_PUBLIC_APP_URL;
       const requestUrl = `${appUrl}/app/lgpd/requests/${request.id}`;
 

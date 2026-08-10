@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 
 import { sendEmail } from "@/lib/email/resend";
+import { DEFAULT_APP_NAME } from "@/lib/branding";
 
 export class EmailNotConfigured extends Error {
   constructor() {
@@ -37,7 +38,7 @@ interface SendArgs {
 
 export async function sendExportEmail(args: SendArgs): Promise<{ messageId: string }> {
   const shortId = args.requestId.slice(0, 8);
-  const orgName = args.organizationName ?? "DeskcommCRM";
+  const orgName = args.organizationName ?? DEFAULT_APP_NAME;
   const expiresFmt = args.expiresAt.toLocaleString("pt-BR", {
     timeZone: "America/Sao_Paulo",
   });

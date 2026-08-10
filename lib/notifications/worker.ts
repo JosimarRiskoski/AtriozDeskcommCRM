@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendEmail } from "@/lib/email/resend";
 import { sendWhatsAppText } from "@/lib/whatsapp/send";
+import { DEFAULT_APP_NAME } from "@/lib/branding";
 
 type Delivery = {
   id: string;
@@ -122,7 +123,7 @@ export async function runNotificationDeliveryTick(admin: SupabaseClient, limit =
     const url = publicUrl(row.action_url);
     const result = await sendEmail({
       to: authUser.user.email,
-      subject: `[DeskcommCRM] ${row.title}`,
+      subject: `[${DEFAULT_APP_NAME}] ${row.title}`,
       text: `${row.title}\n\n${row.body}${url ? `\n\nAbrir: ${url}` : ""}`,
       html: `<h2>${escapeHtml(row.title)}</h2><p>${escapeHtml(row.body)}</p>${url ? `<p><a href="${escapeHtml(url)}">Abrir no CRM</a></p>` : ""}`,
       tags: [{ name: "category", value: row.category.slice(0, 256) }],

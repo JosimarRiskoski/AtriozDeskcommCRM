@@ -36,13 +36,16 @@ export async function ensureTenantForUser(
 ): Promise<{ provisioned: boolean; organizationId?: string }> {
   const admin = createAdminClient();
 
-  const { data: existing } = await admin
+  const { data: existing, error: existingError } = await admin
     .from("user_organizations")
     .select("organization_id")
     .eq("user_id", user.id)
     .is("revoked_at", null)
     .limit(1)
     .maybeSingle();
+  if (existingError) {
+    throw new Error(`signup provisioning: membership lookup failed: ${existingError.message}`);
+  }
   if (existing) return { provisioned: false, organizationId: existing.organization_id };
 
   const orgName =
@@ -83,6 +86,10 @@ export async function ensureTenantForUser(
     accepted_at: new Date().toISOString(),
   });
   if (memberError && memberError.code !== "23505") {
+    // A organização acabou de ser criada por esta execução e ainda não tem
+    // membros. Removê-la evita deixar uma empresa órfã quando a segunda etapa
+    // do provisionamento falha.
+    await admin.from("organizations").delete().eq("id", org.id).eq("created_by", user.id);
     throw new Error(`signup provisioning: membership insert failed: ${memberError.message}`);
   }
 

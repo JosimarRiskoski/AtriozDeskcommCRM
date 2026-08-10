@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 
 import { signUpFromInvite } from "@/app/actions/team/signUpFromInvite";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,16 @@ export function InviteSignupForm({ token, email }: { token: string; email: strin
             Você criará somente seu acesso para {email}. Nenhuma empresa será criada.
           </p>
         </div>
+        <p className="text-sm text-muted-foreground">
+          Já possui uma conta?{" "}
+          <Link
+            className="font-medium text-foreground underline underline-offset-4"
+            href={`/login?next=${encodeURIComponent(`/team/accept-invite/${token}`)}`}
+          >
+            Entre para aceitar o convite
+          </Link>
+          .
+        </p>
         <div className="space-y-2">
           <Label htmlFor="password">Senha</Label>
           <Input

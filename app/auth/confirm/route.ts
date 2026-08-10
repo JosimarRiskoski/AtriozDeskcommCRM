@@ -48,13 +48,27 @@ export async function GET(request: NextRequest) {
     return redirectTo("/login/reset");
   }
 
+  if (type !== "signup") {
+    return redirectTo("/app/inbox");
+  }
+
   const inviteToken = url.searchParams.get("invite");
   const invite = inviteToken ? verifyInviteToken(inviteToken) : null;
-  if (
-    invite &&
-    (data.user.email ?? "").trim().toLowerCase() === invite.email.trim().toLowerCase()
-  ) {
-    return redirectTo(`/team/accept-invite/${encodeURIComponent(inviteToken!)}`);
+  if (inviteToken) {
+    if (!invite) {
+      return redirectTo("/login?error=convite_invalido");
+    }
+    if ((data.user.email ?? "").trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
+      return redirectTo("/login?error=convite_email");
+    }
+    return redirectTo(`/team/accept-invite/${encodeURIComponent(inviteToken)}`);
+  }
+
+  // Uma conta iniciada pelo fluxo de convite nunca pode cair silenciosamente
+  // no provisionamento comum. Sem o token, pedimos um novo convite em vez de
+  // criar uma empresa indevida para o convidado.
+  if (data.user.user_metadata?.invited === true) {
+    return redirectTo("/login?error=convite_invalido");
   }
 
   try {

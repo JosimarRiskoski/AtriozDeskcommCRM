@@ -43,6 +43,24 @@ export default async function LoginPage({
           Tente entrar novamente em instantes.
         </div>
       )}
+      {error === "convite_invalido" && (
+        <div
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          O convite está inválido, expirou ou perdeu seus dados durante a confirmação. Peça um
+          novo convite ao administrador. Nenhuma empresa foi criada.
+        </div>
+      )}
+      {error === "convite_email" && (
+        <div
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          O e-mail confirmado não corresponde ao destinatário do convite. Entre com o endereço
+          que recebeu o convite.
+        </div>
+      )}
       <LoginForm next={next} />
       <div className="space-y-2 text-center text-sm">
         <p>

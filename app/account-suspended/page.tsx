@@ -12,14 +12,8 @@ export default function AccountSuspendedPage() {
       <Card className="w-full max-w-md p-8 text-center space-y-4">
         <h1 className="text-2xl font-semibold">Conta suspensa</h1>
         <p className="text-sm text-muted-foreground">
-          Sua conta está suspensa. Entre em contato com{" "}
-          <a
-            href="mailto:support@deskcomm.com.br"
-            className="underline underline-offset-4 hover:text-foreground transition-colors"
-          >
-            support@deskcomm.com.br
-          </a>{" "}
-          para mais informações.
+          Sua conta está suspensa. Entre em contato com o administrador do Átrioz CRM para mais
+          informações.
         </p>
         <div className="pt-2">
           <Button asChild variant="outline">
