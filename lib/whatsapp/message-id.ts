@@ -1,14 +1,14 @@
 /**
- * Extração do id externo da resposta de envio do WAHA (Fase 4A-3 da fusão).
+ * Extração do ID externo de respostas de envio do WhatsApp.
  *
- * O shape do `id` varia por engine/versão do WAHA:
+ * O formato do `id` varia entre versões do conector:
  *   - string plana ("ABCD...")
  *   - WAMessageKey do WEBJS: { id: { _serialized: "..." } }
  *   - NOWEB: { id: { id: "..." } } ou { key: { id: "..." } }
  * Sem casar o shape, `messages.external_id` fica null e o ack do webhook nunca
  * encontra a linha — insere duplicata em vez de atualizar (bug real da Fase 1).
  */
-export function parseWahaMessageId(raw: unknown): string | null {
+export function parseWhatsAppMessageId(raw: unknown): string | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as { id?: unknown; key?: { id?: unknown } };
   if (typeof r.id === 'string') return r.id;
@@ -23,9 +23,9 @@ export function parseWahaMessageId(raw: unknown): string | null {
 }
 
 /**
- * Normaliza um id de mensagem WAHA para a "cauda" serializada (bare id).
+ * Normaliza um ID de mensagem WhatsApp para a "cauda" serializada (bare id).
  *
- * O WAHA 2026.x/NOWEB é assimétrico: a resposta de ENVIO devolve o id interno
+ * Alguns conectores são assimétricos: a resposta de envio devolve o ID interno
  * cru (`3EB0…`), mas o webhook `message.ack` chega no formato completo
  * `{fromMe}_{chatId}_{3EB0…}` (ex.: `true_5511…@lid_3EB0…`). Como o envio grava
  * `external_id` = bare, casar o ack pelo id completo nunca acha a linha e o
@@ -33,19 +33,19 @@ export function parseWahaMessageId(raw: unknown): string | null {
  * `_` — chatId (`@c.us`/`@lid`) e o serializado WA não contêm `_`, então a
  * cauda é sempre o bare id; um id já-bare passa intacto (sem `_`).
  */
-export function bareWaMessageId(id: string): string {
+export function bareWhatsAppMessageId(id: string): string {
   const cut = id.lastIndexOf('_');
   return cut === -1 ? id : id.slice(cut + 1);
 }
 
 /**
- * Extrai o chatId do id composto do WAHA (`{fromMe}_{chatId}_{bareId}`).
+ * Extrai o chatId de um ID composto (`{fromMe}_{chatId}_{bareId}`).
  *
  * O NOWEB pode omitir `to` nas mensagens que o operador digitou no celular.
  * Nesses casos, o identificador serializado ainda conserva o chat e permite
  * associar a mensagem à conversa correta sem depender do engine.
  */
-export function chatIdFromWaMessageId(id: string): string | null {
+export function chatIdFromWhatsAppMessageId(id: string): string | null {
   const first = id.indexOf('_');
   const last = id.lastIndexOf('_');
   if (first === -1 || last === first) return null;

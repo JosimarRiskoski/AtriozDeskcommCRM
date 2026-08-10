@@ -112,7 +112,7 @@ export function InboxFilters({ value, onChange }: Props) {
             <SelectItem value="all">Todos os números</SelectItem>
             {channels?.map((c) => (
               <SelectItem key={c.id} value={c.id}>
-                {c.display_name || c.phone_number || c.waha_session_name}
+                {c.display_name || c.phone_number || c.external_session_name}
               </SelectItem>
             ))}
           </SelectContent>

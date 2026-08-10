@@ -13,7 +13,7 @@
  *   isso múltiplos tests simultâneos pra mesma conversation não conflitam.
  *
  * Sample contact é apenas pra contexto do prompt — nunca toca contacts/conversations
- * tables, nunca chama WAHA, nunca cria messages.outbound.
+ * tables, nunca chama a Evolution, nunca cria messages.outbound.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -207,7 +207,7 @@ async function callInternalRuntime(args: {
   // S-13.08 wires the real runtime. We invoke `runAgent` in-process to avoid
   // a fetch loopback (no cold-start, no INTERNAL_SECRET required in dev).
   // The run row is already in is_dry_run=true mode so the runtime bypasses
-  // WAHA dispatch + outbound message insert.
+  // Evolution dispatch + outbound message insert.
   const { runAgent } = await import("@/lib/ai/runtime/agent");
   const result = await runAgent({
     runId: args.runId,

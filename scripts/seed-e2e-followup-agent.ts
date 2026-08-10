@@ -77,7 +77,7 @@ async function ensureChannelSession(orgId: string): Promise<string> {
     .from("channel_sessions")
     .select("id")
     .eq("organization_id", orgId)
-    .eq("waha_session_name", SESSION_NAME)
+    .eq("external_session_name", SESSION_NAME)
     .maybeSingle();
   if (existing) return (existing as { id: string }).id;
 
@@ -85,7 +85,7 @@ async function ensureChannelSession(orgId: string): Promise<string> {
     .from("channel_sessions")
     .insert({
       organization_id: orgId,
-      waha_session_name: SESSION_NAME,
+      external_session_name: SESSION_NAME,
       display_name: "Número Follow-up Agent E2E",
       webhook_secret_encrypted: "\\x00",
     } as never)

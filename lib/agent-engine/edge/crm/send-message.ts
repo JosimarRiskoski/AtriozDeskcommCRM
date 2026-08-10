@@ -1,7 +1,7 @@
 /**
  * Borda de saída pós-fusão: envio de mensagem SEMPRE via `sendMessageHandler` do
  * próprio app (app/api/v1/messages/_handler.ts) — o handler insere a linha
- * outbound, envia pelo WAHA, atualiza conversa, audita e emite evento; e dá de
+ * outbound, envia pela Evolution, atualiza conversa, audita e emite evento; e dá de
  * graça o guard is_blocked (ApiError 403). A tool `send_message` do agente chama
  * ESTA função depois da cadeia de guardrails; nenhum output de modelo vira
  * mensagem sem passar por aqui.
@@ -55,11 +55,11 @@ export type SendOutcome =
   | { kind: 'sent'; idempotencyKey: string; crmMessageId: string }
   /** Ledger já estava 'accepted' — replay pós-crash, nada a enviar. */
   | { kind: 'already_sent'; idempotencyKey: string; crmMessageId: string | null }
-  /** CRM aceitou e SEGURA (sessão ≠ WORKING / waha_not_configured) — job reagendado, nunca dropado. */
+  /** CRM aceitou e SEGURA (conexão ≠ WORKING / Evolution indisponível) — job reagendado. */
   | { kind: 'queued'; idempotencyKey: string; crmMessageId: string | null }
   /** 403 is_blocked — veto PERMANENTE de negócio (opt-out, regra dura nº 2). */
   | { kind: 'blocked'; idempotencyKey: string }
-  /** handler registrou a mensagem como 'failed' (sem telefone / erro WAHA) — retry rotaciona a key. */
+  /** handler registrou a mensagem como 'failed' (sem telefone / erro Evolution) — retry rotaciona a key. */
   | { kind: 'failed'; idempotencyKey: string; crmMessageId: string | null };
 
 export interface SendMessageInput {

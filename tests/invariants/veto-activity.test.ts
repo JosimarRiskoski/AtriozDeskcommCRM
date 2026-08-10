@@ -66,7 +66,7 @@ beforeAll(async () => {
     insert into crm_stages (id, organization_id, pipeline_id, name, slug, position)
     values ('${STAGE}', '${ORG}', '${PIPE}', 'Etapa', 'etapa', 1000) on conflict (id) do nothing;
 
-    insert into channel_sessions (id, organization_id, waha_session_name, status, webhook_secret_encrypted)
+    insert into channel_sessions (id, organization_id, external_session_name, status, webhook_secret_encrypted)
     values ('${SESSION}', '${ORG}', 'sessao-0072', 'WORKING', '\\x00'::bytea) on conflict (id) do nothing;
 
     insert into contacts (id, organization_id, name, display_name) values

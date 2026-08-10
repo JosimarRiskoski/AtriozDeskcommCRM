@@ -2,7 +2,7 @@
  * Finalize/persist helpers for the agent runtime (S-13.08).
  *
  * `finalizeRun` stamps the row, emits domain event + audit log.
- * `sendFinalResponse` reuses `sendMessageHandler` (which knows about WAHA,
+ * `sendFinalResponse` reuses `sendMessageHandler` (which knows about Evolution,
  * outbound row insert, retry, idempotency_keys) so we never duplicate
  * dispatch logic here.
  */
@@ -122,7 +122,7 @@ export interface SendFinalResponseInput {
 }
 
 /**
- * Inserts an outbound message + dispatches via WAHA via existing
+ * Inserts an outbound message + dispatches via Evolution via existing
  * sendMessageHandler. Returns the new message id (or null on failure).
  */
 export async function sendFinalResponse(

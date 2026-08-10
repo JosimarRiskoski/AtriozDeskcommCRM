@@ -47,7 +47,7 @@ export async function GET(): Promise<Response> {
     supabase
       .from("ai_agent_versions")
       .select(
-        "followup,channel_sessions:channel_session_id(display_name,phone_number,waha_session_name),ai_agents:agent_id(name)",
+        "followup,channel_sessions:channel_session_id(display_name,phone_number,external_session_name),ai_agents:agent_id(name)",
       )
       .eq("organization_id", activeOrg.orgId)
       .eq("status", "published"),
@@ -83,12 +83,12 @@ export async function GET(): Promise<Response> {
             | {
                 display_name: string | null;
                 phone_number: string | null;
-                waha_session_name: string;
+                external_session_name: string;
               }
             | Array<{
                 display_name: string | null;
                 phone_number: string | null;
-                waha_session_name: string;
+                external_session_name: string;
               }>
             | null;
         }
@@ -110,7 +110,7 @@ export async function GET(): Promise<Response> {
         : 0,
       agent_name: agent?.name ?? null,
       channel_name: channel
-        ? channel.display_name || channel.phone_number || channel.waha_session_name
+        ? channel.display_name || channel.phone_number || channel.external_session_name
         : null,
       cancel_on_reply: trigger.cancel_on_reply !== false,
     };

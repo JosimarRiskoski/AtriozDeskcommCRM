@@ -3,7 +3,7 @@
  * POST /api/v1/webhook-sources — cria uma fonte (gera path_token no server).
  *
  * path_token NÃO é segredo forte (é a identidade pública da URL, como o
- * webhook_path_token do WAHA) — diferente de api_tokens, ele volta no corpo
+ * webhook_path_token da origem) — diferente de api_tokens, ele volta no corpo
  * de GET/POST pra UI montar a URL de captação.
  *
  * `secret` é write-only na leitura: GET devolve só `has_secret` (padrão

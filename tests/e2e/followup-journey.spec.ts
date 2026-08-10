@@ -20,7 +20,7 @@
  * Helpers de SQL cru (scripts/e2e-followup-journey-helpers.ts, service role /
  * pg direto) cobrem o que a API pública genuinamente não expõe: fast-forward
  * de `next_eval_at` (não dá pra dormir 5min/15min reais por chamada de
- * tick), simular uma resposta inbound sem WAHA real, e o seam de
+ * tick), simular uma resposta inbound sem Evolution real, e o seam de
  * completeTurnForEnrollment acima.
  *
  * Cada passo do engine é 1 nó por chamada de tick (confirmado lendo
@@ -496,7 +496,7 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     expect(sendJob!.payload.prompt_hint).toBe(promptHint);
 
     // [INJETADO] — aqui é onde um LLM real geraria a mensagem e o worker
-    // chamaria completeTurnForEnrollment('sent') depois de enviar via WAHA.
+    // chamaria completeTurnForEnrollment('sent') depois de enviar via Evolution.
     runHelper(["complete-turn", creds.org_id, enrollmentId, actionId, JSON.stringify({ kind: "sent" })]);
 
     const afterSent = runHelper(["get-enrollment", enrollmentId]) as EnrollmentRow;
@@ -509,7 +509,7 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     // 6. [REAL] engine entra no ai_classify e ENFILEIRA o turno de
     //    classificação de verdade (job_queue, waiting_reply). [REAL] simula a
     //    resposta do lead (insert de message + emit_event message.received —
-    //    a MESMA função que o webhook real da WAHA chama) e drena o
+    //    a MESMA função que o webhook real da Evolution chama) e drena o
     //    event_log real — lib/followup/reactivity.ts acorda o enrollment.
     //    [INJETADO] completeTurnForEnrollment('classified', 'positivo') no
     //    lugar do classificador de IA real.

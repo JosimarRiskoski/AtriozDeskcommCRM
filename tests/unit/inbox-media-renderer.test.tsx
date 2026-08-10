@@ -17,7 +17,7 @@ function msg(over: Partial<Message>): Message {
     status: "delivered",
     ack: null,
     body: null,
-    media_url: "http://waha/file",
+    media_url: "https://evolution.invalid/media/file",
     media_mime: null,
     media_size_bytes: null,
     media_storage_path: null,

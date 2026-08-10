@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { getEvolutionClient } from "@/lib/evolution/client";
-import { getWahaClient } from "@/lib/waha/client";
 import { isWithinBusinessHours, renderCampaignText } from "./worker-helpers";
 
 type Admin = SupabaseClient;
@@ -68,7 +67,7 @@ async function verifyCampaignDestination(
   const { data: conversation, error } = await admin
     .from("conversations")
     .select(
-      "contact_id, contacts:contact_id(source_metadata), channel_sessions:channel_session_id(provider,external_session_name,waha_session_name,status)",
+      "contact_id, contacts:contact_id(source_metadata), channel_sessions:channel_session_id(provider,external_session_name,status)",
     )
     .eq("id", claim.conversation_id)
     .eq("organization_id", claim.organization_id)
@@ -80,9 +79,8 @@ async function verifyCampaignDestination(
     contact_id: string;
     contacts: { source_metadata: Record<string, unknown> | null } | null;
     channel_sessions: {
-      provider: "waha" | "evolution";
+      provider: "evolution";
       external_session_name: string | null;
-      waha_session_name: string;
       status: string;
     } | null;
   };
@@ -90,40 +88,32 @@ async function verifyCampaignDestination(
   if (!destination.channel_sessions || destination.channel_sessions.status !== "WORKING") {
     throw new Error("campaign_channel_not_working");
   }
-  const provider = destination.channel_sessions.provider ?? "waha";
-  let chatId: string | null = null;
-  if (provider === "evolution") {
-    const evolution = getEvolutionClient();
-    if (!evolution) throw new Error("evolution_not_configured");
-    const result = await evolution.checkNumbers(
-      destination.channel_sessions.external_session_name ||
-        destination.channel_sessions.waha_session_name,
-      [claim.phone_normalized],
-    );
-    const row = Array.isArray(result) ? result[0] : (result as { data?: unknown[] }).data?.[0];
-    const payload = row as
-      { exists?: boolean; numberExists?: boolean; jid?: string; number?: string } | undefined;
-    if (!payload || !(payload.exists ?? payload.numberExists)) return "missing";
-    chatId = payload.jid ?? payload.number ?? claim.phone_normalized;
-  } else {
-    const waha = getWahaClient();
-    if (!waha) throw new Error("waha_not_configured");
-    const result = await waha.checkNumberExists(
-      destination.channel_sessions.waha_session_name,
-      claim.phone_normalized,
-    );
-    if (!result.numberExists || !result.chatId) return "missing";
-    chatId = result.chatId;
+  if (destination.channel_sessions.provider !== "evolution") {
+    throw new Error("campaign_provider_not_evolution");
   }
+  const evolution = getEvolutionClient();
+  if (!evolution) throw new Error("evolution_not_configured");
+  if (!destination.channel_sessions.external_session_name) {
+    throw new Error("evolution_instance_name_missing");
+  }
+  const result = await evolution.checkNumbers(
+    destination.channel_sessions.external_session_name,
+    [claim.phone_normalized],
+  );
+  const row = Array.isArray(result) ? result[0] : (result as { data?: unknown[] }).data?.[0];
+  const payload = row as
+    { exists?: boolean; numberExists?: boolean; jid?: string; number?: string } | undefined;
+  if (!payload || !(payload.exists ?? payload.numberExists)) return "missing";
+  const chatId = payload.jid ?? payload.number ?? claim.phone_normalized;
 
   await admin
     .from("contacts")
     .update({
       source_metadata: {
         ...(destination.contacts?.source_metadata ?? {}),
-        waha_chat_id: chatId,
-        waha_verified_at: new Date().toISOString(),
-        whatsapp_provider: provider,
+        evolution_chat_id: chatId,
+        evolution_verified_at: new Date().toISOString(),
+        whatsapp_provider: "evolution",
       },
     })
     .eq("id", destination.contact_id)
@@ -203,7 +193,7 @@ export async function runCampaignTick(
           status: "skipped",
           processing_lease_until: null,
           last_error_code: "number_not_on_whatsapp",
-          last_error_message: "O WAHA confirmou que este número não possui WhatsApp.",
+          last_error_message: "A Evolution confirmou que este número não possui WhatsApp.",
           updated_at: skippedAt,
         })
         .eq("id", claim.recipient_id);

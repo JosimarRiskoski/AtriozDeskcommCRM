@@ -3,14 +3,14 @@ import { useRef } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { FileText, ImageSquare, Plus } from "@/lib/ui/icons";
+import { FileText, ImageSquare, Paperclip } from "@/lib/ui/icons";
 
 interface Props {
   disabled?: boolean;
   onPick: (file: File) => void;
 }
 
-/** Menu "+" do composer (padrão WhatsApp): Fotos e vídeos / Documento. */
+/** Menu de anexos do composer: Fotos e vídeos / Documento. */
 export function AttachMenu({ disabled, onPick }: Props) {
   const mediaRef = useRef<HTMLInputElement | null>(null);
   const docRef = useRef<HTMLInputElement | null>(null);
@@ -31,9 +31,10 @@ export function AttachMenu({ disabled, onPick }: Props) {
             variant="ghost"
             className="h-9 w-9 shrink-0"
             aria-label="Anexar"
+            title="Anexar arquivo"
             disabled={disabled}
           >
-            <Plus size={18} weight="regular" aria-hidden />
+            <Paperclip size={18} weight="regular" aria-hidden />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" side="top" className="w-52 p-1">

@@ -7,7 +7,7 @@ Conteúdo a popular conforme Spec 01 — Plataforma Base:
 - `/admin/tenants` — listagem cross-tenant + busca
 - `/admin/inbox` — caixa de entrada unificada
 - `/admin/audit` — visualizador de `api_audit_log`
-- `/admin/health` — saúde de WAHA por tenant, alarmes
+- `/admin/health` — saúde da Evolution por tenant, alarmes
 - `/admin/onboarding` — wizard de criação de tenant
 
 Toda rota nesse grupo exige:

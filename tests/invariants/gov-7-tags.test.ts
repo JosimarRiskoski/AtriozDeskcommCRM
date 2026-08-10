@@ -53,7 +53,7 @@ describe("eixo 7 — tags", () => {
         values ('${ORG2}', 'gov-inv-2', 'Gov Invariant Org 2', 'Gov Inv 2')
         on conflict do nothing;
       do $g$ begin
-        insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted)
+        insert into public.channel_sessions (id, organization_id, external_session_name, webhook_secret_encrypted)
           values ('${S2}', '${ORG2}', 'gov-inv-2', '\\x00'::bytea);
       exception when unique_violation then null; end $g$;
       insert into public.contacts (id, organization_id, display_name)

@@ -288,7 +288,7 @@ export interface CronLoopConfig extends CronTickConfig {
 
 /**
  * Loop de produção do cron (main.ts). Roda contra o harness — só enfileira, não fala
- * com CRM/WAHA. Tick falhado loga e espera o intervalo (o próprio poll é a
+ * com CRM/Evolution. Tick falhado loga e espera o intervalo (o próprio poll é a
  * recuperação). Encerra quando `signal` aborta (graceful shutdown).
  */
 export async function runCronLoop(

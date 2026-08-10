@@ -86,7 +86,7 @@ async function ensureChannelSession(sb: SB): Promise<string> {
     .from("channel_sessions")
     .insert({
       organization_id: ORG_ID,
-      waha_session_name: `e2e-wave12-${Date.now()}`,
+      external_session_name: `e2e-wave12-${Date.now()}`,
       webhook_secret_encrypted: "x".repeat(32),
       display_name: "E2E Wave12",
       engine: "NOWEB",

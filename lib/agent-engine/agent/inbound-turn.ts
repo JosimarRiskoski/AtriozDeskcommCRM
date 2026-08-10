@@ -41,7 +41,7 @@ import {
 } from "../edge/crm/get-lead-context";
 import { citationsFromHits, searchKnowledge } from "./search-knowledge";
 import type { CrmEdgeConfig } from "../edge/crm/mcp-client";
-import { WahaChannelAdapter } from "../edge/channel/waha-adapter";
+import { CrmWhatsAppChannelAdapter } from "../edge/channel/crm-whatsapp-adapter";
 // applySendOutcome é disposição de FILA (cancel/reschedule + cache de opt-out), não
 // egress de canal — o envio em si vai pelo adapter (ChannelAdapter). Ver F2-25.
 import { applySendOutcome } from "../edge/crm/send-message";
@@ -429,7 +429,7 @@ export interface InboundTurnDeps {
   registry?: ProviderRegistry;
   /**
    * Seam de canal (F2-25): fábrica do ChannelAdapter para o pool do job. Default =
-   * WAHA-via-CRM (o único adapter da v1). Trocar o adapter (ex.: Cloud API) NÃO
+   * Evolution-via-CRM (o único adapter da v1). Trocar o adapter no futuro NÃO
    * muda este handler — prova em daemon/test/channel-adapter.test.ts.
    */
   channel?: (pool: pg.Pool) => ChannelAdapter;
@@ -884,13 +884,13 @@ export async function runAgentTurn(
   }
 
   // Seam de canal (F2-25): o envio vai SÓ pela interface ChannelAdapter — o
-  // default WAHA-via-CRM envolve o sink F2-06. Instanciado por job (o pool é
+  // default Evolution-via-CRM envolve o sink F2-06. Instanciado por job (o pool é
   // per-job neste codebase); trocar o adapter não muda nada abaixo.
   // Fase 2B: o envio carrega o ai_agents.id REAL como ator (audit/metadata do
   // CRM apontam o agente publicado, não um id genérico).
   const turnCrmCfg =
     agentConfig !== null ? { ...deps.crmCfg, agentActorId: agentConfig.agentId } : deps.crmCfg;
-  const channel = (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, turnCrmCfg)))(pool);
+  const channel = (deps.channel ?? ((p: pg.Pool) => new CrmWhatsAppChannelAdapter(p, turnCrmCfg)))(pool);
   // STOP lido no turno (fonte: CRM via get_lead_context) — combinado com o cache
   // durável leads.is_opted_out no gate 1 da cadeia (F2-13).
   const optedOutThisTurn = openingContext.context.contact.is_blocked;

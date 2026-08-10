@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseChatId } from "@/lib/waha/identity";
+import { parseChatId } from "@/lib/whatsapp/chat-identity";
 
 describe("parseChatId", () => {
   it("normaliza celular brasileiro legado antes de vincular o contato", () => {
@@ -11,7 +11,7 @@ describe("parseChatId", () => {
     });
   });
 
-  it("mantem LID como identidade pendente ate o WAHA resolver o telefone", () => {
+  it("mantem LID como identidade pendente ate a Evolution resolver o telefone", () => {
     expect(parseChatId("203392655843435@lid")).toEqual({
       kind: "lid",
       phone: null,

@@ -13,13 +13,13 @@
  *   5. Load history sliding window
  *   6. generateText with stopWhen=[stepCountIs(maxSteps), budgetGuard]
  *   7. Detect handoff signal → finalizeHandoff('agent_invoked_tool')
- *   8. !dry_run → outbound message via sendMessageHandler (WAHA)
+ *   8. !dry_run → outbound message via sendMessageHandler (Evolution)
  *   9. finalizeRun
  *  10. revoke ephemeral token (always)
  *
  * Robustness:
  *   - Try/catch global: any throw → finalizeRun('failed', error_message=...).
- *   - Dry-run path bypasses concurrency unique guard, WAHA dispatch, outbound row.
+ *   - Dry-run path bypasses concurrency unique guard, Evolution dispatch, outbound row.
  *   - Plaintext API keys are never logged.
  */
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -46,7 +46,7 @@ import { loadHistoryWithBudget } from "./history";
 import { mintEphemeralToken, revokeEphemeralToken } from "./mcp_token";
 import { pickToolsFromMcp, type RuntimeHandoffSignal } from "./tools";
 import { serializeSteps } from "./serialize";
-import { resolveWahaChatId } from "@/lib/waha/send";
+import { resolveWhatsAppChatId } from "@/lib/whatsapp/recipient";
 import { searchKnowledge } from "@/lib/agent-engine/agent/search-knowledge";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 
@@ -268,7 +268,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     // 5) Resolve inbound text + dispatch context.
     let inboundBody: string | null = null;
     let chatId: string | null = null;
-    let waSessionName: string | null = null;
+    let whatsappSessionName: string | null = null;
     const conversationIdForHandoff: string | null = run.conversation_id;
 
     if (run.is_dry_run) {
@@ -289,7 +289,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       const { data: convRaw } = await admin
         .from("conversations")
         .select(
-          "id, group_chat_id, is_group, contacts:contact_id(phone_number, wa_identity), channel_sessions:channel_session_id(waha_session_name)",
+          "id, group_chat_id, is_group, contacts:contact_id(phone_number, wa_identity), channel_sessions:channel_session_id(external_session_name,provider)",
         )
         .eq("id", run.conversation_id)
         .eq("organization_id", run.organization_id)
@@ -299,11 +299,14 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         group_chat_id: string | null;
         is_group: boolean;
         contacts: { phone_number: string | null; wa_identity: string | null } | null;
-        channel_sessions: { waha_session_name: string } | null;
+        channel_sessions: { external_session_name: string | null; provider: string } | null;
       } | null;
       if (conv) {
-        waSessionName = conv.channel_sessions?.waha_session_name ?? null;
-        chatId = resolveWahaChatId({
+        whatsappSessionName =
+          conv.channel_sessions?.provider === "evolution"
+            ? (conv.channel_sessions.external_session_name ?? null)
+            : null;
+        chatId = resolveWhatsAppChatId({
           isGroup: conv.is_group,
           groupChatId: conv.group_chat_id,
           phoneNumber: conv.contacts?.phone_number,
@@ -337,7 +340,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         tokens_out: 0,
         cost_cents: 0,
         steps_count: 0,
-        would_send_to: { session: waSessionName, chat_id: chatId },
+        would_send_to: { session: whatsappSessionName, chat_id: chatId },
       };
     }
 
@@ -554,7 +557,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         latency_ms: latencyMs,
         steps_count: result.steps.length,
         tool_calls: trace,
-        would_send_to: { session: waSessionName, chat_id: chatId },
+        would_send_to: { session: whatsappSessionName, chat_id: chatId },
       };
     }
 
@@ -583,7 +586,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         latency_ms: latencyMs,
         steps_count: result.steps.length,
         tool_calls: trace,
-        would_send_to: { session: waSessionName, chat_id: chatId },
+        would_send_to: { session: whatsappSessionName, chat_id: chatId },
       };
     }
 
@@ -612,11 +615,11 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         latency_ms: latencyMs,
         steps_count: result.steps.length,
         tool_calls: trace,
-        would_send_to: { session: waSessionName, chat_id: chatId },
+        would_send_to: { session: whatsappSessionName, chat_id: chatId },
       };
     }
 
-    // 16) Happy path. Send WAHA reply when not dry-run.
+    // 16) Happy path. Envia pela Evolution quando não for dry-run.
     let outboundMessageId: string | null = null;
     const finalText = (result.text ?? "").trim();
     if (!run.is_dry_run && finalText && run.conversation_id) {
@@ -654,7 +657,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       latency_ms: latencyMs,
       steps_count: result.steps.length,
       tool_calls: trace,
-      would_send_to: { session: waSessionName, chat_id: chatId },
+      would_send_to: { session: whatsappSessionName, chat_id: chatId },
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

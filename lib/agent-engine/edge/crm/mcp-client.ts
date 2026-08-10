@@ -5,7 +5,7 @@
  *     (ex.: sendMessageHandler) — ele BYPASSA RLS, então todo uso filtra
  *     organization_id manualmente, de fonte confiável (regra dura nº 1);
  *   - CrmTransportError: o erro que o runtime trata como TRANSIENTE (Supabase/
- *     WAHA indisponível) — o job re-tenta pela fila, nunca vira mensagem ao lead.
+ *     Evolution indisponível) — o job re-tenta pela fila, nunca vira mensagem ao lead.
  *
  * O arquivo mantém o nome mcp-client.ts porque é o seam que todos os módulos do
  * engine já importam (CrmEdgeConfig) — o conteúdo é a versão fundida.
@@ -22,7 +22,7 @@ export interface CrmEdgeConfig {
   agentActorId?: string;
 }
 
-/** Falha de transporte da borda (Supabase/WAHA fora) — transiente, o job re-tenta. */
+/** Falha de transporte da borda (Supabase/Evolution fora) — transiente, o job re-tenta. */
 export class CrmTransportError extends Error {
   constructor(message: string) {
     super(message);

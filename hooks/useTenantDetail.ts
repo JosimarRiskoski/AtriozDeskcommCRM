@@ -29,7 +29,7 @@ export interface TenantCounts {
   orders_count: number;
   lgpd_requests_pending: number;
   ai_invocations_30d: number;
-  waha_sessions_count: number;
+  whatsapp_connections_count: number;
 }
 
 export interface TenantIntegrations {

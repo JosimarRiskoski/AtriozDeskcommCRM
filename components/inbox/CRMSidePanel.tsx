@@ -9,7 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Tag, Receipt, Users, ArrowRight } from "@/lib/ui/icons";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tag, Receipt, Briefcase, ArrowRight } from "@/lib/ui/icons";
 import { apiClient } from "@/lib/api/client";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { activityLabel, actorLabel, actorShape } from "@/lib/leads/activity-vocabulary";
@@ -23,6 +29,9 @@ import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useConversationNotes } from "@/hooks/inbox/useConversationNotes";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { contactSourceLabel } from "@/lib/contacts/source-labels";
+import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
+import type { BoardData } from "@/lib/kanban/types";
+import type { PipelineRow } from "@/app/api/v1/pipelines/_handler";
 
 interface Props {
   conversation: ConversationWithContact | null;
@@ -30,12 +39,14 @@ interface Props {
 
 interface LeadRow {
   id: string;
+  pipeline_id: string;
+  stage_id: string;
   title: string;
   status: string;
   value_cents: number | null;
   currency: string | null;
   updated_at: string;
-  assigned_to_user_id: string | null;
+  owner_user_id: string | null;
   crm_stages: { name: string } | null;
 }
 
@@ -128,6 +139,8 @@ export function CRMSidePanel({ conversation }: Props) {
   const [erro, setErro] = useState(false);
   const [tentativa, setTentativa] = useState(0);
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
+  const [opportunityOpen, setOpportunityOpen] = useState(false);
+  const [opportunityPipelineId, setOpportunityPipelineId] = useState("");
   const channels = useChannelSessions();
   const notes = useConversationNotes(conversation?.id ?? null);
   const members = useAssignableMembers(true);
@@ -136,6 +149,23 @@ export function CRMSidePanel({ conversation }: Props) {
     enabled: !!contactId,
     queryFn: async () =>
       (await apiClient.get<{ data: SourceEvent[] }>(`/api/v1/contacts/${contactId}/origins`)).data,
+  });
+  const pipelines = useQuery({
+    queryKey: ["pipelines", "inbox-opportunity"],
+    enabled: opportunityOpen,
+    queryFn: async () =>
+      (await apiClient.get<{ data: PipelineRow[] }>("/api/v1/pipelines")).data,
+  });
+  const pipelineId =
+    opportunityPipelineId ||
+    pipelines.data?.find((pipeline) => pipeline.is_default)?.id ||
+    pipelines.data?.[0]?.id ||
+    "";
+  const board = useQuery({
+    queryKey: ["board", pipelineId, "inbox-opportunity"],
+    enabled: opportunityOpen && !!pipelineId,
+    queryFn: async () =>
+      (await apiClient.get<{ data: BoardData }>(`/api/v1/pipelines/${pipelineId}/board`)).data,
   });
 
   useEffect(() => {
@@ -193,6 +223,7 @@ export function CRMSidePanel({ conversation }: Props) {
   // guarda o painel mostraria esqueleto para sempre e o estado de falha nunca
   // apareceria — o mesmo colapso de significados que criou o defeito original,
   // só que trocando "erro→vazio" por "erro→carregando".
+  const openLeads = (leads ?? []).filter((lead) => lead.status === "open");
   const sectionsLoading = useMemo(
     () => !erro && (loading || (leads === null && orders === null && activities === null)),
     [erro, loading, leads, orders, activities],
@@ -270,9 +301,40 @@ export function CRMSidePanel({ conversation }: Props) {
             <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
               <Tag size={12} className="mr-1" weight="regular" aria-hidden /> Tag
             </Button>
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
-              <Users size={12} className="mr-1" weight="regular" aria-hidden /> Lead
-            </Button>
+            {openLeads.length === 1 ? (
+              <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
+                <Link href={`/app/pipelines/${openLeads[0]!.pipeline_id}`}>
+                  <Briefcase size={12} className="mr-1" weight="regular" aria-hidden />
+                  Abrir oportunidade
+                </Link>
+              </Button>
+            ) : openLeads.length > 1 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
+                    <Briefcase size={12} className="mr-1" weight="regular" aria-hidden />
+                    Abrir oportunidades
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {openLeads.map((lead) => (
+                    <DropdownMenuItem key={lead.id} asChild>
+                      <Link href={`/app/pipelines/${lead.pipeline_id}`}>{lead.title}</Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={() => setOpportunityOpen(true)}
+              >
+                <Briefcase size={12} className="mr-1" weight="regular" aria-hidden />
+                Criar oportunidade
+              </Button>
+            )}
             {contactId && (
               <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
                 <Link href={`/app/contacts/${contactId}`}>
@@ -370,7 +432,7 @@ export function CRMSidePanel({ conversation }: Props) {
 
       <section>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Leads recentes
+          Oportunidades recentes
         </h3>
         {sectionsLoading ? (
           <Skeleton className="mt-2 h-14 w-full" />
@@ -385,8 +447,8 @@ export function CRMSidePanel({ conversation }: Props) {
                   <div className="truncate font-medium">{l.title}</div>
                   <div className="text-muted-foreground">
                     {l.crm_stages?.name || l.status} · {formatMoney(l.value_cents, l.currency)}
-                    {l.assigned_to_user_id
-                      ? ` · ${members.data?.find((member) => member.user_id === l.assigned_to_user_id)?.full_name || "Responsável definido"}`
+                    {l.owner_user_id
+                      ? ` · ${members.data?.find((member) => member.user_id === l.owner_user_id)?.full_name || "Responsável definido"}`
                       : " · Sem responsável"}
                   </div>
                 </div>
@@ -395,7 +457,7 @@ export function CRMSidePanel({ conversation }: Props) {
           </ul>
         ) : (
           <SemLista
-            vazio="Sem leads."
+            vazio="Sem oportunidades."
             erro={erro}
             onTentarDeNovo={() => setTentativa((n) => n + 1)}
           />
@@ -489,6 +551,30 @@ export function CRMSidePanel({ conversation }: Props) {
         contactName={displayName}
         open={caseDialogOpen}
         onOpenChange={setCaseDialogOpen}
+      />
+      <NewLeadDialog
+        open={opportunityOpen}
+        onOpenChange={setOpportunityOpen}
+        pipelineId={pipelineId}
+        stages={board.data?.stages ?? []}
+        valueLabel={board.data?.pipeline.settings?.value_label as string | undefined}
+        contactId={contactId}
+        conversationId={conversation.id}
+        contactName={displayName === "—" ? null : displayName}
+        contactPhone={contact?.phone_number ?? null}
+        primaryOrigin={contact?.source ? contactSourceLabel(contact.source) : null}
+        originHistory={(origins.data ?? [])
+          .slice(-5)
+          .reverse()
+          .map((event) => contactSourceLabel(event.source))}
+        initialTitle={displayName === "—" ? "Nova oportunidade" : displayName}
+        source="inbox"
+        pipelineOptions={(pipelines.data ?? []).map((pipeline) => ({
+          id: pipeline.id,
+          name: pipeline.name,
+        }))}
+        onPipelineChange={setOpportunityPipelineId}
+        onCreated={() => setTentativa((value) => value + 1)}
       />
     </aside>
   );

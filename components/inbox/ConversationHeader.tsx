@@ -77,7 +77,7 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
   );
   const channel = channels.data?.find((item) => item.id === conversation.channel_session_id);
   const channelName = channel
-    ? channel.display_name || channel.phone_number || channel.waha_session_name
+    ? channel.display_name || channel.phone_number || channel.external_session_name
     : null;
   const channelUnavailable = Boolean(
     channel && !["WORKING", "connected", "active", "online"].includes(channel.status),

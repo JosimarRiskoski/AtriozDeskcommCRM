@@ -13,13 +13,21 @@ describe("compactEvolutionWebhookLog", () => {
 
     const result = compactEvolutionWebhookLog(envelope, raw);
 
-    expect(result.payloadParsed).toEqual(envelope);
+    expect(result.payloadParsed).toMatchObject({
+      compacted: true,
+      event: "MESSAGES_UPSERT",
+      instance: "evo_teste",
+      data_count: 1,
+      message_id: "msg-1",
+      remote_jid_suffix: "9999",
+    });
     expect(result.rawBody).not.toBe(raw);
     expect(JSON.parse(result.rawBody)).toMatchObject({
-      compacted: false,
+      compacted: true,
       event: "MESSAGES_UPSERT",
       message_id: "msg-1",
     });
+    expect(JSON.stringify(result.payloadParsed)).not.toContain("5511999999999");
   });
 
   it("guarda somente resumo quando o histórico contém base64 grande", () => {
@@ -42,4 +50,3 @@ describe("compactEvolutionWebhookLog", () => {
     expect(JSON.stringify(result.payloadParsed)).not.toContain("x".repeat(100));
   });
 });
-

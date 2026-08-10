@@ -2,7 +2,7 @@
  * GET  /api/v1/channel-sessions — lista os canais WhatsApp da org (do DB).
  *   Acessível a qualquer membro (usado pelo seletor do inbox e pela sidebar).
  * POST /api/v1/channel-sessions — conecta um NOVO número (cria a sessão com
- *   nome único e inicia no WAHA). Admin only.
+ *   nome único e inicia na Evolution). Admin only.
  *
  * organization_id resolvido da sessão (cookie) — nunca do body.
  */
@@ -21,7 +21,7 @@ import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/clie
 export const dynamic = "force-dynamic";
 
 export const CHANNEL_COLUMNS =
-  "id, provider, external_session_name, waha_session_name, display_name, phone_number, purpose, is_default, archived_at, status, status_reason, last_health_check_at, last_inbound_event_at, last_outbound_event_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
+  "id, provider, external_session_name, display_name, phone_number, purpose, is_default, archived_at, status, status_reason, last_health_check_at, last_inbound_event_at, last_outbound_event_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
@@ -140,7 +140,6 @@ export async function POST(req: NextRequest): Promise<Response> {
       organization_id: activeOrg.orgId,
       provider: "evolution",
       external_session_name: sessionName,
-      waha_session_name: sessionName,
       display_name: parsed.data.display_name,
       purpose: parsed.data.purpose ?? null,
       is_default: parsed.data.is_default,
@@ -169,7 +168,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";
-    // Rollback: sem WAHA no ar, não deixamos um canal fantasma preso em STARTING.
+    // Rollback: sem Evolution no ar, não deixamos um canal fantasma preso em STARTING.
     await supabase
       .from("channel_sessions")
       .delete()

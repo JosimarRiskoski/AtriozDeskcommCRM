@@ -6,7 +6,7 @@
  * secret, path token) — NUNCA do request body.
  *
  * Uso permitido:
- *  - Webhook handlers (WAHA, Nuvemshop)
+ *  - Webhook handlers (Evolution, Nuvemshop)
  *  - Cron / workers
  *  - Onboarding / admin operations explícitas
  *  - Health check (read-only)

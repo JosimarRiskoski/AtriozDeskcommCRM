@@ -1,7 +1,7 @@
 /**
  * POST /api/v1/webhooks/in/[token] — captação pública de leads.
  *
- * Mesmo padrão do webhook WAHA per-tenant: path_token resolve o tenant
+ * Mesmo padrão de webhook por tenant: path_token resolve o tenant
  * (fonte confiável — nunca o body), loga em webhook_events_log e NÃO executa
  * ação síncrona além de criar o lead (motor de regras consome lead.created
  * via event_log). Aceita JSON e form-urlencoded na mesma URL.
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
   const sigHeader = req.headers.get("x-deskcomm-signature");
   // secret cifrado at-rest (migration 0041). Decrypt falhou (chave da GUC
-  // ausente/trocada)? Precedente WAHA: pula a validação em vez de derrubar a
+  // ausente/trocada)? Precedente do CRM: pula a validação em vez de derrubar a
   // captação — secret aqui é defesa opcional, não gate de disponibilidade.
   let sourceSecret: string | null = null;
   if (source.secret_encrypted) {
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     payload_parsed: payload,
     signature_header: sigHeader ?? null,
     // hmacSkipped (decrypt indisponível) conta como "não validado mas aceito",
-    // igual ao webhook WAHA — o feed da UI não pinta de vermelho.
+    // igual aos demais webhooks operacionais — o feed da UI não pinta de vermelho.
     valid_signature: validSignature ?? true,
     event_type: "lead_capture.received",
     external_id: null,

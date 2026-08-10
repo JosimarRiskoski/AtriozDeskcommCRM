@@ -11,17 +11,17 @@ import { randomUUID } from "node:crypto";
 
 export type HealthStatus = "ok" | "warning" | "critical";
 
-export interface WahaSession {
+export interface EvolutionSessionHealth {
   id: string;
-  waha_session_name: string | null;
+  external_session_name: string | null;
   status: string | null;
   last_qr_at: string | null;
   updated_at: string | null;
 }
 
 export interface TenantHealthResponse {
-  waha: {
-    sessions: WahaSession[];
+  evolution: {
+    sessions: EvolutionSessionHealth[];
     overall_status: HealthStatus;
   };
   nuvemshop: {
@@ -48,7 +48,7 @@ export interface TenantHealthResponse {
 // Status computation
 // ---------------------------------------------------------------------------
 
-function wahaOverallStatus(sessions: WahaSession[]): HealthStatus {
+function evolutionOverallStatus(sessions: EvolutionSessionHealth[]): HealthStatus {
   if (sessions.length === 0) return "warning";
   const hasWorking = sessions.some(
     (s) => s.status === "WORKING" || s.status === "CONNECTED",
@@ -107,11 +107,12 @@ export async function GET(
 
   // 4 parallel queries — service-role, intentional cross-tenant reads.
   // organization_id is resolved from path (trusted), never from body.
-  const [wahaRes, nuvemshopRes, aiRes, auditRes] = await Promise.all([
+  const [evolutionRes, nuvemshopRes, aiRes, auditRes] = await Promise.all([
     admin
       .from("channel_sessions")
-      .select("id, waha_session_name, status, last_qr_at, updated_at")
-      .eq("organization_id", id),
+      .select("id, external_session_name, status, last_qr_at, updated_at")
+      .eq("organization_id", id)
+      .eq("provider", "evolution"),
 
     admin
       .from("tenant_integrations")
@@ -134,9 +135,9 @@ export async function GET(
       .maybeSingle(),
   ]);
 
-  // --- WAHA ---
-  const sessions = (wahaRes.data ?? []) as WahaSession[];
-  const wahaStatus = wahaOverallStatus(sessions);
+  // --- Evolution ---
+  const sessions = (evolutionRes.data ?? []) as EvolutionSessionHealth[];
+  const evolutionStatus = evolutionOverallStatus(sessions);
 
   // --- Nuvemshop ---
   type NuvemshopRow = {
@@ -183,7 +184,7 @@ export async function GET(
   const auditStatus = auditOverallStatus(lagSeconds);
 
   const health: TenantHealthResponse = {
-    waha: { sessions, overall_status: wahaStatus },
+    evolution: { sessions, overall_status: evolutionStatus },
     nuvemshop: {
       connected: nuConnected,
       expires_at: nuExpiresAt,

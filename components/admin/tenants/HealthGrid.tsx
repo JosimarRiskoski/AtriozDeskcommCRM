@@ -51,19 +51,19 @@ interface HealthGridProps {
 // ---------------------------------------------------------------------------
 
 export function HealthGrid({ health }: HealthGridProps) {
-  const { waha, nuvemshop, ai, audit } = health;
+  const { evolution, nuvemshop, ai, audit } = health;
 
-  // WAHA card
-  const wahaConnected = waha.sessions.filter(
+  // Evolution card
+  const evolutionConnected = evolution.sessions.filter(
     (s) => s.status === "WORKING" || s.status === "CONNECTED",
   ).length;
-  const wahaPrimary =
-    waha.sessions.length === 0
+  const evolutionPrimary =
+    evolution.sessions.length === 0
       ? "Sem sessões"
-      : `${wahaConnected}/${waha.sessions.length} conectada${waha.sessions.length !== 1 ? "s" : ""}`;
+      : `${evolutionConnected}/${evolution.sessions.length} conectada${evolution.sessions.length !== 1 ? "s" : ""}`;
 
-  const wahaDetails = waha.sessions.slice(0, 4).map((s) => ({
-    label: s.waha_session_name ?? s.id.slice(0, 8),
+  const evolutionDetails = evolution.sessions.slice(0, 4).map((s) => ({
+    label: s.external_session_name ?? s.id.slice(0, 8),
     value: s.status ?? "—",
   }));
 
@@ -103,11 +103,11 @@ export function HealthGrid({ health }: HealthGridProps) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       <HealthCard
-        title="WAHA"
-        status={waha.overall_status}
+        title="Evolution"
+        status={evolution.overall_status}
         icon={<WifiHigh size={18} aria-hidden />}
-        primaryValue={wahaPrimary}
-        details={wahaDetails}
+        primaryValue={evolutionPrimary}
+        details={evolutionDetails}
       />
 
       <HealthCard

@@ -9,7 +9,7 @@
 - **Auth (Supabase Auth + `@supabase/ssr`)**: cookie SameSite=Strict, MFA TOTP forçado pra admin/super-admin. Sempre `getUser()` no server.
 - **Realtime (Supabase Realtime)**: `postgres_changes` para inbox/kanban; `broadcast` para sinais leves.
 - **Storage (Supabase Storage)**: bucket `whatsapp-media` privado, URLs assinadas.
-- **WhatsApp (WAHA Plus / engine NOWEB)**: HMAC-SHA512 webhooks; throttle anti-banimento; STOP detection.
+- **WhatsApp (Evolution API)**: webhooks autenticados, recibos monotônicos, mídia persistida; throttle anti-banimento; STOP detection.
 - **Filas (event sourcing leve)**: `event_log` table + workers via cron. Trigger Postgres NUNCA faz HTTP.
 - **Rate limit (Upstash Redis)**: sliding window.
 - **AI (Vercel AI Gateway)**: Anthropic primário, OpenAI backup pra embeddings.
@@ -47,4 +47,4 @@ Triggers Postgres emitem linhas em `event_log`. Workers (cron / Realtime listene
 - [`docs/specs/`](docs/specs/) — specs técnicas com schema SQL e payloads.
 - [`docs/business-rules/`](docs/business-rules/) — regras de negócio fora do código.
 - [`docs/stories/epics/MASTER.md`](docs/stories/epics/MASTER.md) — plano de execução por epic/wave.
-- [`CLAUDE.md`](CLAUDE.md) — convenções não-negociáveis (multi-tenancy, idempotência, RBAC, LGPD, WAHA, anti-patterns).
+- [`CLAUDE.md`](CLAUDE.md) — convenções não-negociáveis (multi-tenancy, idempotência, RBAC, LGPD, Evolution API, anti-patterns).

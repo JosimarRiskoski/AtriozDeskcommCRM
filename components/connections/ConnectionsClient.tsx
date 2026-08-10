@@ -73,9 +73,9 @@ export function ConnectionsClient({ evolutionConfigured }: { evolutionConfigured
     [qc],
   );
 
-  // Health check ao vivo de todos os canais — consulta o WAHA e grava
+  // Health check ao vivo de todos os canais — consulta a Evolution e grava
   // last_health_check_at. É a verificação de saúde de verdade (o status do DB
-  // pode estar velho se o WAHA caiu sem emitir evento).
+  // pode estar velho se a Evolution caiu sem emitir evento).
   const runHealthCheck = useCallback(
     async (list: ChannelSession[]) => {
       if (!evolutionConfigured || list.length === 0) return;
@@ -536,7 +536,7 @@ function ManageConnectionDialog({
           <DialogDescription>
             {connection.phone_number ||
               connection.external_session_name ||
-              connection.waha_session_name}
+              connection.external_session_name}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-5">

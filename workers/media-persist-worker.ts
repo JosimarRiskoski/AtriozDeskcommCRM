@@ -1,6 +1,6 @@
 /**
- * Consome `media.persist_requested`: baixa o binário da mídia (MediaSource
- * WAHA) e persiste no bucket privado `whatsapp-media`, preenchendo
+ * Consome `media.persist_requested`: baixa o binário pela Evolution API e
+ * persiste no bucket privado `whatsapp-media`, preenchendo
  * media_storage_path/media_size_bytes na linha de `messages`.
  * Retry/backoff é responsabilidade do drain (`lib/event-log/drain.ts`), não
  * deste handler: aqui só retornamos `status:"error"` em falha. O drain conta
@@ -12,8 +12,7 @@
  */
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { storagePathFor } from "@/lib/messaging/media/types";
-import { fetchWahaMedia } from "@/lib/messaging/media/waha-source";
-import { fetchEvolutionMedia } from "@/lib/messaging/media/evolution-source";
+import { fetchEvolutionMessageMedia } from "@/lib/messaging/media/evolution-api-source";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -32,6 +31,7 @@ interface MessageMediaRow {
   media_url: string | null;
   media_mime: string | null;
   media_storage_path: string | null;
+  channel_session_id: string;
   metadata: Record<string, unknown> | null;
 }
 
@@ -44,7 +44,7 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
   const { data, error } = await admin
     .from("messages")
     .select(
-      "id, organization_id, conversation_id, media_url, media_mime, media_storage_path, metadata",
+      "id, organization_id, conversation_id, channel_session_id, media_url, media_mime, media_storage_path, metadata",
     )
     .eq("id", messageId)
     .eq("organization_id", row.organization_id)
@@ -52,7 +52,7 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
   if (error) return { consumer_key, status: "error", detail: error.message };
 
   const msg = data as MessageMediaRow | null;
-  if (!msg?.media_url) return { consumer_key, status: "skipped", detail: "no media_url" };
+  if (!msg) return { consumer_key, status: "skipped", detail: "message_not_found" };
   if (msg.media_storage_path) return { consumer_key, status: "skipped", detail: "already stored" };
 
   const markStatus = async (
@@ -69,12 +69,38 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
 
   const isLastAttempt = row.attempts >= DRAIN_MAX_ATTEMPTS - 1;
 
+  const { data: session, error: sessionError } = await admin
+    .from("channel_sessions")
+    .select("provider, external_session_name")
+    .eq("id", msg.channel_session_id)
+    .eq("organization_id", msg.organization_id)
+    .maybeSingle();
+  if (sessionError || !session) {
+    return { consumer_key, status: "error", detail: "evolution_session_not_found" };
+  }
+  if (session.provider !== "evolution") {
+    return { consumer_key, status: "error", detail: "unsupported_whatsapp_provider" };
+  }
+  if (!session.external_session_name) {
+    return { consumer_key, status: "error", detail: "evolution_instance_name_missing" };
+  }
+  const evolutionMessage = msg.metadata?.evolution_message;
+  const rawMessage =
+    evolutionMessage && typeof evolutionMessage === "object" && !Array.isArray(evolutionMessage)
+      ? (evolutionMessage as Record<string, unknown>)
+      : {};
+  if (!msg.media_url && !Object.keys(rawMessage).length) {
+    return { consumer_key, status: "skipped", detail: "media_source_missing" };
+  }
+
   let media;
   try {
-    media =
-      msg.metadata?.channel_provider === "evolution"
-        ? await fetchEvolutionMedia(msg.media_url, msg.media_mime)
-        : await fetchWahaMedia(msg.media_url, msg.media_mime);
+    media = await fetchEvolutionMessageMedia({
+      mediaUrl: msg.media_url,
+      hintMime: msg.media_mime,
+      instanceName: session.external_session_name,
+      message: rawMessage,
+    });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     if (isLastAttempt) {

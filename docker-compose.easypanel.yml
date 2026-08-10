@@ -15,7 +15,6 @@ x-runtime-environment: &runtime-environment
   INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET}
   CPF_ENCRYPTION_KEY: ${CPF_ENCRYPTION_KEY}
   NUVEMSHOP_OAUTH_ENCRYPTION_KEY: ${NUVEMSHOP_OAUTH_ENCRYPTION_KEY}
-  WAHA_BYO_ENCRYPTION_KEY: ${WAHA_BYO_ENCRYPTION_KEY}
   AI_CRED_AES_KEY: ${AI_CRED_AES_KEY}
   IMPERSONATE_COOKIE_SECRET: ${IMPERSONATE_COOKIE_SECRET}
   LGPD_SIGNING_KEY: ${LGPD_SIGNING_KEY}
@@ -95,7 +94,7 @@ services:
     networks: [internal]
 
   evolution:
-    image: ${EVOLUTION_IMAGE:-evoapicloud/evolution-api:latest}
+    image: ${EVOLUTION_IMAGE:-evoapicloud/evolution-api:v2.3.7}
     depends_on:
       evolution-postgres:
         condition: service_healthy
@@ -195,8 +194,6 @@ services:
     networks: [internal]
 
 volumes:
-  waha-data:
-  waha-media:
   evolution-instances:
   evolution-postgres-data:
 

@@ -30,7 +30,6 @@ import { createPool } from '@/lib/agent-engine/db/pool';
 import { runDrainLoop } from '@/lib/agent-engine/edge/crm/drain';
 import { crmEdgeConfigFromEnv } from '@/lib/agent-engine/edge/crm/mcp-client';
 import { enforceHolds, sessionHealthMetrics } from '@/lib/agent-engine/edge/crm/session-watchdog';
-import { runSessionWatchdogLoop } from '@/lib/agent-engine/edge/crm/session-reconciler';
 import { runEvolutionSessionWatchdogLoop } from '@/lib/evolution/session-reconciler';
 import { runHealthLoop } from '@/lib/agent-engine/health/circuit';
 import { runFlywheelLoop } from '@/lib/agent-engine/flywheel/live';
@@ -169,7 +168,7 @@ export async function startWorker(
   }, env.QUEUE_REAPER_INTERVAL_MS);
 
   // Holds de sessão/saúde: retém jobs de envio de número fora do ar (WORKING é a
-  // fonte channel_sessions, mantida pelo webhook do WAHA) — ritmo do reaper serve.
+  // fonte channel_sessions, mantida pelo webhook da Evolution) — ritmo do reaper serve.
   const holdsTimer = setInterval(() => {
     enforceHolds(pool)
       .then(({ held, released }) => {
@@ -199,8 +198,7 @@ export async function startWorker(
     loopsAbort.signal,
   );
 
-  // Watchdog de sessão (4A-2): reconcilia channel_sessions×WAHA + redrive de
-  // queued. Liga só com as credenciais do WAHA no env (sem elas: warn + off).
+  // Watchdog de sessão: reconcilia channel_sessions × Evolution.
   const sessionWatchdogLoop =
     env.EVOLUTION_API_BASE_URL !== undefined && env.EVOLUTION_API_KEY !== undefined
       ? runEvolutionSessionWatchdogLoop(
@@ -213,21 +211,7 @@ export async function startWorker(
           log,
           loopsAbort.signal,
         )
-      : env.WAHA_API_BASE_URL !== undefined && env.WAHA_API_KEY !== undefined
-      ? runSessionWatchdogLoop(
-          pool,
-          {
-            wahaBaseUrl: env.WAHA_API_BASE_URL,
-            wahaApiKey: env.WAHA_API_KEY,
-            intervalMs: env.WATCHDOG_INTERVAL_MS,
-            redriveMinAgeMs: env.WATCHDOG_REDRIVE_MIN_AGE_MS,
-            redriveBatchSize: env.WATCHDOG_REDRIVE_BATCH_SIZE,
-            redriveSpacingMs: env.WATCHDOG_REDRIVE_SPACING_MS,
-          },
-          log,
-          loopsAbort.signal,
-        )
-      : (log.warn('watchdog de sessão OFF — WAHA_API_BASE_URL/WAHA_API_KEY ausentes no env', {}),
+      : (log.warn('watchdog de sessão OFF — EVOLUTION_API_BASE_URL/EVOLUTION_API_KEY ausentes', {}),
         Promise.resolve());
 
   // Circuito de saúde do número (block/response rate → hold).

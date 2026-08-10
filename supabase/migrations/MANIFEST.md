@@ -95,6 +95,9 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 | `20260727233000` | `0094_interactive_poll_templates` | Templates interativos de enquete com fallback textual para provedores ou clientes sem suporte. |
 | `20260727234000` | `0095_ai_contact_field_access` | Permissões imutáveis por versão do agente e por campo comercial do contato: sem acesso, somente leitura ou leitura e alteração. |
 | `20260810100000` | `0121_llm_failures_and_safe_fallback` | Falhas de IA passam a deixar rastro técnico em `llm_calls`; troca apenas o fallback antigo que prometia handoff sem criar caso. |
+| `20260810110000` | `0122_inbox_read_and_receipt_progression` | Leitura transacional de conversas e progressão monotônica dos recibos da Evolution, incluindo `played_at` para áudio reproduzido e sem regressão de estado. |
+| `20260810120000` | `0123_one_open_opportunity_per_contact` | Garante no banco uma única oportunidade aberta por contato, inclusive em criações simultâneas. |
+| `20260810130000` | `0124_remove_waha_session_legacy` | Encerra conexões do provedor antigo, fixa Evolution como único transporte e remove a coluna legada duplicada de sessão. |
 
 ## Reproducibility
 

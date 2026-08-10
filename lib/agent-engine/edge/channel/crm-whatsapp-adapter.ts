@@ -1,5 +1,6 @@
 /**
- * Adapter WAHA-via-CRM (F2-25) — o ÚNICO ChannelAdapter da v1. ENVOLVE (não
+ * Adapter WhatsApp-via-CRM. O transporte concreto é resolvido pelo CRM e, na
+ * instalação atual, usa exclusivamente a Evolution API.
  * reescreve) o sink idempotente F2-06 (send-message.ts) e o espelho de saúde do
  * watchdog F2-14 (session-watchdog.ts). É o único ponto do daemon que fala com a
  * borda concreta do canal; o runtime/guardrails só enxergam a interface
@@ -25,11 +26,11 @@ import { CrmTransportError, type CrmEdgeConfig } from '../crm/mcp-client';
 import { sendTurnMessage, SendToolError } from '../crm/send-message';
 import { SESSION_HEALTHY_STATUS } from '../crm/session-watchdog';
 
-/** id do canal da v1 — o único adapter (WAHA através do sink do CRM). */
-export const WAHA_VIA_CRM_CHANNEL = 'waha_via_crm';
+/** Identificador estável do canal entregue pelo sink idempotente do CRM. */
+export const CRM_WHATSAPP_CHANNEL = 'whatsapp_via_crm';
 
-export class WahaChannelAdapter implements ChannelAdapter {
-  readonly channel = WAHA_VIA_CRM_CHANNEL;
+export class CrmWhatsAppChannelAdapter implements ChannelAdapter {
+  readonly channel = CRM_WHATSAPP_CHANNEL;
   // Campos declarados + atribuídos no corpo (não parameter properties): o daemon
   // roda em `node --experimental-strip-types` (strip-only), que não transforma.
   private readonly db: pg.Pool;
@@ -68,7 +69,7 @@ export class WahaChannelAdapter implements ChannelAdapter {
   }
 
   async sessionHealth(channelSessionId: string): Promise<ChannelSessionHealth> {
-    // Regra dura nº 4: message-plane NUNCA fala com WAHA — lê o espelho durável
+    // O message-plane nunca fala diretamente com o provedor — lê o espelho durável
     // que o watchdog (F2-14) mantém a partir do CRM. channel_session_id é um UUID
     // do CRM, globalmente único; sem linha no espelho = ainda não observada.
     const { rows } = await this.db.query<{ status: string; changed_at: string | null }>(
@@ -88,14 +89,12 @@ export class WahaChannelAdapter implements ChannelAdapter {
   }
 
   capabilities(): ChannelCapabilities {
-    // WAHA entrega texto livre a qualquer hora — sem janela de serviço nem
-    // aprovação de template (contraste com a Cloud API, ver doc).
+    // A conexão Evolution usada pelo CRM aceita texto livre a qualquer hora.
     return { freeformAnytime: true, serviceWindowHours: null };
   }
 
   costPerMessage(): ChannelCost {
-    // WAHA = custo flat de infra (0 por mensagem). A Cloud API cobra per-message
-    // a partir de out/2026 — quando esse adapter existir, o preço é knob de config.
+    // Evolution é custo flat de infraestrutura, sem custo por mensagem no adapter.
     return { perMessageUsdCents: 0, model: 'flat' };
   }
 }

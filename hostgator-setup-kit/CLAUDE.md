@@ -84,7 +84,7 @@ Quando terminar, diga à pessoa para:
 - **App reiniciando em loop** → quase sempre falta uma chave no `.env`. Rode
   `docker compose -f docker-compose.prod.yml logs app` e procure a linha
   `[env] Falha de validação` — ela diz exatamente qual variável falta.
-- **WhatsApp não conecta / QR não aparece** → veja `docker compose ... logs waha`.
+- **WhatsApp não conecta / QR não aparece** → veja `docker compose ... logs evolution`.
   Confirme que o número não está logado em outro lugar.
 - **"não consigo entrar / esqueci a senha"** → `bash reset-password.sh <email>`.
 - **"perdi o celular do autenticador"** → `bash reset-mfa.sh <email>`.
@@ -105,8 +105,8 @@ Se mesmo assim aparecerem, aqui está o diagnóstico pronto:
    `create extension if not exists vector with schema public;` (idem citext e pg_trgm).
 3. **Supabase "Network unreachable" / IPv6** — a connection string é a Direct (IPv6).
    Troque pela do **Session pooler** (ver passo 2).
-4. **WhatsApp/WAHA dá 401** — a chave do WAHA precisa do prefixo `sha512:` na env do
-   container (o compose já faz). O app manda o texto puro; o WAHA hasheia e compara.
+4. **WhatsApp/Evolution dá 401** — confirme que `EVOLUTION_API_KEY` é exatamente a
+   mesma no CRM e no serviço Evolution, sem espaços ou aspas adicionais.
 5. **Stack não sobe: imagem do "srh" não encontrada** — a imagem correta é
    `hiett/serverless-redis-http` (o compose já usa). Um nome antigo (`hjr265/...`) saiu do ar.
 6. **"usuário já existe" (422) no bootstrap do admin** — normal numa 2ª tentativa. O
@@ -125,7 +125,7 @@ Se mesmo assim aparecerem, aqui está o diagnóstico pronto:
    existentes e trava a re-duplicação. É **auto-curativo** — quem já tinha o CRM bagunçado
    só precisa rodar `bash update.sh` (re-aplica o baseline, que deduplica e conserta) e
    reiniciar o app. Se persistir após o update, confirme que o app está na imagem `latest`
-   nova (o código dos webhooks em `lib/waha/ingest.ts` precisa acompanhar o schema).
+   nova (o adaptador em `lib/evolution/ingest.ts` precisa acompanhar o schema).
 
 ## Depois de instalado
 

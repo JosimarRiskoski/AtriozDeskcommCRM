@@ -150,7 +150,7 @@ export function SectionPatterns() {
           <div className="ds-key" style={{ color: "var(--ds-error)" }}>Erro · 503</div>
           <div className="ds-display" style={{ fontSize: 18, fontWeight: 600, marginTop: 6 }}>WhatsApp fora do ar</div>
           <p style={{ fontSize: 13, color: "var(--ds-text-muted)", marginTop: 8, lineHeight: 1.5 }}>
-            Não conseguimos conectar ao WAHA neste momento. Tentaremos novamente em 30s.
+            Não conseguimos conectar à Evolution neste momento. Tentaremos novamente em 30s.
           </p>
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button className="ds-btn ds-btn--secondary">Tentar agora</button>

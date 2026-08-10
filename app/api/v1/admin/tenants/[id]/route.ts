@@ -58,7 +58,7 @@ export async function GET(
     ordersRes,
     lgpdRes,
     aiRes,
-    wahaRes,
+    whatsappConnectionsRes,
     integrationRes,
   ] = await Promise.all([
     admin
@@ -114,7 +114,7 @@ export async function GET(
     orders_count: ordersRes.count ?? 0,
     lgpd_requests_pending: lgpdRes.count ?? 0,
     ai_invocations_30d: aiRes.count ?? 0,
-    waha_sessions_count: wahaRes.count ?? 0,
+    whatsapp_connections_count: whatsappConnectionsRes.count ?? 0,
   };
 
   const nuvemshopIntegration =

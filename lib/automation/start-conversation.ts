@@ -1,6 +1,6 @@
 /**
  * Conversa programática p/ automação: acha a conversa aberta do contato na
- * sessão, REABRE a fechada, ou cria uma nova. Distinto da ingestão WAHA (que
+ * sessão, REABRE a fechada, ou cria uma nova. Distinto da ingestão Evolution (que
  * usa RPCs de identidade) — aqui contato e sessão já são conhecidos.
  *
  * Por que reabrir: o índice uniq_conversations_1to1_per_contact_session é

@@ -215,13 +215,14 @@ export async function GET(req: NextRequest): Promise<Response> {
     if (channelIds.length > 0) {
       const { data: channels } = await admin
         .from("channel_sessions")
-        .select("id, display_name, phone_number, waha_session_name")
+        .select("id, display_name, phone_number, external_session_name")
+        .eq("provider", "evolution")
         .eq("organization_id", org.orgId)
         .in("id", channelIds);
       for (const channel of channels ?? []) {
         channelNameById.set(
           channel.id,
-          channel.display_name ?? channel.phone_number ?? channel.waha_session_name,
+          channel.display_name ?? channel.phone_number ?? channel.external_session_name,
         );
       }
     }

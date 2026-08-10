@@ -1,5 +1,6 @@
 "use client";
 import { format } from "date-fns";
+import type { ReactNode } from "react";
 import { ptBR } from "date-fns/locale";
 import { Check, Checks, Robot, WarningOctagon } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -17,17 +18,39 @@ interface Props {
   debugCitations?: boolean;
 }
 
-function AckIndicator({ status }: { status: string }) {
-  if (status === "read") {
-    return <Checks size={12} weight="bold" className="text-blue-400" aria-label="Lida" />;
+function AckIndicator({
+  status,
+  ack,
+  messageType,
+}: {
+  status: string;
+  ack: number | null;
+  messageType: string;
+}) {
+  let indicator: ReactNode = null;
+  let label = "";
+  if ((ack ?? 0) >= 4 && messageType === "audio") {
+    label = "Reproduzida";
+    indicator = <Checks size={12} weight="bold" className="text-blue-400" aria-label={label} />;
+  } else if (status === "read") {
+    label = "Lida";
+    indicator = <Checks size={12} weight="bold" className="text-blue-400" aria-label={label} />;
+  } else if (status === "delivered") {
+    label = "Entregue";
+    indicator = <Checks size={12} weight="bold" className="text-current/70" aria-label={label} />;
+  } else if (status === "sent") {
+    label = "Enviada";
+    indicator = <Check size={12} weight="bold" className="text-current/70" aria-label={label} />;
   }
-  if (status === "delivered") {
-    return <Checks size={12} weight="bold" className="text-current/70" aria-label="Entregue" />;
-  }
-  if (status === "sent") {
-    return <Check size={12} weight="bold" className="text-current/70" aria-label="Enviada" />;
-  }
-  return null;
+  if (!indicator) return null;
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild><span className="inline-flex">{indicator}</span></TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 export function MessageBubble({ message, debugCitations }: Props) {
@@ -92,7 +115,9 @@ export function MessageBubble({ message, debugCitations }: Props) {
           {showCitationButton && (
             <CitationButton citations={citations} messageId={message.id} />
           )}
-          {isOutbound && !isFailed && <AckIndicator status={message.status} />}
+          {isOutbound && !isFailed && (
+            <AckIndicator status={message.status} ack={message.ack} messageType={message.type} />
+          )}
           {isFailed && (
             // Provider local: o painel do inbox não tem TooltipProvider ancestral e
             // este Tooltip só monta em mensagem failed — sem o provider, abrir uma

@@ -12,7 +12,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { reconcilePendingWahaInbound } from "@/lib/waha/ingest";
+import { reconcilePendingEvolutionInbound } from "@/lib/evolution/commercial-ingest";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,7 @@ async function handle(req: NextRequest): Promise<Response> {
   }
 
   try {
-    const summary = await reconcilePendingWahaInbound(createAdminClient());
+    const summary = await reconcilePendingEvolutionInbound(createAdminClient());
     void audit({
       action: "whatsapp.inbound_recovery_run",
       organizationId: null,

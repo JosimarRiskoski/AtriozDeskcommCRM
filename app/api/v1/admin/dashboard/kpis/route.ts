@@ -5,7 +5,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 
 export type AlertSeverity = "critical" | "warning" | "info";
 export type AlertKind =
-  | "waha_ban"
+  | "whatsapp_connection"
   | "lgpd_at_risk"
   | "ai_budget"
   | "tenant_pending_overflow";
@@ -24,7 +24,7 @@ export interface AlertItem {
 export interface DashboardKPIs {
   tenants_active: number;
   conv_pending_10min: number;
-  waha_ban_alerts: number;
+  whatsapp_connection_alerts: number;
   lgpd_at_risk: number;
   ai_budget_warnings: number;
   alerts: AlertItem[];
@@ -47,7 +47,7 @@ export async function GET(_req: NextRequest) {
   const [
     tenantsRes,
     convPendingRes,
-    wahaBanRes,
+    whatsappConnectionRes,
     lgpdRiskRes,
     aiBudgetRes,
   ] = await Promise.all([
@@ -105,12 +105,12 @@ export async function GET(_req: NextRequest) {
   const cutoff5d = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
-    wahaAlertsRes,
+    whatsappAlertsRes,
     lgpdAlertsRes,
     aiBudgetAlertsRes,
     overflowAlertsRes,
   ] = await Promise.all([
-    // WAHA ban alerts with org name
+    // Alertas de conexão WhatsApp com o nome da organização
     admin
       .from("channel_sessions")
       .select(`
@@ -168,18 +168,18 @@ export async function GET(_req: NextRequest) {
   const alerts: AlertItem[] = [];
   const now = Date.now();
 
-  // WAHA alerts
-  for (const row of wahaAlertsRes.data ?? []) {
+  // Alertas do canal WhatsApp
+  for (const row of whatsappAlertsRes.data ?? []) {
     const org = (row as { organizations?: { display_name?: string } }).organizations;
     alerts.push({
-      id: `waha-${row.id}`,
+      id: `whatsapp-${row.id}`,
       severity: row.status === "ban_suspected" ? "critical" : "warning",
-      kind: "waha_ban",
+      kind: "whatsapp_connection",
       tenant_id: row.organization_id,
       tenant_name: (org as { display_name?: string })?.display_name ?? row.organization_id,
       message:
         row.status === "ban_suspected"
-          ? "Sessão WAHA com suspeita de banimento"
+          ? "Conexão WhatsApp com suspeita de banimento"
           : `Sessão desconectada inesperadamente${row.status_reason ? `: ${row.status_reason}` : ""}`,
       link: `/admin/tenants/${row.organization_id}/health`,
       created_at: row.updated_at,
@@ -260,7 +260,7 @@ export async function GET(_req: NextRequest) {
   const kpis: DashboardKPIs = {
     tenants_active: tenantsRes.count ?? 0,
     conv_pending_10min: convPendingRes.count ?? 0,
-    waha_ban_alerts: wahaBanRes.count ?? 0,
+    whatsapp_connection_alerts: whatsappConnectionRes.count ?? 0,
     lgpd_at_risk: lgpdRiskRes.count ?? 0,
     ai_budget_warnings: aiBudgetWarnings,
     alerts: alerts.slice(0, 20),

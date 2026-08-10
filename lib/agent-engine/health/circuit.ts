@@ -105,7 +105,7 @@ interface SessionRates {
  * channel_session_id, is_group=false) — send_ledger não guarda a sessão; a
  * conversa 1:1 do contato no número é o vínculo durável. Inbound via evento
  * ai_agent.dispatch_requested no event_log do CRM (payload.channel_session_id/
- * contact_id — as chaves que lib/waha/ingest.ts emite).
+ * contact_id — as chaves que a ingestão da Evolution emite).
  */
 async function computeSessionRates(
   db: pg.Pool,

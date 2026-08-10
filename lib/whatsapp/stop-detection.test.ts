@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isExplicitStopRequest } from "@/lib/waha/stop-detection";
+import { isExplicitStopRequest } from "@/lib/whatsapp/stop-detection";
 
 describe("isExplicitStopRequest", () => {
   it.each([

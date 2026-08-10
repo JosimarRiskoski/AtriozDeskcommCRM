@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const { data: session, error: sessionError } = await admin
     .from("channel_sessions")
     .select(
-      "id,organization_id,provider,external_session_name,waha_session_name,is_warmup_complete,warmup_started_at",
+      "id,organization_id,provider,external_session_name,is_warmup_complete,warmup_started_at",
     )
     .eq("webhook_path_token", token)
     .eq("provider", "evolution")

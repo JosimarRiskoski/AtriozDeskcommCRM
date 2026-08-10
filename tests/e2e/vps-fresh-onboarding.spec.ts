@@ -4,7 +4,7 @@
  * Pré-condições (ambiente que simula o kit self-host):
  *   - banco zerado do baseline.sql (Supabase local pg17)
  *   - primeiro usuário criado via scripts/bootstrap-owner.ts (como o install.sh)
- *   - WAHA ativo, Redis local, RESEND_API_KEY VAZIO (realidade da VPS fresca)
+ *   - Evolution ativa, Redis local, RESEND_API_KEY VAZIO (realidade da VPS fresca)
  *   - app em produção (next build + next start) na E2E_PORT
  *
  * Casos: J1.1–J1.13 do docs/testing/user-journey-map.md. Tudo pelo frontend;
@@ -81,20 +81,22 @@ test.describe("J1 — onboarding do dono numa instalação fresca", () => {
     }
     if (fs.existsSync(OWNER_STATE_PATH)) fs.rmSync(OWNER_STATE_PATH);
 
-    // WAHA: remove sessões org_* de rodadas anteriores (instalação fresca não
-    // teria sessão FAILED pendurada; QR não re-renderiza sobre sessão morta).
-    const wahaBase = process.env.WAHA_API_BASE_URL;
-    const wahaKey = process.env.WAHA_API_KEY;
-    if (wahaBase && wahaKey) {
-      const res = await fetch(`${wahaBase}/api/sessions?all=true`, {
-        headers: { "X-Api-Key": wahaKey },
+    // Evolution: remove instâncias org_* de rodadas anteriores.
+    const evolutionBase = process.env.EVOLUTION_API_BASE_URL;
+    const evolutionKey = process.env.EVOLUTION_API_KEY;
+    if (evolutionBase && evolutionKey) {
+      const res = await fetch(`${evolutionBase.replace(/\/$/, "")}/instance/fetchInstances`, {
+        headers: { apikey: evolutionKey },
       }).catch(() => null);
-      const sessions = res?.ok ? ((await res.json()) as Array<{ name: string }>) : [];
-      for (const s of sessions) {
-        if (!s.name.startsWith("org_")) continue;
-        await fetch(`${wahaBase}/api/sessions/${s.name}`, {
+      const instances = res?.ok
+        ? ((await res.json()) as Array<{ name?: string; instanceName?: string }>)
+        : [];
+      for (const instance of instances) {
+        const name = instance.name ?? instance.instanceName ?? "";
+        if (!name.startsWith("org_")) continue;
+        await fetch(`${evolutionBase.replace(/\/$/, "")}/instance/delete/${encodeURIComponent(name)}`, {
           method: "DELETE",
-          headers: { "X-Api-Key": wahaKey },
+          headers: { apikey: evolutionKey },
         }).catch(() => null);
       }
     }
@@ -146,12 +148,12 @@ test.describe("J1 — onboarding do dono numa instalação fresca", () => {
     expect((org.onboarding_state as { welcome?: unknown })?.welcome).toBeTruthy();
   });
 
-  test("J1.5 WAHA ativo → QR code aparece de verdade", async ({ page }) => {
+  test("J1.5 Evolution ativa → QR code aparece de verdade", async ({ page }) => {
     await login(page);
     await page.waitForURL(/\/onboarding\/connect-whatsapp/);
 
-    // sem banner de "WAHA não está configurado"
-    await expect(page.getByText(/waha não está configurado/i)).toHaveCount(0);
+    // sem banner de "Evolution não está configurada"
+    await expect(page.getByText(/evolution não está (configurada|ativa)/i)).toHaveCount(0);
 
     // QR do proxy (poll de 3s até SCAN_QR_CODE) — imagem carregada de fato
     const qr = page.locator('img[src*="/whatsapp/qr"]');

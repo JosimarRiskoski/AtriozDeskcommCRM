@@ -1,6 +1,6 @@
 "use client";
 import { forwardRef, useImperativeHandle, useRef, useState, type KeyboardEvent } from "react";
-import { PaperPlaneTilt, Plus } from "@/lib/ui/icons";
+import { ChatText, PaperPlaneTilt, Plus } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
@@ -190,10 +190,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               className="h-9 w-9 shrink-0"
               onClick={() => setTemplateDialogOpen(true)}
               disabled={isDisabled}
-              aria-label="Criar resposta rápida"
-              title="Criar resposta rápida"
+              aria-label="Respostas rápidas"
+              title="Respostas rápidas"
             >
-              <Plus size={17} aria-hidden />
+              <ChatText size={17} aria-hidden />
             </Button>
           )}
           {mode === "reply" && (

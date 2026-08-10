@@ -171,7 +171,7 @@ export interface MetricsSnapshot {
   queue: { pending: number; running: number; dead: number };
   /** envios da janela por status do ledger — 'vetoed' = vetados (gates F2-13 somam aqui) */
   sends: { requested: number; accepted: number; queued: number; vetoed: number; failed: number };
-  /** saúde por sessão WAHA (F2-14) */
+  /** saúde por conexão Evolution (F2-14) */
   sessions: SessionHealthMetric[];
 }
 

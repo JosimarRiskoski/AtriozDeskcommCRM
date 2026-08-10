@@ -30,14 +30,7 @@ const envSchema = z.object({
   QUEUE_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(250),
   QUEUE_REAPER_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   SHUTDOWN_GRACE_MS: z.coerce.number().int().positive().default(30_000),
-  // Watchdog de sessão (Fase 4A-2) — o ÚNICO ponto do engine que fala com o
-  // WAHA direto (admin-plane, regra dura nº 4): reconcilia o espelho
-  // channel_sessions com o status real e reenvia mensagens AI presas em queued.
-  // Opcionais no boot: sem WAHA_API_BASE_URL/KEY o watchdog fica OFF (warn).
-  WAHA_API_BASE_URL: z.string().url().optional(),
-  WAHA_API_KEY: z.string().min(1).optional(),
-  // Evolution é o transporte padrão. WAHA permanece opcional apenas para a
-  // transição de sessões antigas.
+  // Watchdog de sessão: reconcilia o espelho com a Evolution.
   EVOLUTION_API_BASE_URL: z.string().url().optional(),
   EVOLUTION_API_KEY: z.string().min(1).optional(),
   WATCHDOG_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
@@ -132,7 +125,7 @@ const envSchema = z.object({
   // sempre: proposta nunca vira comportamento sem o dono publicar na tela.
   FLYWHEEL_INTERVAL_MS: z.coerce.number().int().min(0).default(21_600_000),
   FLYWHEEL_BATCH_LIMIT: z.coerce.number().int().positive().default(10),
-  // Contenção de egress — hosts EXTRA além do Supabase/WAHA (CSV). Fail-closed.
+  // Contenção de egress — hosts EXTRA além do Supabase/Evolution (CSV). Fail-closed.
   EGRESS_EXTRA_ALLOWED_HOSTS: z.string().optional(),
 });
 

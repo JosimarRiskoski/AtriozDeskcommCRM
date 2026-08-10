@@ -167,9 +167,9 @@ export function seedGov(): void {
     ${memberships}
     -- DO + exception (não ON CONFLICT): channel_sessions tem unique DEFERRABLE
     -- (phone_per_org), que ON CONFLICT sem arbiter rejeita, e o arbiter (id)
-    -- não cobre a corrida no unique de waha_session_name entre arquivos paralelos.
+    -- não cobre a corrida no unique de external_session_name entre arquivos paralelos.
     do $gov$ begin
-      insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted)
+      insert into public.channel_sessions (id, organization_id, external_session_name, webhook_secret_encrypted)
         values ('${GOV_SESSION}', '${GOV_ORG}', 'gov-inv', '\\x00'::bytea);
     exception when unique_violation then null; end $gov$;
     insert into public.contacts (id, organization_id, display_name)

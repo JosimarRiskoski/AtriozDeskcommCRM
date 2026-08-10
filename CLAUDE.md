@@ -6,7 +6,7 @@
 
 ## Visão (1 parágrafo)
 
-DeskcommCRM é um sistema operacional de vendas open source com agentes de IA nativos — multi-nicho (e-commerce, clínicas, imobiliárias, infoprodutos, serviços), com WhatsApp como canal primário (via WAHA). Agentes com RAG por tenant atendem, qualificam e movem o funil junto com humanos; CRM inteiro exposto via MCP. Monetização = self-host em VPS (parceria HostGator), não assinatura. Arquitetura multi-tenant com RLS desde o dia 1; LGPD nativa. Posicionamento completo: `VISION.md`.
+DeskcommCRM é um sistema operacional de vendas open source com agentes de IA nativos — multi-nicho (e-commerce, clínicas, imobiliárias, infoprodutos, serviços), com WhatsApp como canal primário (via Evolution API). Agentes com RAG por tenant atendem, qualificam e movem o funil junto com humanos; CRM inteiro exposto via MCP. Monetização = self-host em VPS (parceria HostGator), não assinatura. Arquitetura multi-tenant com RLS desde o dia 1; LGPD nativa. Posicionamento completo: `VISION.md`.
 
 ---
 
@@ -18,7 +18,7 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
 - **Auth:** Supabase Auth via `@supabase/ssr`. Cookie SameSite=Strict, HttpOnly, Secure
 - **Realtime:** Supabase Realtime (postgres_changes + broadcast)
 - **Storage:** Supabase Storage (bucket `whatsapp-media` privado, URLs assinadas)
-- **WhatsApp:** WAHA Plus, engine NOWEB
+- **WhatsApp:** Evolution API
 - **Filas/eventos:** `event_log` table + workers (não usar Inngest/Trigger no MVP)
 - **Rate limit:** Upstash Redis sliding window
 - **AI:** Vercel AI Gateway (Anthropic primário; OpenAI backup pra embeddings); strings tipo `"anthropic/claude-sonnet-4-6"`
@@ -72,15 +72,14 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
 - SLA: data_request entregue D+7; redact executado D+15
 - Action audit obrigatória: `lgpd.data_request_received`, `lgpd.export_generated`, `lgpd.redact_executed`, `lgpd.consent_changed`
 
-### WAHA
-- Plus obrigatório (Core não suporta multi-tenant, sem retry, sem S3)
-- Engine NOWEB default; WEBJS apenas se precisar stickers animados / botões
-- Auth: env do WAHA recebe **hash SHA512 hex** da api key; cliente envia plaintext em `X-Api-Key`
-- Webhooks: HMAC SHA512 com `crypto.timingSafeEqual`
+### Evolution API
+- Evolution é o único transporte WhatsApp operacional; não adicionar fallback para outro provedor.
+- Autenticação via `apikey`; segredos ficam somente no servidor e nunca entram no bundle do navegador.
+- Webhooks usam token opaco por sessão e segredo adicional quando configurado; payload bruto é sanitizado antes de logar.
 - Anti-banimento: throttle 1 msg/1.2s + jitter ≤800ms. Campanha 1 msg/5s. Warm-up 7-14d. Spinning de copy. Janela 7h-22h, evitar domingo
 - STOP detection: regex `/STOP|PARAR|SAIR|UNSUBSCRIBE/i` no inbound → `is_blocked=true` automaticamente
-- Mídia: subir pro Supabase Storage primeiro, passar URL ao WAHA (não inline base64)
-- Multi-device: assinar `message.any` (não só `message`); tratar `fromMe=true` sem duplicar
+- Mídia: persistir no Supabase Storage; a UI consome somente rota autenticada/signed URL, sem URL direta do provedor.
+- Eventos: assinar `MESSAGES_UPSERT` e `MESSAGES_UPDATE`; tratar `fromMe=true` sem duplicar.
 - Grupos: SKIP CRM binding se `chatId.endsWith('@g.us')`. Sender é `p.author`, não `p.from`
 - Cron `recover-stuck-messages`: marca `status='sending'` há >5min como `failed`
 
@@ -93,7 +92,7 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
 ### Modelagem
 - 5 tabelas core CRM: `crm_pipelines`, `crm_stages`, `crm_leads`, `crm_lead_activities` (polimórfica timeline), `crm_lead_links` (polimórficos vínculos)
 - `position_in_stage numeric` (fractional indexing via `midpoint()`) — **NUNCA `int`**
-- `external_id` nullable (mensagem outbound `sending` ainda não tem ID WAHA)
+- `external_id` nullable (mensagem outbound `sending` ainda pode não ter ID do provedor)
 - `type` é `text` + `check constraint`, **não enum** (enum é difícil de estender)
   - **Exceção deliberada — colunas de vocabulário ABERTO:** onde um clone pode ter linhas com valor
     legado (ex.: `crm_lead_activities.type`), o CHECK **não** entra: a constraint faria o `update.sh`
@@ -135,13 +134,13 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
 | `docs/prd/02-...06-` | Customer 360, WhatsApp, Pipeline, IA-RAG, Nuvemshop |
 | `docs/specs/` | Specs técnicas detalhadas (schema SQL, payloads exatos) |
 | `docs/business-rules/` | Regras de negócio fora do código |
-| `docs/research/reference-synthesis.md` | Arquitetura herdada do curso WAHA |
+| `docs/research/reference-synthesis.md` | Arquitetura histórica herdada do curso original |
 | `tasks/todo.md` | Workflow de construção atual |
 | `lib/api/wrappers.ts` | `ok()`, `fail()`, tipos `ApiSuccess<T>` / `ApiError` |
 | `lib/api/errors.ts` | Códigos de erro canônicos |
 | `lib/env.ts` | Validação Zod das env vars (lança no startup se faltar crítica) |
 | `lib/supabase/{browser,server,admin}.ts` | Clients canônicos |
-| `app/api/v1/health/route.ts` | Health check (Supabase + Redis + WAHA) |
+| `app/api/v1/health/route.ts` | Health check (Supabase + Redis + Evolution API) |
 | `supabase/migrations/` | Schema versionado |
 
 ---
@@ -152,7 +151,7 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
 nvm use                    # node 22
 npm install
 cp .env.example .env.local  # preencher
-docker compose up -d        # WAHA local
+docker compose up -d        # Evolution API local
 npm run dev                 # http://localhost:3000
 ```
 
@@ -188,7 +187,7 @@ Ao mexer em schema, RLS, RBAC, atribuição, escopo, roteamento, follow-up, webh
 **O que "recurso real" significa (e o que NÃO conta):**
 - **Conta.** Prova pela tela, dirigindo o browser (Playwright), logando com conta de teste real. `curl`/chamada de API **não** provam UX — validam o backend, mas não o que o usuário vê, clica e entende. Use curl só como diagnóstico.
 - **Banco fresco estilo VPS.** Postgres limpo aplicado do `supabase/baseline.sql` (não das `migrations/` — a cadeia fresh não sobe) + `scripts/bootstrap-owner.ts` (o que o `install.sh` faz). O ambiente do teste = o que o clone recém-instalado tem: sem os seus dados, sem os seus envs opcionais.
-- **Dependências como na VPS.** WAHA local, Redis local (`redis` + `serverless-redis-http`), cron drain via endpoint. E **teste com os envs opcionais AUSENTES** (ex.: sem `RESEND_API_KEY`) — é o estado real de um primeiro deploy, e é onde moram os piores bugs de primeira impressão.
+- **Dependências como na VPS.** Evolution API local, Redis local (`redis` + `serverless-redis-http`), cron drain via endpoint. E **teste com os envs opcionais AUSENTES** (ex.: sem `RESEND_API_KEY`) — é o estado real de um primeiro deploy, e é onde moram os piores bugs de primeira impressão.
 - **Efeito colateral externo provado com receiver real.** Webhook outbound, envio — suba um receiver HTTP de verdade e prove o que chegou (ou que foi barrado). Mock não estressa o egress real (anti-SSRF, projeção de payload, https em prod).
 
 **Prioridade: primeira impressão acima de tudo.** Onboarding e as primeiras ações (criar conta, conectar canal, primeiro lead, primeiro convite) são a primeira impressão do usuário — bug ali é abandono. Teste esses caminhos primeiro e com o maior rigor.

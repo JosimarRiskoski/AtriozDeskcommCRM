@@ -27,7 +27,7 @@ export function classifyFailure(
   module: string,
 ): FailureCategory {
   const value = `${code ?? ""} ${message ?? ""} ${module}`.toLowerCase();
-  if (/connection|channel|session|waha|socket|econn|network/.test(value)) return "conexao";
+  if (/connection|channel|session|evolution|socket|econn|network/.test(value)) return "conexao";
   if (/phone|number|whatsapp|chat_id|jid|lid/.test(value)) return "telefone";
   if (/consent|blocked|opt.?out|suppression|exclu/.test(value)) return "consentimento_bloqueio";
   if (/media|audio|image|video|document|storage|arquivo/.test(value)) return "midia_documento";

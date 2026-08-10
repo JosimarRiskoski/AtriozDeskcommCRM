@@ -1666,7 +1666,6 @@ export type Database = {
           status_reason: string | null;
           updated_at: string;
           external_session_name: string;
-          waha_session_name: string;
           warmup_completed_at: string | null;
           warmup_started_at: string | null;
           webhook_path_token: string;
@@ -1697,8 +1696,7 @@ export type Database = {
           status?: string;
           status_reason?: string | null;
           updated_at?: string;
-          external_session_name?: string;
-          waha_session_name: string;
+          external_session_name: string;
           warmup_completed_at?: string | null;
           warmup_started_at?: string | null;
           webhook_path_token?: string;
@@ -1730,7 +1728,6 @@ export type Database = {
           status_reason?: string | null;
           updated_at?: string;
           external_session_name?: string;
-          waha_session_name?: string;
           warmup_completed_at?: string | null;
           warmup_started_at?: string | null;
           webhook_path_token?: string;
@@ -3918,6 +3915,7 @@ export type Database = {
           metadata: Json;
           organization_id: string;
           read_at: string | null;
+          played_at: string | null;
           sent_at: string;
           sent_by_user_id: string | null;
           sent_via: string;
@@ -3948,6 +3946,7 @@ export type Database = {
           metadata?: Json;
           organization_id: string;
           read_at?: string | null;
+          played_at?: string | null;
           sent_at?: string;
           sent_by_user_id?: string | null;
           sent_via?: string;
@@ -3978,6 +3977,7 @@ export type Database = {
           metadata?: Json;
           organization_id?: string;
           read_at?: string | null;
+          played_at?: string | null;
           sent_at?: string;
           sent_by_user_id?: string | null;
           sent_via?: string;

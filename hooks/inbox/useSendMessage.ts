@@ -56,6 +56,7 @@ export function useSendMessage() {
         sent_at: new Date().toISOString(),
         delivered_at: null,
         read_at: null,
+        played_at: null,
         metadata: { _optimistic: true },
         created_at: new Date().toISOString(),
       };

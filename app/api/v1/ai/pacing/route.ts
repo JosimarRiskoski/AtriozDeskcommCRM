@@ -37,7 +37,8 @@ export async function GET(): Promise<Response> {
   const [{ data: sessions, error: sErr }, { data: knobs, error: kErr }] = await Promise.all([
     admin
       .from("channel_sessions")
-      .select("id, waha_session_name, display_name, phone_number, status, daily_message_limit")
+      .select("id, external_session_name, display_name, phone_number, status, daily_message_limit")
+      .eq("provider", "evolution")
       .eq("organization_id", org.orgId)
       .order("created_at", { ascending: true }),
     admin

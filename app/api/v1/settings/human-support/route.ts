@@ -25,8 +25,9 @@ export async function GET() {
       .maybeSingle(),
     admin
       .from("channel_sessions")
-      .select("id,display_name,phone_number,waha_session_name,status")
+      .select("id,display_name,phone_number,external_session_name,provider,status")
       .eq("organization_id", authz.org.orgId)
+      .eq("provider", "evolution")
       .order("display_name"),
     admin
       .from("conversations")

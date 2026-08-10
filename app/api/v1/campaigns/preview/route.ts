@@ -6,7 +6,6 @@ import { previewCampaignCsv } from "@/lib/campaigns/csv";
 import { fetchGoogleSheetCsv, googleSheetErrorMessage } from "@/lib/campaigns/google-sheets";
 import { createClient } from "@/lib/supabase/server";
 import { getEvolutionClient } from "@/lib/evolution/client";
-import { getWahaClient } from "@/lib/waha/client";
 import {
   distributeCampaignRecipients,
   estimateCampaignSchedule,
@@ -75,12 +74,15 @@ export async function POST(req: NextRequest): Promise<Response> {
     const { data: selectedSessions } = await supabase
       .from("channel_sessions")
       .select(
-        "id,provider,external_session_name,waha_session_name,display_name,phone_number,status,daily_message_limit",
+        "id,provider,external_session_name,display_name,phone_number,status,daily_message_limit",
       )
       .eq("organization_id", authz.org.orgId)
       .in("id", sessionIds);
     const healthySessions = (selectedSessions ?? []).filter(
-      (session) => session.status === "WORKING",
+      (session) =>
+        session.status === "WORKING" &&
+        session.provider === "evolution" &&
+        Boolean(session.external_session_name),
     );
     if (!healthySessions.length) {
       return fail("validation_failed", "Nenhuma das conexões selecionadas está ativa.", 422, {
@@ -102,37 +104,25 @@ export async function POST(req: NextRequest): Promise<Response> {
       (dailyUsage ?? []).map((row) => [row.channel_session_id, row.messages_sent]),
     );
     const evolution = getEvolutionClient();
-    const waha = getWahaClient();
     const verification = new Map<string, "confirmed" | "not_found" | "unverified">();
     const toVerify = phones.filter((phone) => !blockedPhones.has(phone)).slice(0, 500);
-    if ((evolution || waha) && verificationSession) {
+    if (evolution && verificationSession?.external_session_name) {
       for (let index = 0; index < toVerify.length; index += 12) {
         const chunk = toVerify.slice(index, index + 12);
         await Promise.all(
           chunk.map(async (phone) => {
             try {
-              if (verificationSession.provider === "evolution" && evolution) {
-                const result = await evolution.checkNumbers(
-                  verificationSession.external_session_name ||
-                    verificationSession.waha_session_name,
-                  [phone],
-                );
-                const row = (
-                  Array.isArray(result) ? result[0] : (result as { data?: unknown[] }).data?.[0]
-                ) as { exists?: boolean; numberExists?: boolean } | undefined;
-                verification.set(
-                  phone,
-                  (row?.exists ?? row?.numberExists) ? "confirmed" : "not_found",
-                );
-              } else if (waha) {
-                const result = await waha.checkNumberExists(
-                  verificationSession.waha_session_name,
-                  phone,
-                );
-                verification.set(phone, result.numberExists ? "confirmed" : "not_found");
-              } else {
-                verification.set(phone, "unverified");
-              }
+              const result = await evolution.checkNumbers(
+                verificationSession.external_session_name,
+                [phone],
+              );
+              const row = (
+                Array.isArray(result) ? result[0] : (result as { data?: unknown[] }).data?.[0]
+              ) as { exists?: boolean; numberExists?: boolean } | undefined;
+              verification.set(
+                phone,
+                (row?.exists ?? row?.numberExists) ? "confirmed" : "not_found",
+              );
             } catch {
               verification.set(phone, "unverified");
             }

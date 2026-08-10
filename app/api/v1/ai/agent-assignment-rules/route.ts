@@ -45,7 +45,8 @@ export async function GET(): Promise<Response> {
       .is("archived_at", null),
     admin
       .from("channel_sessions")
-      .select("id,display_name,phone_number,waha_session_name,status")
+      .select("id,display_name,phone_number,external_session_name,status")
+      .eq("provider", "evolution")
       .eq("organization_id", authz.org.orgId),
     admin
       .from("crm_stages")

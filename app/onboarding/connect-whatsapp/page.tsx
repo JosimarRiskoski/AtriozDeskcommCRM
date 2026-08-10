@@ -12,7 +12,7 @@ export default async function ConnectWhatsappPage() {
 
   const evolutionConfigured = getEvolutionClient() !== null;
   // We don't try to start the session at SSR — client kicks off the call
-  // (and shows graceful banner if WAHA is not reachable).
+  // (e mostra um aviso claro quando a Evolution não está disponível).
 
   return (
     <div className="space-y-6">
@@ -23,7 +23,7 @@ export default async function ConnectWhatsappPage() {
         </p>
       </header>
       <ConnectWhatsappClient
-        wahaConfigured={evolutionConfigured}
+        evolutionConfigured={evolutionConfigured}
         sessionName={`org_${activeOrg.orgId.slice(0, 8)}`}
       />
     </div>

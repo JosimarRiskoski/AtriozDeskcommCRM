@@ -209,6 +209,50 @@ export async function createLeadHandler(
     external_id?: string;
   },
 ): Promise<Record<string, unknown>> {
+  if (input.contact_id) {
+    const { data: existing, error: existingError } = await supabase
+      .from("crm_leads")
+      .select("id")
+      .eq("organization_id", ctx.organization_id)
+      .eq("contact_id", input.contact_id)
+      .eq("status", "open")
+      .limit(1)
+      .maybeSingle();
+    if (existingError) {
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, existingError.message);
+    }
+    if (existing) {
+      throw new ApiError(
+        409,
+        "open_opportunity_exists",
+        undefined,
+        ctx.requestId,
+        "Este contato já possui uma oportunidade aberta.",
+      );
+    }
+  }
+
+  if (input.conversation_id) {
+    const { data: conversation, error: conversationError } = await supabase
+      .from("conversations")
+      .select("id, contact_id")
+      .eq("id", input.conversation_id)
+      .eq("organization_id", ctx.organization_id)
+      .maybeSingle();
+    if (conversationError) {
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, conversationError.message);
+    }
+    if (!conversation || (input.contact_id && conversation.contact_id !== input.contact_id)) {
+      throw new ApiError(
+        422,
+        "validation_failed",
+        undefined,
+        ctx.requestId,
+        "A conversa não pertence ao contato informado.",
+      );
+    }
+  }
+
   // Validate stage belongs to pipeline within active org.
   const { data: stage, error: stageErr } = await supabase
     .from("crm_stages")
@@ -269,9 +313,16 @@ export async function createLeadHandler(
       expected_close_date: input.expected_close_date ?? null,
       tags: input.tags ?? [],
       source: input.source,
-      source_metadata: input.source_metadata ?? {},
+      source_metadata: {
+        ...(input.source_metadata ?? {}),
+        ...(input.conversation_id ? { conversation_id: input.conversation_id } : {}),
+      },
       external_id: input.external_id ?? null,
-      custom_fields: input.custom_fields ?? {},
+      custom_fields: {
+        ...(input.custom_fields ?? {}),
+        ...(input.next_action ? { next_action: input.next_action } : {}),
+        ...(input.internal_note ? { internal_note: input.internal_note } : {}),
+      },
       status: "open",
       position_in_stage: nextPos,
       created_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
@@ -280,6 +331,15 @@ export async function createLeadHandler(
     .single();
 
   if (insErr || !lead) {
+    if (insErr?.code === "23505") {
+      throw new ApiError(
+        409,
+        "open_opportunity_exists",
+        undefined,
+        ctx.requestId,
+        "Este contato já possui uma oportunidade aberta.",
+      );
+    }
     throw new ApiError(
       500,
       "internal_error",
@@ -287,6 +347,23 @@ export async function createLeadHandler(
       ctx.requestId,
       insErr?.message ?? "Falha ao criar lead.",
     );
+  }
+
+  if (input.conversation_id) {
+    const { error: linkError } = await supabase.from("crm_lead_links").insert({
+      organization_id: ctx.organization_id,
+      lead_id: (lead as { id: string }).id,
+      target_kind: "conversation",
+      target_id: input.conversation_id,
+    });
+    if (linkError) {
+      await supabase
+        .from("crm_leads")
+        .delete()
+        .eq("id", (lead as { id: string }).id)
+        .eq("organization_id", ctx.organization_id);
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, linkError.message);
+    }
   }
 
   const a = actorAuditPayload(ctx.actor);

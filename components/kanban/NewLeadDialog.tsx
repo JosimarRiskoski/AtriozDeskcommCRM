@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -24,6 +25,7 @@ import {
 import { useCreateLead } from "@/hooks/kanban/useCreateLead";
 import type { Stage } from "@/lib/kanban/types";
 import { createLeadSchema, type CreateLeadInput } from "@/lib/schemas/leads";
+import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 
 interface FormShape {
   title: string;
@@ -32,6 +34,9 @@ interface FormShape {
   valueReais: string;
   tagsRaw: string;
   expected_close_date: string;
+  owner_user_id: string;
+  next_action: string;
+  internal_note: string;
 }
 
 interface Props {
@@ -40,6 +45,18 @@ interface Props {
   pipelineId: string;
   stages: Stage[];
   valueLabel?: string;
+  contactId?: string | null;
+  conversationId?: string | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  primaryOrigin?: string | null;
+  originHistory?: string[];
+  initialTitle?: string;
+  source?: string;
+  dialogTitle?: string;
+  pipelineOptions?: Array<{ id: string; name: string }>;
+  onPipelineChange?: (pipelineId: string) => void;
+  onCreated?: () => void;
 }
 
 function defaultStageId(stages: Stage[]): string {
@@ -53,8 +70,22 @@ export function NewLeadDialog({
   pipelineId,
   stages,
   valueLabel = "Valor previsto",
+  contactId = null,
+  conversationId = null,
+  contactName = null,
+  contactPhone = null,
+  primaryOrigin = null,
+  originHistory = [],
+  initialTitle = "",
+  source = "manual",
+  dialogTitle = "Nova oportunidade",
+  pipelineOptions,
+  onPipelineChange,
+  onCreated,
 }: Props) {
+  const router = useRouter();
   const create = useCreateLead(pipelineId);
+  const members = useAssignableMembers(open);
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
 
   const form = useForm<FormShape>({
@@ -65,6 +96,9 @@ export function NewLeadDialog({
       valueReais: "",
       tagsRaw: "",
       expected_close_date: "",
+      owner_user_id: "none",
+      next_action: "",
+      internal_note: "",
     },
   });
 
@@ -74,6 +108,21 @@ export function NewLeadDialog({
       form.setValue("stage_id", initialStage);
     }
   }, [initialStage, form]);
+
+  useEffect(() => {
+    if (!open) return;
+    form.reset({
+      title: initialTitle,
+      description: "",
+      stage_id: initialStage,
+      valueReais: "",
+      tagsRaw: "",
+      expected_close_date: "",
+      owner_user_id: "none",
+      next_action: "",
+      internal_note: "",
+    });
+  }, [open, initialTitle, initialStage, form]);
 
   async function onSubmit(values: FormShape) {
     const tags = values.tagsRaw
@@ -98,9 +147,14 @@ export function NewLeadDialog({
       stage_id: values.stage_id,
       title: values.title.trim(),
       currency: "BRL",
-      source: "manual",
+      source,
       tags,
     };
+    if (contactId) payload.contact_id = contactId;
+    if (conversationId) payload.conversation_id = conversationId;
+    if (values.owner_user_id !== "none") payload.owner_user_id = values.owner_user_id;
+    if (values.next_action.trim()) payload.next_action = values.next_action.trim();
+    if (values.internal_note.trim()) payload.internal_note = values.internal_note.trim();
     if (values.description.trim()) payload.description = values.description.trim();
     if (valueCents !== null) payload.value_cents = valueCents;
     if (values.expected_close_date) payload.expected_close_date = values.expected_close_date;
@@ -114,7 +168,17 @@ export function NewLeadDialog({
 
     try {
       await create.mutateAsync(parsed.data as CreateLeadInput);
-      toast.success("Lead criado");
+      const stageName = stages.find((stage) => stage.id === values.stage_id)?.name;
+      const pipelineName = pipelineOptions?.find((pipeline) => pipeline.id === pipelineId)?.name;
+      toast.success(
+        `Oportunidade criada${pipelineName ? ` em ${pipelineName}` : ""}${stageName ? ` · ${stageName}` : ""}`,
+        {
+          action: {
+            label: "Ver no Kanban",
+            onClick: () => router.push(`/app/pipelines/${pipelineId}`),
+          },
+        },
+      );
       form.reset({
         title: "",
         description: "",
@@ -122,8 +186,12 @@ export function NewLeadDialog({
         valueReais: "",
         tagsRaw: "",
         expected_close_date: "",
+        owner_user_id: "none",
+        next_action: "",
+        internal_note: "",
       });
       onOpenChange(false);
+      onCreated?.();
     } catch {
       // toast already shown
     }
@@ -135,16 +203,94 @@ export function NewLeadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Novo Lead</DialogTitle>
-          <DialogDescription>Crie um lead manualmente neste pipeline.</DialogDescription>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogDescription>
+            A oportunidade será vinculada automaticamente ao contato desta conversa.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {(contactName || contactPhone || primaryOrigin || originHistory.length > 0) && (
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+              <div className="font-medium">{contactName || "Contato sem nome"}</div>
+              {contactPhone ? (
+                <div className="text-xs text-muted-foreground">{contactPhone}</div>
+              ) : null}
+              {primaryOrigin ? (
+                <div className="mt-2 text-xs">
+                  <span className="text-muted-foreground">Origem principal: </span>
+                  {primaryOrigin}
+                </div>
+              ) : null}
+              {originHistory.length > 0 ? (
+                <div className="mt-1 text-xs">
+                  <span className="text-muted-foreground">Histórico: </span>
+                  {originHistory.join(" · ")}
+                </div>
+              ) : null}
+            </div>
+          )}
+          {pipelineOptions && pipelineOptions.length > 1 ? (
+            <div className="space-y-2">
+              <Label>Funil</Label>
+              <Select value={pipelineId} onValueChange={(value) => onPipelineChange?.(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o funil" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pipelineOptions.map((pipeline) => (
+                    <SelectItem key={pipeline.id} value={pipeline.id}>
+                      {pipeline.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="title">Título</Label>
             <Input
               id="title"
               placeholder="Ex: Pedido Maria — combo presente"
               {...form.register("title", { required: true, minLength: 2 })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Responsável</Label>
+            <Select
+              value={form.watch("owner_user_id")}
+              onValueChange={(value) => form.setValue("owner_user_id", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Sem responsável" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem responsável</SelectItem>
+                {(members.data ?? []).map((member) => (
+                  <SelectItem key={member.user_id} value={member.user_id}>
+                    {member.full_name || member.user_id.slice(0, 8)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="next_action">Próxima ação</Label>
+            <Input
+              id="next_action"
+              placeholder="Ex: solicitar a fatura amanhã"
+              {...form.register("next_action")}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="internal_note">Observação interna</Label>
+            <Textarea
+              id="internal_note"
+              rows={3}
+              placeholder="Informação visível somente para a equipe"
+              {...form.register("internal_note")}
             />
           </div>
 
@@ -214,7 +360,7 @@ export function NewLeadDialog({
               Cancelar
             </Button>
             <Button type="submit" disabled={create.isPending || !stageId}>
-              {create.isPending ? "Criando…" : "Criar lead"}
+              {create.isPending ? "Criando…" : "Criar oportunidade"}
             </Button>
           </DialogFooter>
         </form>

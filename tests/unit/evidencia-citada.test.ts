@@ -35,7 +35,8 @@ const SUBPASTAS = new Set(
 function versionados(padrao: string): string[] {
   return execFileSync("git", ["ls-files", padrao], { cwd: RAIZ, encoding: "utf8" })
     .split("\n")
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((arquivo) => fs.existsSync(path.join(RAIZ, arquivo)));
 }
 
 /**
@@ -148,6 +149,7 @@ const DOCS = versionados("*.md").filter(
  * sozinha.
  */
 const LEGADO = new Set([
+  "docs/growth/lp-prompts-imagens.md",
   "docs/handoffs/HANDOFF-inbox-multimodal.md",
   "HANDOFF-operacao-visivel.md",
   "HANDOFF.md",

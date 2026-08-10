@@ -1313,14 +1313,22 @@ ALTER TABLE "public"."channel_session_warmup" OWNER TO "postgres";
 CREATE TABLE IF NOT EXISTS "public"."channel_sessions" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
     "organization_id" "uuid" NOT NULL,
-    "waha_session_name" "text" NOT NULL,
-    "engine" "text" DEFAULT 'NOWEB'::"text" NOT NULL,
+    "provider" "text" DEFAULT 'evolution'::"text" NOT NULL,
+    "external_session_name" "text" NOT NULL,
+    "engine" "text" DEFAULT 'EVOLUTION'::"text" NOT NULL,
     "webhook_path_token" "text" DEFAULT "replace"(("extensions"."uuid_generate_v4"())::"text", '-'::"text", ''::"text") NOT NULL,
     "webhook_secret_encrypted" "bytea" NOT NULL,
     "status" "text" DEFAULT 'STARTING'::"text" NOT NULL,
     "status_reason" "text",
     "phone_number" "text",
     "display_name" "text",
+    "purpose" "text",
+    "is_default" boolean DEFAULT false NOT NULL,
+    "archived_at" timestamp with time zone,
+    "archived_by_user_id" "uuid",
+    "archive_reason" "text",
+    "last_inbound_event_at" timestamp with time zone,
+    "last_outbound_event_at" timestamp with time zone,
     "last_health_check_at" timestamp with time zone,
     "last_status_change_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "consecutive_health_fails" integer DEFAULT 0 NOT NULL,
@@ -1332,7 +1340,8 @@ CREATE TABLE IF NOT EXISTS "public"."channel_sessions" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "created_by" "uuid",
-    CONSTRAINT "channel_sessions_engine_check" CHECK (("engine" = ANY (ARRAY['NOWEB'::"text", 'WEBJS'::"text"]))),
+    CONSTRAINT "channel_sessions_engine_check" CHECK (("engine" = 'EVOLUTION'::"text")),
+    CONSTRAINT "channel_sessions_provider_check" CHECK (("provider" = 'evolution'::"text")),
     CONSTRAINT "channel_sessions_status_check" CHECK (("status" = ANY (ARRAY['STARTING'::"text", 'SCAN_QR_CODE'::"text", 'WORKING'::"text", 'STOPPED'::"text", 'FAILED'::"text"])))
 );
 
@@ -1888,7 +1897,7 @@ CREATE TABLE IF NOT EXISTS "public"."webhook_events_log" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
     "organization_id" "uuid",
     "channel_session_id" "uuid",
-    "provider" "text" DEFAULT 'waha'::"text" NOT NULL,
+    "provider" "text" DEFAULT 'evolution'::"text" NOT NULL,
     "webhook_path_token" "text",
     "http_method" "text" DEFAULT 'POST'::"text" NOT NULL,
     "headers" "jsonb",
@@ -1904,7 +1913,7 @@ CREATE TABLE IF NOT EXISTS "public"."webhook_events_log" (
     "processed_at" timestamp with time zone,
     "received_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "archived_at" timestamp with time zone,
-    CONSTRAINT "webhook_events_log_provider_check" CHECK (("provider" = ANY (ARRAY['waha'::"text", 'nuvemshop'::"text", 'generic'::"text"]))),
+    CONSTRAINT "webhook_events_log_provider_check" CHECK (("provider" = ANY (ARRAY['evolution'::"text", 'nuvemshop'::"text", 'generic'::"text"]))),
     CONSTRAINT "webhook_events_log_status_check" CHECK (("status" = ANY (ARRAY['received'::"text", 'processed'::"text", 'error'::"text", 'dead'::"text"])))
 );
 
@@ -2033,12 +2042,19 @@ ALTER TABLE ONLY "public"."channel_sessions"
 
 
 ALTER TABLE ONLY "public"."channel_sessions"
-    ADD CONSTRAINT "channel_sessions_waha_session_name_unique" UNIQUE ("waha_session_name");
-
-
-
-ALTER TABLE ONLY "public"."channel_sessions"
     ADD CONSTRAINT "channel_sessions_webhook_path_token_unique" UNIQUE ("webhook_path_token");
+
+
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uniq_channel_sessions_provider_external"
+    ON "public"."channel_sessions" ("organization_id", "provider", "external_session_name")
+    WHERE ("archived_at" IS NULL);
+
+
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uniq_channel_sessions_default_per_org"
+    ON "public"."channel_sessions" ("organization_id")
+    WHERE (("is_default" = true) AND ("archived_at" IS NULL));
 
 
 
@@ -4093,7 +4109,7 @@ on conflict (provider, model_id) do nothing;
 -- ---- WhatsApp: unificação de conversas por contato (migration 0027) ----
 -- O dump --schema-only não traz mudanças pós-snapshot. Sem este bloco, clones
 -- (install.sh) e clones atualizando (update.sh, que re-aplica baseline.sql)
--- ficam com o bug: 1 pessoa vira N contatos/conversas (WAHA emite
+-- ficam com o bug: 1 pessoa vira N contatos/conversas (o provedor emite
 -- message+message.any por mensagem; contatos @lid sem unique + check-then-act).
 -- Idempotente e AUTO-CURATIVO: em banco novo o dedup é no-op; em clone já bugado
 -- ele deduplica o histórico ANTES de criar as constraints. Ver a migration
@@ -4105,8 +4121,8 @@ alter table public.contacts
   generated always as (
     case
       when phone_number is not null then 'phone:' || phone_number
-      when source_metadata->>'waha_lid' is not null
-        then 'lid:' || regexp_replace(source_metadata->>'waha_lid', '@.*$', '')
+      when source_metadata->>'whatsapp_lid' is not null
+        then 'lid:' || regexp_replace(source_metadata->>'whatsapp_lid', '@.*$', '')
       else null
     end
   ) stored;
@@ -4161,19 +4177,95 @@ create unique index if not exists uniq_conversations_1to1_per_contact_session
   on public.conversations (organization_id, contact_id, channel_session_id)
   where is_group = false;
 
--- D. Upsert atômico (a aplicação usa via lib/waha/ingest.ts)
+-- D. Upsert atômico (a aplicação usa na ingestão da Evolution)
 create or replace function public.fn_upsert_wa_contact(
   p_org uuid, p_kind text, p_phone text, p_lid text, p_chat_id text, p_notify text
 ) returns uuid language plpgsql security definer set search_path = public as $$
-declare v_id uuid;
+declare
+  v_id uuid;
+  v_phone_id uuid;
+  v_lid_id uuid;
+  v_notify text := nullif(btrim(coalesce(p_notify, '')), '');
+  v_provider_metadata jsonb := jsonb_strip_nulls(jsonb_build_object(
+    'whatsapp_lid', p_lid,
+    'whatsapp_chat_id', p_chat_id,
+    'notify_name', v_notify
+  ));
 begin
+  if p_kind = 'resolved' and p_phone is not null and p_lid is not null then
+    perform pg_advisory_xact_lock(
+      hashtextextended(p_org::text || ':lid:' || p_lid || ':phone:' || p_phone, 0)
+    );
+
+    select id into v_phone_id
+      from public.contacts
+     where organization_id = p_org
+       and wa_identity = 'phone:' || p_phone
+       and is_merged_into is null
+     order by created_at, id
+     limit 1;
+
+    select id into v_lid_id
+      from public.contacts
+     where organization_id = p_org
+       and wa_identity = 'lid:' || p_lid
+       and is_merged_into is null
+     order by created_at, id
+     limit 1;
+
+    if v_phone_id is not null then
+      update public.contacts
+         set display_name = case
+               when v_notify is not null
+                and (
+                  nullif(btrim(coalesce(display_name, '')), '') is null
+                  or display_name ~ '^Contato [0-9]{4}$'
+                  or display_name = 'Contato sem nome'
+                ) then v_notify
+               else display_name
+             end,
+             source_metadata = coalesce(source_metadata, '{}'::jsonb) || v_provider_metadata,
+             updated_at = now()
+       where id = v_phone_id;
+      return v_phone_id;
+    end if;
+
+    if v_lid_id is not null then
+      update public.contacts
+         set phone_number = p_phone,
+             display_name = case
+               when v_notify is not null
+                and (
+                  nullif(btrim(coalesce(display_name, '')), '') is null
+                  or display_name ~ '^Contato [0-9]{4}$'
+                  or display_name = 'Contato sem nome'
+                ) then v_notify
+               else display_name
+             end,
+             source_metadata = coalesce(source_metadata, '{}'::jsonb) || v_provider_metadata,
+             updated_at = now()
+       where id = v_lid_id
+       returning id into v_id;
+      return v_id;
+    end if;
+  end if;
+
   insert into public.contacts (organization_id, phone_number, source, consent, tags, source_metadata, display_name)
-  values (p_org, case when p_kind = 'phone' then p_phone end, 'whatsapp', '{}'::jsonb, '{}'::text[],
-    case when p_kind = 'lid' then jsonb_build_object('waha_lid', p_lid, 'notify_name', nullif(p_notify, ''))
-      else jsonb_build_object('waha_chat_id', p_chat_id, 'notify_name', nullif(p_notify, '')) end,
-    nullif(p_notify, ''))
+  values (p_org, case when p_kind in ('phone', 'resolved') then p_phone end, 'whatsapp', '{}'::jsonb, '{}'::text[],
+    v_provider_metadata, v_notify)
   on conflict (organization_id, wa_identity) where wa_identity is not null and is_merged_into is null
-  do update set display_name = coalesce(contacts.display_name, excluded.display_name), updated_at = now()
+  do update set
+    display_name = case
+      when excluded.display_name is not null
+       and (
+         nullif(btrim(coalesce(contacts.display_name, '')), '') is null
+         or contacts.display_name ~ '^Contato [0-9]{4}$'
+         or contacts.display_name = 'Contato sem nome'
+       ) then excluded.display_name
+      else contacts.display_name
+    end,
+    source_metadata = coalesce(contacts.source_metadata, '{}'::jsonb) || excluded.source_metadata,
+    updated_at = now()
   returning id into v_id;
   return v_id;
 end; $$;
@@ -5566,9 +5658,9 @@ create table if not exists send_ledger (
   body_hash text not null,
   -- requested: inserido imediatamente antes do envio (crash aqui → retry re-envia a MESMA key)
   -- accepted:  envio confirmado ('sent') — retry pula
-  -- queued:    aceito e retido (sessão ≠ WORKING / waha_not_configured)
+  -- queued:    aceito e retido (sessão não está WORKING / evolution_not_configured)
   -- vetoed:    is_blocked — veto permanente de negócio (irrevogável)
-  -- failed:    'failed' (sem telefone / erro WAHA) — retry = tentativa lógica nova
+  -- failed:    'failed' (sem telefone / erro Evolution) — retry = tentativa lógica nova
   status text not null default 'requested'
     check (status in ('requested','accepted','queued','vetoed','failed')),
   crm_message_id uuid,                 -- messages.id (mesmo banco; vem na resposta do handler de envio)
@@ -5635,7 +5727,7 @@ create unique index if not exists uniq_playbook_pointers_platform
   on playbook_pointers (layer) where organization_id is null;
 
 -- ============================================================================
--- 0005 + 0012 — espelho de saúde da sessão WAHA + circuito de saúde do número.
+-- 0005 + 0012 — espelho de saúde da sessão WhatsApp + circuito de saúde do número.
 -- status_changed_at só avança quando o status MUDA (métrica "tempo no estado").
 -- Os holds de status e de saúde coexistem — job retido sob QUALQUER hold.
 -- ============================================================================
@@ -7973,3 +8065,145 @@ where trim(coalesce(config->>'fallback_message', '')) in (
   'Não encontrei essa informação na base autorizada. Vou encaminhar para uma pessoa.',
   'Não encontrei essa informação na base autorizada. Vou encaminhar o atendimento para uma pessoa.'
 );
+
+-- ---- leitura do Inbox e recibos monotônicos (migration 0122) ----
+alter table public.messages
+  add column if not exists played_at timestamptz;
+
+create or replace function public.fn_advance_message_receipt(
+  p_organization_id uuid,
+  p_external_ids text[],
+  p_ack integer
+)
+returns table(matched_count integer, updated_count integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_matched integer := 0;
+  v_updated integer := 0;
+  v_ack integer := greatest(0, least(coalesce(p_ack, 0), 4));
+begin
+  select count(*)::integer
+    into v_matched
+    from public.messages
+   where organization_id = p_organization_id
+     and direction = 'outbound'
+     and external_id = any(coalesce(p_external_ids, array[]::text[]));
+
+  update public.messages
+     set ack = greatest(coalesce(ack, 0), v_ack),
+         status = case
+           when greatest(coalesce(ack, 0), v_ack) >= 3 then 'read'
+           when greatest(coalesce(ack, 0), v_ack) >= 2 then 'delivered'
+           when greatest(coalesce(ack, 0), v_ack) >= 1 then 'sent'
+           else status
+         end,
+         delivered_at = case when v_ack >= 2 then coalesce(delivered_at, now()) else delivered_at end,
+         read_at = case when v_ack >= 3 then coalesce(read_at, now()) else read_at end,
+         played_at = case when v_ack >= 4 then coalesce(played_at, now()) else played_at end
+   where organization_id = p_organization_id
+     and direction = 'outbound'
+     and external_id = any(coalesce(p_external_ids, array[]::text[]))
+     and coalesce(ack, 0) < v_ack;
+
+  get diagnostics v_updated = row_count;
+  return query select v_matched, v_updated;
+end;
+$$;
+
+revoke all on function public.fn_advance_message_receipt(uuid, text[], integer) from public, anon, authenticated;
+grant execute on function public.fn_advance_message_receipt(uuid, text[], integer) to service_role;
+
+create or replace function public.fn_mark_conversation_read(
+  p_organization_id uuid,
+  p_conversation_id uuid
+)
+returns table(marked_messages integer, unread_count integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_marked integer := 0;
+begin
+  if not exists (
+    select 1 from public.conversations
+     where id = p_conversation_id and organization_id = p_organization_id
+  ) then
+    raise exception 'conversation_not_found';
+  end if;
+
+  update public.messages
+     set status = 'read',
+         ack = greatest(coalesce(ack, 0), 3),
+         delivered_at = coalesce(delivered_at, now()),
+         read_at = coalesce(read_at, now())
+   where organization_id = p_organization_id
+     and conversation_id = p_conversation_id
+     and direction = 'inbound'
+     and read_at is null;
+
+  get diagnostics v_marked = row_count;
+
+  update public.conversations
+     set unread_count_for_assignee = 0, updated_at = now()
+   where id = p_conversation_id and organization_id = p_organization_id;
+
+  return query select v_marked, 0;
+end;
+$$;
+
+revoke all on function public.fn_mark_conversation_read(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_mark_conversation_read(uuid, uuid) to service_role;
+
+-- ---- uma oportunidade aberta por contato (migration 0123) ----
+create or replace function public.fn_reject_duplicate_open_crm_lead()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.status <> 'open' or new.contact_id is null then
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE'
+     and old.status = 'open'
+     and old.organization_id = new.organization_id
+     and old.contact_id = new.contact_id then
+    return new;
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended(new.organization_id::text || ':' || new.contact_id::text, 0)
+  );
+
+  if exists (
+    select 1
+      from public.crm_leads lead
+     where lead.organization_id = new.organization_id
+       and lead.contact_id = new.contact_id
+       and lead.status = 'open'
+       and lead.id is distinct from new.id
+  ) then
+    raise exception 'Já existe uma oportunidade aberta para este contato.'
+      using
+        errcode = '23505',
+        constraint = 'uniq_crm_leads_one_open_per_contact';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_reject_duplicate_open_crm_lead on public.crm_leads;
+create trigger trg_reject_duplicate_open_crm_lead
+before insert or update of organization_id, contact_id, status
+on public.crm_leads
+for each row
+execute function public.fn_reject_duplicate_open_crm_lead();
+
+comment on function public.fn_reject_duplicate_open_crm_lead() is
+  'Preserva duplicidades legadas e impede novas oportunidades abertas para o mesmo contato.';

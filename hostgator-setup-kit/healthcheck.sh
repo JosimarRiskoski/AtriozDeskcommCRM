@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Diagnóstico rápido: estado dos containers + saúde do app (Supabase/Redis/WAHA).
+# Diagnóstico rápido: estado dos containers + saúde do app (Supabase/Redis/Evolution).
 source "$(dirname "$0")/_common.sh"
 enter_project
 

@@ -3,7 +3,7 @@
  * TestPanel — dry-run de uma version (S-13.12).
  *
  * Envia sample message via POST `:test` (admin-only). Renderiza trace +
- * "Mensagem que SERIA enviada". Não toca WAHA, não cria messages.outbound.
+ * "Mensagem que SERIA enviada". Não toca a Evolution, não cria messages.outbound.
  * Quando `INTERNAL_AGENT_RUN_STUB=true` o backend devolve trace stub com
  * `stub: true`; o componente mostra um aviso amigável.
  */
@@ -59,12 +59,12 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
   const [pending, setPending] = React.useState(false);
   const [result, setResult] = React.useState<TestResponse["data"] | null>(null);
   const explanation = React.useMemo(() => explainTestResult(result), [result]);
-  const previewMessages = React.useMemo(() => {
+  const previewMessages = (() => {
     const text = result?.final_text?.trim();
     if (!text) return [];
     if (!target?.split_messages) return [text];
     return splitIntoBubbles(text, target.split_max_chars);
-  }, [result?.final_text, target?.split_max_chars, target?.split_messages]);
+  })();
 
   if (!target) {
     return (

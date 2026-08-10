@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { skipWhatsapp, markWhatsappConfigured } from "@/app/actions/onboarding/skipWhatsapp";
 
 interface Props {
-  wahaConfigured: boolean;
+  evolutionConfigured: boolean;
   sessionName: string;
 }
 
@@ -43,7 +43,7 @@ function isRedirectError(err: unknown): boolean {
   );
 }
 
-export function ConnectWhatsappClient({ wahaConfigured, sessionName }: Props) {
+export function ConnectWhatsappClient({ evolutionConfigured, sessionName }: Props) {
   const [pending, startTransition] = useTransition();
   const [info, setInfo] = useState<SessionInfo>({ status: "INIT", session: sessionName });
   const [qrTick, setQrTick] = useState(0);
@@ -51,9 +51,9 @@ export function ConnectWhatsappClient({ wahaConfigured, sessionName }: Props) {
 
   const status = info.status;
 
-  // 1) On mount (when WAHA is configured), start the session if not yet started.
+  // 1) Ao montar, cria/inicia a instância Evolution quando necessário.
   useEffect(() => {
-    if (!wahaConfigured) return;
+    if (!evolutionConfigured) return;
     let cancelled = false;
     (async () => {
       setBusy(true);
@@ -70,11 +70,11 @@ export function ConnectWhatsappClient({ wahaConfigured, sessionName }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [wahaConfigured, sessionName]);
+  }, [evolutionConfigured, sessionName]);
 
   // 2) Poll status every 3 seconds until WORKING/FAILED.
   useEffect(() => {
-    if (!wahaConfigured) return;
+    if (!evolutionConfigured) return;
     if (status === "WORKING" || status === "FAILED") return;
     const id = setInterval(async () => {
       try {
@@ -89,7 +89,7 @@ export function ConnectWhatsappClient({ wahaConfigured, sessionName }: Props) {
       }
     }, 3000);
     return () => clearInterval(id);
-  }, [wahaConfigured, status]);
+  }, [evolutionConfigured, status]);
 
   // 3) When status → WORKING, auto-advance.
   useEffect(() => {
@@ -104,22 +104,22 @@ export function ConnectWhatsappClient({ wahaConfigured, sessionName }: Props) {
     });
   }, [status, sessionName]);
 
-  const showQr = wahaConfigured && status === "SCAN_QR_CODE";
+  const showQr = evolutionConfigured && status === "SCAN_QR_CODE";
 
   return (
     <div className="space-y-4 rounded-lg border bg-background p-6">
-      {!wahaConfigured && (
+      {!evolutionConfigured && (
         <div className="rounded-md border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
-          <p className="font-medium">WAHA não está configurado.</p>
+          <p className="font-medium">Evolution API não está configurada.</p>
           <p className="mt-1">
-            Suba o Docker (<code>docker compose up -d waha</code>) e recarregue, ou pule este passo
+            Configure <code>EVOLUTION_API_BASE_URL</code> e <code>EVOLUTION_API_KEY</code>, depois recarregue, ou pule este passo
             agora — você pode configurar WhatsApp depois em{" "}
             <strong>Configurações → Canais</strong>.
           </p>
         </div>
       )}
 
-      {wahaConfigured && (
+      {evolutionConfigured && (
         <div className="rounded-md border bg-muted/40 p-4">
           <p className="text-sm font-medium">
             Sessão: <code>{sessionName}</code>
@@ -146,7 +146,7 @@ export function ConnectWhatsappClient({ wahaConfigured, sessionName }: Props) {
 
           {status === "STARTING" && (
             <p className="mt-3 text-xs text-muted-foreground">
-              Aguardando WAHA gerar o QR Code…
+              Aguardando a Evolution gerar o QR Code…
             </p>
           )}
 
@@ -158,8 +158,7 @@ export function ConnectWhatsappClient({ wahaConfigured, sessionName }: Props) {
 
           {status === "FAILED" && (
             <p className="mt-3 text-sm text-destructive">
-              Falha ao conectar. Verifique o WAHA dashboard em{" "}
-              <code>http://localhost:3030/dashboard</code>.
+              Falha ao conectar. Verifique a instância e os logs da Evolution API.
             </p>
           )}
 

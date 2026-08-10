@@ -25,7 +25,7 @@ const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
 
 /**
  * Em produção exigimos todas as vars críticas. Em dev, algumas são opcionais
- * pra permitir setup parcial (ex: dev sem WAHA quando trabalhando só na UI).
+ * para permitir setup parcial (ex.: desenvolvimento sem Evolution ao trabalhar só na UI).
  */
 const required = (name: string) =>
   isProd ? z.string().min(1, `${name} é obrigatória em produção`) : z.string().default("");
@@ -50,18 +50,12 @@ const schema = z.object({
   CPF_ENCRYPTION_KEY: required("CPF_ENCRYPTION_KEY"),
   // Opcional (template genérico) — só necessária ao ligar NUVEMSHOP_ENABLED.
   NUVEMSHOP_OAUTH_ENCRYPTION_KEY: z.string().optional().default(""),
-  WAHA_BYO_ENCRYPTION_KEY: required("WAHA_BYO_ENCRYPTION_KEY"),
   /**
    * AES-256-GCM key (32 bytes em base64) usada pra cifrar API keys em
    * `ai_provider_credentials`. Em produção é obrigatória; em dev a default vazia
    * é tolerada — `lib/crypto/aes_gcm.ts` lança se a key não bate em runtime.
    */
   AI_CRED_AES_KEY: required("AI_CRED_AES_KEY"),
-
-  // WAHA legado: opcional durante a migração para Evolution.
-  WAHA_API_BASE_URL: z.string().optional().default(""),
-  WAHA_API_KEY: z.string().optional().default(""),
-  WAHA_WEBHOOK_BASE_URL: z.string().optional().default(""),
 
   // Evolution é o transporte padrão de WhatsApp do Atrios CRM Inteligente.
   EVOLUTION_API_BASE_URL: z.string().optional().default(""),

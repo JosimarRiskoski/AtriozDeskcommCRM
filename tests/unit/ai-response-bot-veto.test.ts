@@ -26,6 +26,9 @@ vi.mock("@/lib/ai/gateway", () => ({
   isAiGatewayConfigured: () => true,
   isEmbeddingProviderConfigured: () => false,
 }));
+vi.mock("@/lib/ai/embed", () => ({
+  embedText: vi.fn(),
+}));
 
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const CONV_ID = "44444444-4444-4444-8444-444444444444";

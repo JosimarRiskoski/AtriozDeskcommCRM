@@ -1,7 +1,5 @@
 import type { EvolutionWebhookEnvelope } from "@/lib/evolution/ingest";
 
-const MAX_FULL_PAYLOAD_BYTES = 64 * 1024;
-
 type JsonObject = Record<string, unknown>;
 
 function asObject(value: unknown): JsonObject {
@@ -26,9 +24,13 @@ export function compactEvolutionWebhookLog(
   const data = eventData(envelope);
   const first = asObject(data[0]);
   const key = asObject(first.key);
+  const update = asObject(first.update);
+  const message = asObject(first.message);
   const rawBytes = Buffer.byteLength(rawBody, "utf8");
+  const remoteJid = typeof key.remoteJid === "string" ? key.remoteJid : "";
+  const remoteDigits = remoteJid.replace(/\D/g, "");
   const summary: JsonObject = {
-    compacted: rawBytes > MAX_FULL_PAYLOAD_BYTES,
+    compacted: true,
     original_size_bytes: rawBytes,
     event: String(envelope.event ?? "unknown"),
     instance: String(envelope.instance ?? envelope.instanceName ?? ""),
@@ -39,23 +41,14 @@ export function compactEvolutionWebhookLog(
         : typeof first.id === "string"
           ? first.id
           : null,
-    remote_jid: typeof key.remoteJid === "string" ? key.remoteJid : null,
+    remote_jid_suffix: remoteDigits ? remoteDigits.slice(-4) : null,
+    from_me: typeof key.fromMe === "boolean" ? key.fromMe : null,
+    message_type: Object.keys(message)[0] ?? null,
+    status: update.status ?? first.status ?? null,
+    timestamp: first.messageTimestamp ?? first.timestamp ?? null,
   };
-
-  if (rawBytes <= MAX_FULL_PAYLOAD_BYTES) {
-    return {
-      // raw_body é obrigatório no schema. Guardamos o resumo nele e o JSON
-      // completo somente uma vez, em payload_parsed.
-      rawBody: JSON.stringify(summary),
-      payloadParsed: envelope as unknown as JsonObject,
-    };
-  }
-
-  // Eventos grandes (principalmente MESSAGES_SET e mídia base64) não podem
-  // consumir centenas de MB no banco apenas para observabilidade.
   return {
     rawBody: JSON.stringify(summary),
     payloadParsed: summary,
   };
 }
-

@@ -66,7 +66,7 @@ beforeAll(async () => {
     [CONTACT, ORG],
   );
   await pool.query(
-    `insert into channel_sessions (id, organization_id, waha_session_name, status, webhook_secret_encrypted)
+    `insert into channel_sessions (id, organization_id, external_session_name, status, webhook_secret_encrypted)
      values ($1, $2, 'nocred-session', 'WORKING', '\\x00'::bytea) on conflict (id) do nothing`,
     [SESSION, ORG],
   );

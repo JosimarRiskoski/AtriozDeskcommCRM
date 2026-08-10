@@ -19,15 +19,13 @@ import {
   getEvolutionClient,
   parseEvolutionMessageId,
 } from "@/lib/evolution/client";
-import { getWahaClient } from "@/lib/waha/client";
-import { isMediaPathOwnedBy, wahaSendPlanFor } from "@/lib/waha/media-send";
-import { parseWahaMessageId } from "@/lib/waha/message-id";
-import { resolveWahaChatId } from "@/lib/waha/send";
+import { isMediaPathOwnedBy } from "@/lib/messaging/media/outbound";
+import { resolveWhatsAppChatId } from "@/lib/whatsapp/recipient";
 
 type SB = SupabaseClient;
 
 const MSG_COLS =
-  "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, metadata, created_at";
+  "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, played_at, metadata, created_at";
 
 function actorAuditPayload(actor: Actor): {
   actorUserId: string | null;
@@ -142,7 +140,7 @@ export async function sendMessageHandler(
   const { data: conv, error: convErr } = await supabase
     .from("conversations")
     .select(
-      "id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, contacts:contact_id(phone_number, wa_identity, source_metadata, is_blocked), channel_sessions:channel_session_id(provider, external_session_name, waha_session_name, status)",
+      "id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, contacts:contact_id(phone_number, wa_identity, source_metadata, is_blocked), channel_sessions:channel_session_id(provider, external_session_name, status)",
     )
     .eq("id", input.conversation_id)
     .maybeSingle();
@@ -168,9 +166,8 @@ export async function sendMessageHandler(
       is_blocked: boolean;
     } | null;
     channel_sessions: {
-      provider: "waha" | "evolution";
+      provider: "evolution";
       external_session_name: string | null;
-      waha_session_name: string;
       status: string;
     } | null;
   };
@@ -246,24 +243,19 @@ export async function sendMessageHandler(
   let message = created as unknown as Message;
 
   const evolution = getEvolutionClient();
-  const waha = getWahaClient();
-  const provider = c.channel_sessions?.provider ?? "waha";
-  const chatId = resolveWahaChatId({
+  const provider = c.channel_sessions?.provider;
+  const chatId = resolveWhatsAppChatId({
     isGroup: c.is_group,
     groupChatId: c.group_chat_id,
     phoneNumber: c.contacts?.phone_number,
     waIdentity: c.contacts?.wa_identity,
-    verifiedChatId:
-      typeof c.contacts?.source_metadata?.waha_chat_id === "string"
-        ? c.contacts.source_metadata.waha_chat_id
-        : null,
   });
 
-  if ((provider === "evolution" && !evolution) || (provider === "waha" && !waha)) {
+  if (provider !== "evolution" || !evolution) {
     const { data: updated } = await supabase
       .from("messages")
       .update({
-        metadata: { ...(message.metadata ?? {}), queued_reason: `${provider}_not_configured` },
+        metadata: { ...(message.metadata ?? {}), queued_reason: "evolution_not_configured" },
       })
       .eq("id", message.id)
       .select(MSG_COLS)
@@ -297,10 +289,10 @@ export async function sendMessageHandler(
   } else {
     try {
       let providerRes: unknown;
-      const instanceName =
-        c.channel_sessions.external_session_name || c.channel_sessions.waha_session_name;
+      const instanceName = c.channel_sessions.external_session_name;
+      if (!instanceName) throw new Error("evolution_instance_name_missing");
       const target = evolutionRecipient(chatId);
-      if (provider === "evolution" && evolution) {
+      if (evolution) {
         if (input.media_storage_path) {
           const admin = createAdminClient();
           const { data: signed, error: signErr } = await admin.storage
@@ -336,72 +328,8 @@ export async function sendMessageHandler(
         } else {
           providerRes = await evolution.sendText(instanceName, target, input.body ?? "");
         }
-      } else if (waha && input.media_storage_path) {
-        // Storage-first: signed URL curta só pro WAHA baixar (nunca base64).
-        const admin = createAdminClient();
-        const { data: signed, error: signErr } = await admin.storage
-          .from("whatsapp-media")
-          .createSignedUrl(input.media_storage_path, 600);
-        if (signErr || !signed?.signedUrl) {
-          throw new Error(`storage_sign_failed: ${signErr?.message ?? "no_url"}`);
-        }
-        const filename = input.media_storage_path.split("/").pop() ?? undefined;
-        providerRes = await waha.sendMedia(
-          c.channel_sessions.waha_session_name,
-          chatId,
-          wahaSendPlanFor(input.type, {
-            url: signed.signedUrl,
-            mime: input.media_mime ?? "application/octet-stream",
-            filename,
-            caption: input.body ?? null,
-          }),
-        );
-      } else if (waha && input.interactive_poll) {
-        try {
-          providerRes = await waha.sendPoll(
-            c.channel_sessions.waha_session_name,
-            chatId,
-            input.body ?? "Escolha uma opção",
-            input.interactive_poll.options,
-            input.interactive_poll.multipleAnswers,
-          );
-        } catch (pollError) {
-          const fallback = [
-            input.body ?? "Escolha uma opção",
-            ...input.interactive_poll.options.map((option, index) => `${index + 1}. ${option}`),
-            "Responda com o número da opção desejada.",
-          ].join("\n");
-          providerRes = await waha.sendMessage(
-            c.channel_sessions.waha_session_name,
-            chatId,
-            fallback,
-          );
-          await supabase
-            .from("messages")
-            .update({
-              body: fallback,
-              metadata: {
-                ...(message.metadata ?? {}),
-                interactive_fallback: true,
-                interactive_error: pollError instanceof Error ? pollError.message : "poll_failed",
-              },
-            })
-            .eq("id", message.id);
-        }
-      } else if (waha) {
-        providerRes = await waha.sendMessage(
-          c.channel_sessions.waha_session_name,
-          chatId,
-          input.body ?? "",
-        );
       }
-      // Fase 4A-3: o shape do id varia por engine (string | {_serialized} |
-      // NOWEB {id:{id}} | {key:{id}}) — parser compartilhado cobre todos; sem
-      // external_id o ack do webhook duplica a linha em vez de atualizar.
-      const externalId =
-        provider === "evolution"
-          ? parseEvolutionMessageId(providerRes)
-          : parseWahaMessageId(providerRes);
+      const externalId = parseEvolutionMessageId(providerRes);
       const { data: updated } = await supabase
         .from("messages")
         .update({ status: "sent", external_id: externalId, ack: 0 })
@@ -410,10 +338,10 @@ export async function sendMessageHandler(
         .maybeSingle();
       if (updated) message = updated as unknown as Message;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : `${provider}_unknown`;
+      const msg = err instanceof Error ? err.message : "evolution_unknown";
       const code = msg.startsWith("storage_sign_failed")
         ? "storage_sign_failed"
-        : `${provider}_error`;
+        : "evolution_error";
       const { data: updated } = await supabase
         .from("messages")
         .update({

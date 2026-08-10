@@ -35,9 +35,10 @@ describe("CaseReplyPanel", () => {
     renderWith("awaiting_lead");
 
     expect(screen.getByText(/aguardando o cliente responder/i)).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /concluí/i })).toBeDisabled();
+    expect(screen.queryByRole("radio", { name: /concluí/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /cancelar caso/i })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
-    expect(screen.getByPlaceholderText(/escreva sua resposta/i)).toBeDisabled();
+    expect(screen.getByPlaceholderText(/escreva sua resposta/i)).not.toBeDisabled();
   });
 
   it("botão Enviar desabilitado com texto vazio, mesmo em awaiting_human", () => {

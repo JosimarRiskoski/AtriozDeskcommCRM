@@ -1,7 +1,7 @@
 /**
  * GET /api/v1/channel-sessions/[id] — health check AO VIVO de um canal.
  *
- * Consulta o status real no WAHA, grava `last_health_check_at` (+ sincroniza
+ * Consulta o status real na Evolution, grava `last_health_check_at` (+ sincroniza
  * `status`) no DB e devolve o estado atual. É a fonte de verdade quando o
  * usuário abre a Central de Conexões ou está aguardando o QR ser escaneado.
  *
@@ -17,7 +17,6 @@ import { requireRole } from "@/lib/auth/require-role";
 import { isChannelStatus, updateChannelSchema } from "@/lib/schemas/channels";
 import { createClient } from "@/lib/supabase/server";
 import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/client";
-import { getWahaClient } from "@/lib/waha/client";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +84,7 @@ export async function GET(
   const { data: session } = await supabase
     .from("channel_sessions")
     .select(
-      "id, provider, external_session_name, waha_session_name, display_name, phone_number, status",
+      "id, provider, external_session_name, display_name, phone_number, status",
     )
     .eq("organization_id", activeOrg.orgId)
     .eq("id", id)
@@ -97,42 +96,29 @@ export async function GET(
     return ok({ session, dependencies }, { requestId });
   }
 
-  const provider = session.provider ?? "waha";
+  const provider = session.provider;
   const evolution = getEvolutionClient();
-  const waha = getWahaClient();
-  if (provider === "evolution" && !evolution) {
+  if (provider !== "evolution" || !session.external_session_name) {
     return ok({ ...session, provider_configured: false }, { requestId });
   }
-  if (provider === "waha" && !waha) {
-    // Sem WAHA ativo: devolve o que está no DB, sinalizando que não deu p/ checar ao vivo.
+  if (!evolution) {
     return ok({ ...session, provider_configured: false }, { requestId });
   }
 
   let liveStatus = session.status as string;
   let phoneNumber = session.phone_number as string | null;
   try {
-    if (provider === "evolution" && evolution) {
-      const remote = await evolution.connectionState(
-        session.external_session_name || session.waha_session_name,
-      );
+    if (evolution) {
+      const remote = await evolution.connectionState(session.external_session_name);
       const state = remote.state.toLowerCase();
       liveStatus =
         state === "open" ? "WORKING" : state === "connecting" ? "STARTING" : "SCAN_QR_CODE";
       const identity = remote.number || remote.ownerJid;
       if (identity && !phoneNumber) phoneNumber = identity.replace(/@.*/, "");
-    } else if (waha) {
-      const remote = (await waha.getSessionQr(session.waha_session_name)) as {
-        status?: string;
-        me?: { id?: string; pushName?: string };
-      };
-      if (remote.status) liveStatus = remote.status;
-      // WAHA expõe o número (JID `<phone>@c.us`) quando a sessão está WORKING.
-      const jid = remote.me?.id;
-      if (jid && !phoneNumber) phoneNumber = jid.replace(/@.*/, "");
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";
-    // 404 no WAHA = sessão não iniciada lá → considera STOPPED.
+    // 404 = instância não existe mais na Evolution.
     if (msg.includes("404")) liveStatus = "STOPPED";
     // outros erros: mantém o status do DB (não sobrescreve com ruído transitório).
   }
@@ -155,7 +141,6 @@ export async function GET(
       id: session.id,
       provider,
       external_session_name: session.external_session_name,
-      waha_session_name: session.waha_session_name,
       display_name: session.display_name,
       phone_number: phoneNumber,
       status: liveStatus,
@@ -280,7 +265,7 @@ export async function DELETE(
   const { data: session } = await supabase
     .from("channel_sessions")
     .select(
-      "id,provider,external_session_name,waha_session_name,display_name,phone_number,status,is_default",
+      "id,provider,external_session_name,display_name,phone_number,status,is_default",
     )
     .eq("organization_id", authz.org.orgId)
     .eq("id", id)
@@ -325,32 +310,25 @@ export async function DELETE(
   }
 
   const evolution = getEvolutionClient();
-  const waha = getWahaClient();
-  if (session.provider === "evolution" && !evolution) {
+  if (session.provider !== "evolution" || !session.external_session_name) {
+    return fail("unsupported_provider", "Esta conexão não usa a Evolution API.", 409, {
+      requestId,
+    });
+  }
+  if (!evolution) {
     return fail("evolution_not_configured", "A Evolution nÃ£o estÃ¡ configurada.", 503, {
       requestId,
     });
   }
-  if (session.provider === "evolution" && evolution) {
+  if (evolution) {
     try {
-      await evolution.deleteInstance(session.external_session_name || session.waha_session_name);
+      await evolution.deleteInstance(session.external_session_name);
     } catch (error) {
       return fail(
         "provider_error",
         error instanceof Error
           ? evolutionFriendlyError(error.message)
           : "Falha ao excluir a conexÃ£o.",
-        502,
-        { requestId },
-      );
-    }
-  } else if (waha) {
-    try {
-      await waha.deleteSession(session.waha_session_name);
-    } catch (error) {
-      return fail(
-        "waha_error",
-        error instanceof Error ? error.message : "Não foi possível excluir a sessão do WhatsApp.",
         502,
         { requestId },
       );
@@ -375,7 +353,6 @@ export async function DELETE(
     metadata: {
       display_name: session.display_name,
       phone_number: session.phone_number,
-      waha_session_name: session.waha_session_name,
       provider: session.provider,
       external_session_name: session.external_session_name,
       reason,

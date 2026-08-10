@@ -58,6 +58,7 @@ export interface Message {
   sent_at: string;
   delivered_at: string | null;
   read_at: string | null;
+  played_at: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
 }
@@ -73,8 +74,8 @@ export interface Note {
 }
 
 /**
- * Mapeia ack do WAHA (0..3) para o status canônico em messages.status.
- * 0=pending/sent server-side, 1=server-confirmed, 2=delivered (device), 3=read.
+ * Mapeia ack do WhatsApp (0..4) para o status canônico em messages.status.
+ * 0=pending, 1=servidor, 2=entregue, 3=lida e 4=reproduzida (áudio).
  */
 export function ackToStatus(ack: number | null | undefined): Message["status"] {
   if (ack == null) return "sent";

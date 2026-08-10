@@ -30,7 +30,7 @@ type Lookup = {
     id: string;
     display_name: string | null;
     phone_number: string | null;
-    waha_session_name: string;
+    external_session_name: string;
   }>;
   stages: Array<{
     id: string;
@@ -149,7 +149,7 @@ export function AgentAssignmentRules({ canWrite }: { canWrite: boolean }) {
               <option value="">Qualquer conexão</option>
               {(data?.channels ?? []).map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.display_name || item.phone_number || item.waha_session_name}
+                  {item.display_name || item.phone_number || item.external_session_name}
                 </option>
               ))}
             </select>

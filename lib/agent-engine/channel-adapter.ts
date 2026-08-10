@@ -2,8 +2,8 @@
  * Contrato agnóstico de canal (F2-25; blueprint risco nº 1 + veredito executivo).
  *
  * O RUNTIME e os guardrails falam com o canal de mensagens SÓ por esta interface.
- * Na v1 há um único adapter — WAHA-via-CRM (F2-06/F2-14), em
- * daemon/src/edge/channel/. A migração para a WhatsApp Cloud API troca a
+ * Na v1 há um único adapter — Evolution-via-CRM (F2-06/F2-14), em
+ * `lib/agent-engine/edge/channel`. Uma futura migração de transporte troca a
  * IMPLEMENTAÇÃO sem tocar o runtime; o mapa método-a-método, os pré-requisitos de
  * migração e o plano estão em docs/architecture/channel-adapter.md.
  *
@@ -45,7 +45,7 @@ export type ChannelSendResult =
 
 /** Saúde da sessão do número no canal (o "session health" do adapter). */
 export interface ChannelSessionHealth {
-  /** true só quando o canal pode enviar agora (WAHA: sessão WORKING) */
+  /** true só quando a conexão Evolution pode enviar agora (espelho CRM: WORKING) */
   healthy: boolean;
   /** status cru do canal, para observabilidade (ex.: WORKING, SCAN_QR_CODE) */
   status: string;
@@ -56,17 +56,17 @@ export interface ChannelSessionHealth {
 /** O que o canal suporta — determina o que o runtime/guardrails podem assumir. */
 export interface ChannelCapabilities {
   /**
-   * true = texto livre a qualquer hora (WAHA); false = exige template aprovado
+   * true = texto livre a qualquer hora (Evolution); false = exige template aprovado
    * fora da janela de serviço (WhatsApp Cloud API).
    */
   freeformAnytime: boolean;
-  /** janela de serviço em horas (Cloud API = 24; WAHA não tem janela = null) */
+  /** janela de serviço em horas (Cloud API = 24; Evolution Baileys = null) */
   serviceWindowHours: number | null;
 }
 
 /** Custo do canal por mensagem, em centavos de dólar (custo é métrica de 1ª classe). */
 export interface ChannelCost {
-  /** custo por mensagem enviada; WAHA = 0 (flat/infra); Cloud API = per-message */
+  /** custo por mensagem enviada; Evolution = 0 (flat/infra); Cloud API = per-message */
   perMessageUsdCents: number;
   /** modelo de cobrança, para a doc/telemetria distinguir os canais */
   model: 'flat' | 'per_message';
@@ -78,7 +78,7 @@ export interface ChannelCost {
  * mecânico é scripts/lint-channel-adapter.ts (encadeado em `pnpm lint`, no CI).
  */
 export interface ChannelAdapter {
-  /** id estável do canal, para log/telemetria (ex.: 'waha_via_crm'). */
+  /** id estável do canal, para log/telemetria (ex.: 'crm_whatsapp'). */
   readonly channel: string;
   /** envia UMA mensagem pelo sink idempotente do canal. */
   send(input: ChannelSendInput): Promise<ChannelSendResult>;

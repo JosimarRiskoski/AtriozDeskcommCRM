@@ -4,9 +4,15 @@
  * com a mesma regra, independentemente do transporte WhatsApp.
  */
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { dispatchWahaEvent, type WahaEnvelope, type WahaPayload } from "@/lib/waha/ingest";
+import {
+  dispatchCommercialEvent,
+  type CommercialEventEnvelope,
+  type CommercialMessagePayload,
+} from "@/lib/evolution/commercial-ingest";
 
 import { resolveEvolutionRemoteJid } from "./message-identity";
+import { ackFromEvolutionUpdate } from "./receipts";
+export { ackFromEvolutionUpdate } from "./receipts";
 
 type Admin = ReturnType<typeof createAdminClient>;
 type Json = Record<string, unknown>;
@@ -22,7 +28,6 @@ export type EvolutionSession = {
   id: string;
   organization_id: string;
   external_session_name: string;
-  waha_session_name: string;
   is_warmup_complete: boolean | null;
   warmup_started_at: string | null;
   provider?: "evolution";
@@ -46,6 +51,18 @@ function timestampSeconds(value: unknown): number | undefined {
     return value > 10_000_000_000 ? Math.floor(value / 1000) : value;
   if (typeof value === "string" && /^\d+$/.test(value)) return timestampSeconds(Number(value));
   return undefined;
+}
+
+function evolutionMessageForRecovery(data: Json): Json {
+  const rawMessage = messageData(data);
+  const message = Object.fromEntries(
+    Object.entries(rawMessage).filter(([key]) => key.toLowerCase() !== "base64"),
+  );
+  return {
+    key: object(data.key),
+    message,
+    messageTimestamp: data.messageTimestamp,
+  };
 }
 
 function mediaFromMessage(message: Json): {
@@ -106,7 +123,7 @@ function mediaFromMessage(message: Json): {
  * pelo CRM como telefone e, se o ignorarmos, a mensagem fica pendente mesmo
  * quando já existe um contato com o número correto.
  */
-export function normalizeEvolutionMessage(data: Json): WahaPayload | null {
+export function normalizeEvolutionMessage(data: Json): CommercialMessagePayload | null {
   const key = object(data.key);
   const id = string(key.id) ?? string(data.id);
   const fromMe = key.fromMe === true;
@@ -135,6 +152,7 @@ export function normalizeEvolutionMessage(data: Json): WahaPayload | null {
       // do proprio usuario durante a sincronizacao do historico.
       pushName: fromMe ? undefined : string(data.pushName),
       message: messageData(data),
+      evolution_message: evolutionMessageForRecovery(data),
       // Mantemos a identidade original somente para auditoria/depuração. O
       // pipeline usa `from` já resolvido para não criar contato duplicado.
       ...(identity.usedAlternatePhone
@@ -143,17 +161,6 @@ export function normalizeEvolutionMessage(data: Json): WahaPayload | null {
       ...(parsed.pollVote ? { poll_vote: true } : {}),
     },
   };
-}
-
-function ackFromUpdate(data: Json): number {
-  const update = object(data.update);
-  const status = update.status ?? data.status;
-  if (typeof status === "number") return Math.max(0, Math.min(3, status - 1));
-  const normalized = String(status ?? "").toLowerCase();
-  if (/read/.test(normalized)) return 3;
-  if (/deliver/.test(normalized)) return 2;
-  if (/server|sent|ack/.test(normalized)) return 1;
-  return 0;
 }
 
 function statusFromEvolution(data: Json): string {
@@ -188,12 +195,12 @@ export async function dispatchEvolutionEvent(
       if (!payload) continue;
       inbound ||= !payload.fromMe;
       outbound ||= Boolean(payload.fromMe);
-      const mapped: WahaEnvelope = {
+      const mapped: CommercialEventEnvelope = {
         event: "message.any",
         session: session.external_session_name,
         payload,
       };
-      await dispatchWahaEvent(admin, { ...session, provider: "evolution" }, mapped, requestId);
+      await dispatchCommercialEvent(admin, { ...session, provider: "evolution" }, mapped, requestId);
       continue;
     }
 
@@ -201,13 +208,13 @@ export async function dispatchEvolutionEvent(
       const key = object(data.key);
       const id = string(key.id) ?? string(data.id);
       if (!id) continue;
-      await dispatchWahaEvent(
+      await dispatchCommercialEvent(
         admin,
         { ...session, provider: "evolution" },
         {
           event: "message.ack",
           session: session.external_session_name,
-          payload: { provider: "evolution", id, ack: ackFromUpdate(data) },
+          payload: { provider: "evolution", id, ack: ackFromEvolutionUpdate(data) },
         },
         requestId,
       );
@@ -215,7 +222,7 @@ export async function dispatchEvolutionEvent(
     }
 
     if (event === "CONNECTION_UPDATE") {
-      await dispatchWahaEvent(
+      await dispatchCommercialEvent(
         admin,
         { ...session, provider: "evolution" },
         {

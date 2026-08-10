@@ -24,8 +24,8 @@ import { GOV_ORG, seedGov, sql, lastLine } from "./gov-helpers";
  * padrão de automation-actions-crud.test.ts) pra que o `audit()` interno do
  * handler reuse a MESMA instância de double — sem isso ele abriria um client
  * real contra a URL fake do vitest.db.config.ts (falha rápida, engolida, mas
- * suja o console). WAHA não está configurado no ambiente (sem WAHA_API_KEY) —
- * `sendMessageHandler` cai no ramo `queued_reason='waha_not_configured'`, o
+ * suja o console). Evolution não está configurada no ambiente —
+ * `sendMessageHandler` cai no ramo `queued_reason='evolution_not_configured'`, o
  * que prova o caminho inteiro (throttle → ensureConversation → insert →
  * "envio") sem rede.
  */
@@ -300,7 +300,7 @@ beforeAll(() => {
   seedGov();
   sql(`
     do $t11$ begin
-      insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted, status, daily_message_limit)
+      insert into public.channel_sessions (id, organization_id, external_session_name, webhook_secret_encrypted, status, daily_message_limit)
         values ('${SESSION_ID}', '${GOV_ORG}', 'gov-inv-t11', '\\x00'::bytea, 'WORKING', 300);
     exception when unique_violation then null; end $t11$;
     insert into public.contacts (id, organization_id, display_name, name, phone_number, is_blocked)
@@ -354,7 +354,7 @@ describe("send_whatsapp_message — execute (Task 11)", () => {
     });
 
     expect(result.status).toBe("success");
-    expect(result.detail?.queued_reason).toBe("waha_not_configured");
+    expect(result.detail?.queued_reason).toBe("evolution_not_configured");
     const messageId = String(result.detail?.message_id);
     expect(messageId).toBeTruthy();
 

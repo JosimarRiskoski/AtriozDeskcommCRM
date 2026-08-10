@@ -48,6 +48,18 @@ export type EvolutionSendMediaInput = {
   fileName?: string;
 };
 
+export type EvolutionMessageKey = {
+  id: string;
+  fromMe: boolean;
+  remoteJid: string;
+};
+
+export type EvolutionMediaResult = {
+  base64: string;
+  mimetype?: string;
+  fileName?: string;
+};
+
 function asObject(value: unknown): Json {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : {};
 }
@@ -238,6 +250,33 @@ export class EvolutionClient {
       method: "POST",
       body: JSON.stringify({ numbers }),
     });
+  }
+
+  async markMessagesAsRead(instanceName: string, keys: EvolutionMessageKey[]): Promise<void> {
+    if (keys.length === 0) return;
+    await this.request(`/chat/markMessageAsRead/${encodeURIComponent(instanceName)}`, {
+      method: "POST",
+      body: JSON.stringify({ readMessages: keys }),
+    });
+  }
+
+  async getBase64FromMediaMessage(
+    instanceName: string,
+    message: Json,
+  ): Promise<EvolutionMediaResult> {
+    const result = asObject(
+      await this.request(`/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      }),
+    );
+    const base64 = typeof result.base64 === "string" ? result.base64 : "";
+    if (!base64) throw new Error("evolution_media_missing_base64");
+    return {
+      base64,
+      mimetype: typeof result.mimetype === "string" ? result.mimetype : undefined,
+      fileName: typeof result.fileName === "string" ? result.fileName : undefined,
+    };
   }
 
   private connectionFrom(value: unknown): EvolutionConnection {

@@ -6,14 +6,14 @@ import type { AlertItem as AlertItemType, AlertKind } from "@/app/api/v1/admin/d
 import type { ElementType } from "react";
 
 const KIND_ICONS: Record<AlertKind, ElementType> = {
-  waha_ban: WifiSlash,
+  whatsapp_connection: WifiSlash,
   lgpd_at_risk: Scales,
   ai_budget: ChartBar,
   tenant_pending_overflow: Clock,
 };
 
 const KIND_LABELS: Record<AlertKind, string> = {
-  waha_ban: "WAHA",
+  whatsapp_connection: "WhatsApp",
   lgpd_at_risk: "LGPD",
   ai_budget: "IA Budget",
   tenant_pending_overflow: "Overflow",

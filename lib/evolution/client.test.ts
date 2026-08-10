@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EvolutionClient, evolutionRecipient, parseEvolutionMessageId } from "./client";
 
 describe("EvolutionClient webhook configuration", () => {
+  beforeEach(() => vi.restoreAllMocks());
   afterEach(() => vi.restoreAllMocks());
 
   it("creates an instance with the secure unified webhook and media payload enabled", async () => {
@@ -63,6 +64,9 @@ describe("EvolutionClient webhook configuration", () => {
 });
 
 describe("Evolution helpers", () => {
+  beforeEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
   it("keeps group JIDs and normalizes individual recipients", () => {
     expect(evolutionRecipient("5511999999999@c.us")).toBe("5511999999999");
     expect(evolutionRecipient("120363000000000000@g.us")).toBe("120363000000000000@g.us");

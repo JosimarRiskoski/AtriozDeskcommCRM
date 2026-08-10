@@ -12,7 +12,7 @@ import { GOV_MANAGER, GOV_ORG, GOV_PIPELINE, GOV_STAGE, seedGov, sql } from "./g
  * (updateLeadHandler) e `contact.tag_added` (patchContactHandler). Payloads são
  * o contrato congelado que o motor de regras (Task 7) vai consumir.
  *
- * `message.received` (handleInbound em lib/waha/ingest.ts) fica FORA deste
+ * `message.received` (ingestão comercial Evolution) fica FORA deste
  * harness: a função não é exportada e o ingest depende de RPCs de identidade
  * (fn_upsert_wa_contact/fn_upsert_wa_conversation) que este double não replica
  * — ver nota no relatório da task sobre a verificação manual desse trecho.

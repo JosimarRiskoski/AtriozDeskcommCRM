@@ -8,14 +8,18 @@ import {
   MediaTooLargeError,
   type FetchedMedia,
 } from "@/lib/messaging/media/types";
+import { validateOutboundMedia } from "@/lib/messaging/media/upload-validation";
 
 export async function fetchEvolutionMedia(
   mediaUrl: string,
   hintMime?: string | null,
 ): Promise<FetchedMedia> {
-  const match = /^data:([^;,]+)?;base64,([a-z0-9+/=\s]+)$/i.exec(mediaUrl);
+  const match = /^data:([^,]*);base64,([a-z0-9+/=\s]*)$/i.exec(mediaUrl);
   if (!match) throw new Error("evolution_media_invalid_data_url");
   const buffer = Buffer.from((match[2] ?? "").replace(/\s/g, ""), "base64");
   if (buffer.byteLength > MAX_MEDIA_BYTES) throw new MediaTooLargeError();
-  return { buffer, mime: match[1] || hintMime || "application/octet-stream" };
+  const mime = (match[1] || hintMime || "application/octet-stream").split(";")[0]!.trim();
+  const validation = validateOutboundMedia(mime, buffer.byteLength);
+  if (!validation.ok) throw new Error(`evolution_media_${validation.code}`);
+  return { buffer, mime: mime.split(";")[0]!.trim().toLowerCase() };
 }

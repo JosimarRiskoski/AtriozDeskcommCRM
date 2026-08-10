@@ -1,9 +1,9 @@
 /**
- * Saúde da sessão WAHA pós-fusão. O watchdog de restart (admin-plane) é Fase 4;
+ * Saúde da conexão Evolution. O watchdog de restart (admin-plane) é Fase 4;
  * o que o runtime precisa AGORA:
  *   - ler o status da sessão — fonte é a própria tabela channel_sessions do CRM
- *     (mesmo banco), mantida fresca pelo webhook session.status do WAHA. Regra
- *     dura nº 4 preservada: o message-plane lê a TABELA, nunca fala com o WAHA;
+ *     (mesmo banco), mantida fresca pelo webhook de conexão da Evolution. Regra
+ *     dura nº 4 preservada: o message-plane lê a TABELA, nunca fala direto com a Evolution;
  *   - enforceHolds: reter jobs de envio de sessão fora do ar / em hold de saúde
  *     (health_hold_active vem do circuito de saúde em health/circuit.ts, que
  *     escreve channel_session_health).
@@ -12,7 +12,7 @@ import type pg from 'pg';
 
 import type { Queryable } from '../../queue/queue';
 
-/** Status do WAHA em que a sessão consegue enviar (uppercase — contrato do CRM). */
+/** Status canônico do CRM em que a conexão Evolution consegue enviar. */
 export const SESSION_HEALTHY_STATUS = 'WORKING';
 
 export const SESSION_ESCALATION_STATUSES = ['SCAN_QR_CODE', 'FAILED'] as const;

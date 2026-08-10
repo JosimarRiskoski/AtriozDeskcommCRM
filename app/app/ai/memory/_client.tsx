@@ -174,8 +174,8 @@ export function OrgMemoryClient({ initialState }: Props) {
             <div>
               <CardTitle>Documento da organização</CardTitle>
               <CardDescription>
-                O texto-base que qualquer agente de IA lê antes de responder — como a "política da
-                casa" que todo atendente novo teria que decorar.
+                O texto-base que qualquer agente de IA lê antes de responder — como a &quot;política da
+                casa&quot; que todo atendente novo teria que decorar.
               </CardDescription>
             </div>
             {document ? (

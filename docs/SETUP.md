@@ -14,7 +14,7 @@
 2. [Ordem recomendada](#ordem-recomendada)
 3. [Supabase — banco + auth + storage](#1-supabase--banco--auth--storage)
 4. [Upstash Redis — rate limit + idempotência](#2-upstash-redis--rate-limit--idempotência)
-5. [WAHA — WhatsApp](#3-waha--whatsapp)
+5. [Evolution API — WhatsApp](#3-evolution-api--whatsapp)
 6. [Anthropic + Vercel AI Gateway — IA](#4-anthropic--vercel-ai-gateway--ia)
 7. [OpenAI — embeddings do RAG](#5-openai--embeddings-do-rag)
 8. [Sentry — monitoramento de erros](#6-sentry--monitoramento-de-erros)
@@ -31,7 +31,7 @@
 
 **O que você precisa ter instalado:**
 - **Node.js 22** — recomendamos via [nvm](https://github.com/nvm-sh/nvm). No repo, rode `nvm use` e ele puxa a versão certa. A suíte `pnpm test:db` exige Node 22+: os testes instanciam o cliente do Supabase, que precisa do `WebSocket` global (nativo só a partir do 22).
-- **Docker Desktop** — pra rodar o WAHA local. [Download](https://www.docker.com/products/docker-desktop/).
+- **Docker Desktop** — pra rodar a Evolution API local. [Download](https://www.docker.com/products/docker-desktop/).
 - **pnpm** — `npm install -g pnpm` (gerenciador de pacotes que usamos).
 - **Git** — você já tem se clonou o repo.
 - **Conta de email principal** — vai usar pra criar contas em vários SaaS.
@@ -62,7 +62,7 @@ Se você quer rodar o app o mais rápido possível com o mínimo viável:
 5. [OpenAI](#5-openai--embeddings-do-rag) — embeddings do RAG.
 
 **🟡 Pra testar WhatsApp (+15 min):**
-6. [WAHA](#3-waha--whatsapp) + ngrok (precisa URL pública).
+6. [Evolution API](#3-evolution-api--whatsapp) + ngrok (precisa URL pública).
 
 **⚪ Pode ficar vazio em dev (degradam graciosamente):**
 - [Sentry](#6-sentry--monitoramento-de-erros) — não monitora erros, mas app sobe.
@@ -151,63 +151,35 @@ No menu lateral → **Storage** → **New bucket**:
 
 ---
 
-## 3. WAHA — WhatsApp
+## 3. Evolution API — WhatsApp
 
-**O que é:** Servidor que se conecta ao WhatsApp e expõe API HTTP. Roda em Docker. Em dev, sobe local; em prod, num VPS. **Custo:** WAHA Plus = $19/mês ([devlikeapro.com](https://waha.devlikeapro.com/)). Tem trial grátis. **Não use a versão Core** — não suporta multi-tenant nem retry.
+**O que é:** transporte WhatsApp usado exclusivamente pelo CRM. Roda em Docker com Postgres próprio. Em desenvolvimento sobe pelo `docker-compose.yml`; em produção use o compose e o runbook versionados neste repositório.
 
-### Passo 1 — gerar a API key (plaintext + hash)
-
-WAHA tem um esquema de auth particular: o **container** guarda o hash SHA512 da chave; a **app** envia o plaintext em cada request. Por isso você precisa dos dois.
+### Passo 1 — gerar os segredos
 
 ```bash
-# 1. Gere uma string aleatória forte (no terminal)
-openssl rand -hex 32
-# → cola algo tipo: 7a3f9b2c1d4e5f...
+openssl rand -hex 32 # EVOLUTION_API_KEY
+openssl rand -hex 32 # EVOLUTION_WEBHOOK_SECRET
+openssl rand -hex 24 # EVOLUTION_DB_PASSWORD
 ```
 
-Esse é o **plaintext**. Copie. Agora gere o **hash SHA512 hex** dele:
+Use valores diferentes. A chave da API autentica o CRM na Evolution; o segredo do webhook protege a entrada no CRM; a senha pertence somente ao banco da Evolution.
 
-```bash
-# 2. Hash do plaintext
-echo -n "7a3f9b2c1d4e5f..." | shasum -a 512 | awk '{print $1}'
-# → cola algo tipo (longão, ~128 chars): 9f8e7d6c...
-```
-
-> ⚠️ **Erro #1 de quem clona o projeto:** confundir plaintext com hash. Memoriza:
-> - O **container WAHA** recebe o **HASH** → vai em `WAHA_API_KEY_SHA512`.
-> - O **app Next.js** envia o **PLAINTEXT** no header `X-Api-Key` → vai em `WAHA_API_KEY`.
-
-### Passo 2 — gerar o HMAC secret pro webhook
-
-WAHA assina cada webhook com HMAC SHA512. Geramos um segundo secret pra isso:
-
-```bash
-openssl rand -hex 32
-# → cola em WAHA_HMAC_SECRET
-```
-
-### Passo 3 — preencher .env.local
+### Passo 2 — preencher `.env.local`
 
 ```env
-# Plaintext que a app Next envia no header X-Api-Key
-WAHA_API_KEY=<plaintext-do-passo-1>
-
-# Hash SHA512 do plaintext acima — usado pelo docker-compose pra configurar o container
-WAHA_API_KEY_SHA512=<hash-do-passo-1>
-
-# HMAC do webhook
-WAHA_HMAC_SECRET=<plaintext-do-passo-2>
-
-# WAHA roda em localhost:3030 (mapeamento do docker-compose, host:3030 → container:3000)
-WAHA_API_BASE_URL=http://localhost:3030
-
-# URL pública que o WAHA chama de volta — preenchido no Passo 4
-WAHA_WEBHOOK_BASE_URL=
+EVOLUTION_API_BASE_URL=http://localhost:8080
+EVOLUTION_SERVER_URL=http://localhost:8080
+EVOLUTION_API_KEY=<chave-forte>
+EVOLUTION_WEBHOOK_SECRET=<segredo-diferente>
+EVOLUTION_DB_NAME=evolution
+EVOLUTION_DB_USER=evolution
+EVOLUTION_DB_PASSWORD=<senha-do-banco>
 ```
 
-### Passo 4 — URL pública pra webhook (ngrok)
+### Passo 3 — URL pública para o webhook
 
-WAHA precisa chamar nossa app de volta quando chega mensagem. Localhost não serve — precisa de URL HTTPS pública.
+A Evolution precisa chamar a aplicação quando uma mensagem ou recibo chega. Em desenvolvimento, exponha a porta do Next.js:
 
 ```bash
 # Instale ngrok
@@ -220,23 +192,17 @@ ngrok config add-authtoken <seu-token>
 ngrok http 3000
 ```
 
-O ngrok mostra: `Forwarding https://abc-123-456.ngrok-free.app -> http://localhost:3000`.
+O ngrok mostra `Forwarding https://abc-123-456.ngrok-free.app -> http://localhost:3000`. Essa é a URL pública da aplicação; o CRM configura em cada instância o caminho `/api/v1/webhooks/evolution/<token>`.
 
-Copie a URL `https://...` e cole em:
+> A URL do ngrok muda a cada reinício no plano gratuito. Em produção, use o domínio HTTPS estável configurado em `NEXT_PUBLIC_APP_URL`.
 
-```env
-WAHA_WEBHOOK_BASE_URL=https://abc-123-456.ngrok-free.app
-```
-
-> ⚠️ A URL do ngrok muda toda vez que você reinicia (no plano free). Pague $8/mês pelo subdomínio fixo se for trabalhar muito com WAHA, ou use [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) (gratuito com domínio próprio).
-
-### Passo 5 — subir o WAHA
+### Passo 4 — subir a Evolution
 
 ```bash
 docker compose up -d
 ```
 
-Confira em <http://localhost:3030/dashboard/> que o WAHA está respondendo (UI do WAHA Plus). Pra criar sessão e escanear QR, veja a doc oficial: <https://waha.devlikeapro.com/docs/overview/quick-start/>.
+Confira `docker compose ps` e `docker compose logs evolution --tail 100`. Depois, abra **Conexões** no CRM, crie a conexão e escaneie o QR Code. A instância deve ficar `WORKING` e registrar eventos `MESSAGES_UPSERT` e `MESSAGES_UPDATE`.
 
 ---
 
@@ -339,7 +305,7 @@ RESEND_FROM_EMAIL=onboarding@resend.dev
 1. Acesse <https://partners.tiendanube.com/> → **Sign up** como parceiro (gratuito).
 2. No dashboard de parceiro → **Apps → Create new app**.
    - **App name:** `DeskcommCRM Dev`.
-   - **Redirect URI:** `https://<sua-url-ngrok>.ngrok-free.app/api/v1/integrations/nuvemshop/callback` (mesmo ngrok do WAHA, ou outro).
+   - **Redirect URI:** `https://<sua-url-ngrok>.ngrok-free.app/api/v1/integrations/nuvemshop/callback` (mesmo túnel público da aplicação, ou outro).
    - **Scopes:** marque tudo relacionado a `read_orders`, `read_customers`, `read_products`, `write_orders` (pra atualizar status).
 3. Após criar, a tela do app mostra:
 
@@ -386,8 +352,8 @@ CPF_ENCRYPTION_KEY=<saída-2>
 # Criptografia de tokens OAuth Nuvemshop
 NUVEMSHOP_OAUTH_ENCRYPTION_KEY=<saída-3>
 
-# Criptografia de credenciais BYO-WAHA (cliente que roda WAHA próprio)
-WAHA_BYO_ENCRYPTION_KEY=<saída-4>
+# Criptografia de credenciais dos provedores de IA (gere com `openssl rand -base64 32`)
+AI_CRED_AES_KEY=<saída-4-em-base64>
 
 # HMAC do cookie de impersonate (super-admin) — mínimo 32 chars
 IMPERSONATE_COOKIE_SECRET=<saída-5>
@@ -441,7 +407,7 @@ A resposta deve ser tipo:
   "data": {
     "supabase": "ok",
     "redis": "ok",
-    "waha": "ok"
+    "evolution": "ok"
   }
 }
 ```
@@ -461,17 +427,17 @@ Você esqueceu de preencher `NEXT_PUBLIC_SUPABASE_URL` ou tem espaço/aspa errad
 ### `Invalid JWT` ao chamar Supabase
 A `anon key` ou `service role key` foi colada errada (cortou no meio). JWTs do Supabase são longos (~200 chars). Volte no dashboard e use o botão **Copy** em vez de selecionar manualmente.
 
-### WAHA retorna 401 `Unauthorized`
-Provável: você botou o **hash** em `WAHA_API_KEY` em vez do **plaintext**. Confira: a app envia o que tá no `.env.local` no header — o container WAHA é quem tem o hash (em `WAHA_API_KEY_SHA512`). Refaça o passo 1 do WAHA.
+### Evolution retorna 401 `Unauthorized`
+Confirme se `EVOLUTION_API_KEY` é exatamente a mesma na aplicação e no container Evolution. Depois reinicie os dois serviços.
 
-### Webhook do WAHA não chega
+### Webhook da Evolution não chega
 - O ngrok está rodando? (`ngrok http 3000`)
-- A URL do ngrok atual está em `WAHA_WEBHOOK_BASE_URL`? (muda a cada restart no plano free).
+- A URL pública atual está em `NEXT_PUBLIC_APP_URL` antes de criar/reconectar a instância?
 - Você reiniciou o `pnpm dev` depois de mudar o `.env.local`? Variáveis de ambiente são lidas no boot.
-- Confira logs do container: `docker logs deskcomm-waha`.
+- Confira `docker compose logs evolution --tail 200` e o histórico seguro de webhooks no CRM.
 
 ### Porta 3000 já em uso
-Algum outro processo rodando. Mata com `lsof -ti:3000 | xargs kill -9` ou roda o Next em outra porta: `pnpm dev -- -p 3001` (e atualize `WAHA_WEBHOOK_BASE_URL` no ngrok pra apontar pra nova porta).
+Algum outro processo está rodando. Encerre-o ou rode o Next em outra porta: `pnpm dev -- -p 3001` e atualize o túnel e `NEXT_PUBLIC_APP_URL`.
 
 ### `RESEND_API_KEY is undefined` (mas o app sobe)
 Esperado em dev se você ainda não configurou o Resend. Emails caem no `console.log`. Só configure se for testar fluxos de email (LGPD export, magic link).
@@ -482,9 +448,9 @@ Confira se você está logado: `supabase login` — vai abrir o browser pra auto
 ### Esqueci a senha do banco do Supabase
 **Project Settings → Database → Reset database password**. Lembrando que isso invalida conexões existentes.
 
-### Docker compose não sobe o WAHA
+### Docker compose não sobe a Evolution
 - Docker Desktop está rodando? Ícone na barra de menus.
-- Em Mac M1/M2/M3, o `platform: linux/amd64` no docker-compose pode dar warning — é normal, só roda mais devagar via emulação. Funciona.
+- Confira se `EVOLUTION_API_KEY` e `EVOLUTION_DB_PASSWORD` estão preenchidas e rode `docker compose logs evolution evolution-postgres`.
 
 ---
 
@@ -493,7 +459,7 @@ Confira se você está logado: `supabase login` — vai abrir o browser pra auto
 Com tudo verde no `/api/v1/health`:
 
 1. Crie usuários de teste rodando `pnpm tsx scripts/seed-e2e-credentials.ts` — gera `.e2e-creds.json` com admin/manager/agent.
-2. Leia [`README.md`](../README.md) pra fluxo de criar sessão WAHA + escanear QR.
+2. Leia [`README.md`](../README.md) e abra **Conexões** para criar a instância Evolution e escanear o QR.
 3. Leia [`CLAUDE.md`](../CLAUDE.md) pra convenções do projeto.
 4. Veja [`tasks/todo.md`](../tasks/todo.md) pra entender o backlog atual.
 

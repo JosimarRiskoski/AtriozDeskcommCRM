@@ -29,6 +29,7 @@ export function AudioPlayer({ messageId, isOutbound }: Props) {
   const [current, setCurrent] = useState(0);
   const [rateIdx, setRateIdx] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -49,9 +50,19 @@ export function AudioPlayer({ messageId, isOutbound }: Props) {
       el.removeEventListener("ended", onEnded);
       el.removeEventListener("error", onError);
     };
-  }, []);
+  }, [retryNonce]);
 
-  if (failed) return <MediaUnavailable kind="Áudio" className="h-12 w-60" />;
+  const retry = () => {
+    setFailed(false);
+    setPlaying(false);
+    setCurrent(0);
+    setDuration(0);
+    setRetryNonce((value) => value + 1);
+  };
+
+  if (failed) {
+    return <MediaUnavailable kind="Áudio" className="min-h-16 w-60" onRetry={retry} />;
+  }
 
   // ponytail: OGG streams report Infinity at loadedmetadata; self-heal when refined
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
@@ -81,7 +92,11 @@ export function AudioPlayer({ messageId, isOutbound }: Props) {
 
   return (
     <div className="flex w-60 items-center gap-2 py-1">
-      <audio ref={audioRef} src={mediaSrc(messageId)} preload="metadata" />
+      <audio
+        ref={audioRef}
+        src={`${mediaSrc(messageId)}${retryNonce ? `?retry=${retryNonce}` : ""}`}
+        preload="metadata"
+      />
       <button
         type="button"
         aria-label={playing ? "Pausar áudio" : "Reproduzir áudio"}

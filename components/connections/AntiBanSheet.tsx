@@ -70,7 +70,7 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
   const label = useMemo(() => {
     if (!item) return "";
     const s = item.channel_session;
-    return s.display_name || s.phone_number || s.waha_session_name || "Conexão";
+    return s.display_name || s.phone_number || s.external_session_name || "Conexão";
   }, [item]);
 
   if (!item || !form) return null;

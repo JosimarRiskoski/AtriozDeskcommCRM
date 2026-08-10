@@ -21,7 +21,7 @@ import type pg from "pg";
 import { withFields } from "../obs/logger";
 import type { JobRow } from "../queue/queue";
 import { getLeadContext, type LeadContext } from "../edge/crm/get-lead-context";
-import { WahaChannelAdapter } from "../edge/channel/waha-adapter";
+import { CrmWhatsAppChannelAdapter } from "../edge/channel/crm-whatsapp-adapter";
 import { applySendOutcome } from "../edge/crm/send-message";
 import { runBeforeSend } from "../guardrails/before-send";
 import { classifyPromise } from "../guardrails/promise/semantic";
@@ -517,7 +517,7 @@ async function runDeterministicReentry(
   );
   const crmDailyLimit = channelRows[0]?.daily_message_limit ?? null;
 
-  const channel = (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(pool);
+  const channel = (deps.channel ?? ((p: pg.Pool) => new CrmWhatsAppChannelAdapter(p, deps.crmCfg)))(pool);
 
   // seq = 1: uma única mensagem determinística por disparo (identidade (job_id, 1) no
   // ledger F2-06). Enviar SÓ pela cadeia — nunca por baixo dela (CLAUDE.md princípio 2).

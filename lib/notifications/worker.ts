@@ -178,7 +178,7 @@ export async function runNotificationDeliveryTick(admin: SupabaseClient, limit =
         .maybeSingle(),
       admin
         .from("channel_sessions")
-        .select("provider,external_session_name,waha_session_name,status")
+        .select("provider,external_session_name,status")
         .eq("id", delivery.connection_id)
         .eq("organization_id", delivery.organization_id)
         .maybeSingle(),
@@ -193,6 +193,8 @@ export async function runNotificationDeliveryTick(admin: SupabaseClient, limit =
       !row ||
       !settings?.notify_whatsapp_group ||
       !connection ||
+      connection.provider !== "evolution" ||
+      !connection.external_session_name ||
       !["WORKING", "connected", "active", "online"].includes(connection.status)
     ) {
       await admin
@@ -266,8 +268,8 @@ export async function runNotificationDeliveryTick(admin: SupabaseClient, limit =
     );
     try {
       const result = await sendWhatsAppText({
-        provider: connection.provider ?? "waha",
-        sessionName: connection.external_session_name || connection.waha_session_name,
+        provider: "evolution",
+        sessionName: connection.external_session_name,
         chatId: delivery.group_chat_id,
         text: message,
       });

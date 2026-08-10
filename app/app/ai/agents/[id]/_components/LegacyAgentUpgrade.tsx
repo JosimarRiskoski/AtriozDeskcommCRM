@@ -105,7 +105,7 @@ export function LegacyAgentUpgrade({ agent, readOnly }: { agent: AgentRow; readO
             <SelectContent>
               {workingChannels.map((channel) => (
                 <SelectItem key={channel.id} value={channel.id}>
-                  {channel.display_name || channel.waha_session_name}
+                  {channel.display_name || channel.external_session_name}
                 </SelectItem>
               ))}
             </SelectContent>

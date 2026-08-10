@@ -43,7 +43,7 @@ beforeAll(async () => {
   );
 
   await pool.query(
-    `insert into channel_sessions (id, organization_id, waha_session_name, status, webhook_secret_encrypted)
+    `insert into channel_sessions (id, organization_id, external_session_name, status, webhook_secret_encrypted)
      values ($1, $2, 'ac-cases-session-on', 'WORKING', '\\x00'::bytea) on conflict (id) do nothing`,
     [SESSION_ON, ORG],
   );
@@ -62,7 +62,7 @@ beforeAll(async () => {
   await pool.query(`update ai_agents set published_version_id = $1 where id = $2`, [VERSION_ON, AGENT_ON]);
 
   await pool.query(
-    `insert into channel_sessions (id, organization_id, waha_session_name, status, webhook_secret_encrypted)
+    `insert into channel_sessions (id, organization_id, external_session_name, status, webhook_secret_encrypted)
      values ($1, $2, 'ac-cases-session-off', 'WORKING', '\\x00'::bytea) on conflict (id) do nothing`,
     [SESSION_OFF, ORG],
   );

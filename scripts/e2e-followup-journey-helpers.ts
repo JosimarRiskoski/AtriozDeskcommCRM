@@ -6,9 +6,9 @@
  *
  *   1. Fast-forward de `next_eval_at` — não dá pra dormir 5min/15min reais
  *      por chamada de tick; a spec pula o relógio via UPDATE direto.
- *   2. Simular uma resposta inbound sem WAHA real — insere `messages` +
+ *   2. Simular uma resposta inbound sem Evolution real — insere `messages` +
  *      atualiza `conversations.last_inbound_at` + emite `message.received`
- *      via `emit_event()` (a MESMA função que `lib/waha/ingest.ts` chama no
+ *      via `emit_event()` (a MESMA função que a ingestão Evolution chama no
  *      webhook real), pra `lib/followup/reactivity.ts` acordar o enrollment
  *      `waiting_reply` do jeito real (drenado por
  *      `POST /api/v1/cron/event-log-drain`, não simulado na mão).
@@ -177,7 +177,7 @@ async function main(): Promise<void> {
       // ---- simulate-inbound <orgId> <conversationId> <contactId> <channelSessionId> <body>
       // ---- — insere a mensagem inbound + atualiza a conversa + emite
       // ---- message.received via emit_event() (mesma função que o webhook
-      // ---- real da WAHA chama em lib/waha/ingest.ts) pra
+      // ---- real da Evolution chama na ingestão comercial) para
       // ---- lib/followup/reactivity.ts acordar o enrollment waiting_reply
       // ---- quando o event-log-drain drenar esta linha.
       case "simulate-inbound": {

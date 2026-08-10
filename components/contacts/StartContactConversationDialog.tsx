@@ -82,7 +82,7 @@ export function StartContactConversationDialog({ contactId, contactName, open, o
               <option value="">Selecione uma conexão ativa</option>
               {workingChannels.map((channel) => (
                 <option key={channel.id} value={channel.id}>
-                  {channel.display_name || channel.waha_session_name}
+                  {channel.display_name || channel.external_session_name}
                   {channel.phone_number ? ` · ${channel.phone_number}` : ""}
                 </option>
               ))}

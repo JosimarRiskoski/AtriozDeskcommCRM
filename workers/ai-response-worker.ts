@@ -133,7 +133,7 @@ export async function processMessageReceived(row: EventRow): Promise<ProcessResu
 
     // ── G3 — bot's own response signals low confidence / uncertainty.
     //    Persist the message (may serve as a draft for the human) but DO NOT
-    //    dispatch via WAHA, and trigger handoff. ----------------------------
+    //    dispatch via the CRM WhatsApp transport, and trigger handoff. -------
     const confidence = response.citations[0]?.similarity ?? 0;
     const confidenceThreshold =
       typeof ctx.agent.config?.["confidence_threshold"] === "number"
@@ -600,7 +600,7 @@ async function persistAndDispatch(
 
   // Note: the trigger `trg_messages_emit_event` already emits a `message.sending`
   // event on insert. The plan requires `message.send_requested` as a distinct
-  // signal for the WAHA dispatch worker — emit it explicitly so that worker
+  // signal for the WhatsApp dispatch worker — emit it explicitly so that worker
   // (S-06.x in EPIC-03 land) doesn't have to disambiguate trigger events.
   // EXCEPTION (S-06.03 wave 3): when handoff was triggered (G3 low confidence),
   // we persist the bot's draft for the human to reuse but MUST NOT dispatch.

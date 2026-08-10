@@ -7,11 +7,11 @@
  * `triggerMatches`; the first match (sorted priority desc, created_at asc)
  * wins.
  *
- * Schema realities (the spec talks about WAHA payload, but at dispatch time we
+ * Schema realities (the spec talks about provider payload, but at dispatch time we
  * only have rows from `messages` + `conversations`):
  *  - `chat_id ends with @g.us` → `conversations.is_group === true` OR
  *    `conversations.group_chat_id is not null`. The webhook persists those
- *    flags so the dispatcher does not need to re-parse the WAHA payload.
+ *    flags so the dispatcher does not need to re-parse the Evolution payload.
  *  - `from_me` → `messages.direction === 'outbound'`. Inbound messages from
  *    the customer are always `direction='inbound'`. We still defend against
  *    operator devices that might emit fromMe events into the queue.
@@ -87,7 +87,7 @@ export function triggerMatches(input: TriggerMatchInput): boolean {
   const isGroup = Boolean(conversation.is_group) || Boolean(conversation.group_chat_id);
   if (ignoreGroups && isGroup) return false;
 
-  // 3. Self filter — defaults to ignoring fromMe (mirrors WAHA worker default).
+  // 3. Self filter — defaults to ignoring fromMe (mirrors Evolution ingest default).
   const ignoreSelf = filters.ignore_self !== false;
   if (ignoreSelf && message.direction === "outbound") return false;
 

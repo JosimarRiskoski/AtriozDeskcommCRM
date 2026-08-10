@@ -21,17 +21,22 @@ export async function POST() {
     });
   const { data: connection } = await admin
     .from("channel_sessions")
-    .select("provider,external_session_name,waha_session_name,status")
+    .select("provider,external_session_name,status")
     .eq("id", settings.whatsapp_connection_id)
     .eq("organization_id", authz.org.orgId)
     .maybeSingle();
-  if (!connection || !["WORKING", "connected", "active", "online"].includes(connection.status))
+  if (
+    !connection ||
+    connection.provider !== "evolution" ||
+    !connection.external_session_name ||
+    !["WORKING", "connected", "active", "online"].includes(connection.status)
+  )
     return fail("connection_unavailable", "A conexão escolhida não está disponível.", 409, {
       requestId,
     });
   const result = await sendWhatsAppText({
-    provider: connection.provider ?? "waha",
-    sessionName: connection.external_session_name || connection.waha_session_name,
+    provider: "evolution",
+    sessionName: connection.external_session_name,
     chatId: settings.whatsapp_group_chat_id,
     text: `✅ Teste do CRM ${authz.org.name}\nOs avisos aos gestores estão configurados para este grupo.`,
   });

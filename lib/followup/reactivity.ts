@@ -29,7 +29,7 @@
  *
  * As 4 reações (spec §4):
  *   1. `message.received` (inbound) — se o contato está `is_blocked` (a
- *      detecção de STOP em `lib/waha/ingest.ts` já setou a coluna ANTES de
+ *      detecção de STOP na ingestão comercial já setou a coluna ANTES de
  *      emitir este evento — mesma request, sequencial): cancela TUDO
  *      (`opted_out`). Senão, para enrollments `waiting_reply` do contato:
  *      `cancel_on_reply` no `trigger_config` do pointer → cancela
@@ -46,7 +46,7 @@
  *      evento de fechamento no repo (grep confirmou — só `ai.reactivated_by_agent`
  *      no audit log, sem event_log). Adicionado em
  *      `app/api/v1/conversations/[id]/reactivate-bot/route.ts` (rota
- *      home-grown, não código portado do WAHA — mesmo padrão `emit_event` já
+ *      código nativo do CRM — mesmo padrão `emit_event` já
  *      usado em ~30 rotas deste repo). Resume `paused_handoff` → `active` com
  *      grace de 30min (RESUME_GRACE_MS).
  */
@@ -178,7 +178,7 @@ async function reactToInbound(
   const live = await db.loadLiveEnrollmentsForContact(row.organization_id, contactId);
 
   if (isBlocked) {
-    // STOP/opt-out (a regex já rodou em lib/waha/ingest.ts e setou is_blocked
+    // STOP/opt-out (a regex já rodou na ingestão comercial e setou is_blocked
     // ANTES de emitir este evento, na mesma request — ver header do arquivo).
     // Hard stop LGPD/anti-ban: cancela TUDO que está vivo, sem exceção de política.
     const reacted = await cancelAll(db, row.organization_id, row.id, live, "opted_out", "stop_keyword", "reactivity_opted_out", clock);

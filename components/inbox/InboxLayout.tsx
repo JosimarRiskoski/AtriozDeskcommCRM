@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
@@ -10,6 +10,7 @@ import {
   type ConversationWithContact,
 } from "@/hooks/inbox/useConversationsRealtime";
 import { useConversation, isNotFound } from "@/hooks/inbox/useConversation";
+import { useMarkConversationRead } from "@/hooks/inbox/useMarkConversationRead";
 import { ConversationList } from "./ConversationList";
 import { InboxFilters, type InboxFiltersValue, type InboxTab } from "./InboxFilters";
 import { ChatThread } from "./ChatThread";
@@ -125,8 +126,30 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
 
   const claim = useClaimConversation();
   const close = useCloseConversation();
+  const markRead = useMarkConversationRead();
+  const requestedReadIds = useRef(new Set<string>());
 
-  const handleSelect = useCallback((id: string) => setSelectedId(id), []);
+  const requestRead = useCallback(
+    (conversation: ConversationWithContact | null | undefined) => {
+      if (!conversation || conversation.unread_count_for_assignee <= 0) return;
+      if (requestedReadIds.current.has(conversation.id)) return;
+      requestedReadIds.current.add(conversation.id);
+      markRead.mutate(conversation.id, {
+        onError: () => requestedReadIds.current.delete(conversation.id),
+      });
+    },
+    [markRead],
+  );
+
+  const handleSelect = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      const conversation = listQ.data?.pages.flatMap((page) => page.data).find((item) => item.id === id);
+      requestRead(conversation);
+    },
+    [listQ.data, requestRead],
+  );
+  useEffect(() => requestRead(selectedConversation), [requestRead, selectedConversation]);
   const handleVisibleChange = useCallback((ids: string[]) => setVisibleIds(ids), []);
   const handleFocusReply = useCallback(() => composerRef.current?.focus(), []);
   const handleClaim = useCallback(() => {

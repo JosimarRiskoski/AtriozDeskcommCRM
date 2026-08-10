@@ -57,7 +57,7 @@ export async function handleManagerGroupCommand(input: {
     });
     if (authorized && !parsed && input.sessionName) {
       await sendWhatsAppText({
-        provider: input.provider ?? "waha",
+        provider: input.provider ?? "evolution",
         sessionName: input.sessionName,
         chatId: input.groupChatId,
         text: "Comando não reconhecido. Use: CASO <id> RESOLVER <resposta> ou CASO <id> PEDIR <informação necessária>. Respostas livres não são enviadas ao cliente.",

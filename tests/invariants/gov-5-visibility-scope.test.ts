@@ -57,7 +57,7 @@ beforeAll(() => {
     insert into public.user_organizations (user_id, organization_id, role, accepted_at)
       values ('${GOV_AGENT_A}', '${OWN_ORG}', 'agent', now()) on conflict do nothing;
     do $gov$ begin
-      insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted)
+      insert into public.channel_sessions (id, organization_id, external_session_name, webhook_secret_encrypted)
         values ('${OWN_SESSION}', '${OWN_ORG}', 'gov-own', '\\x00'::bytea);
     exception when unique_violation then null; end $gov$;
     insert into public.contacts (id, organization_id, display_name)

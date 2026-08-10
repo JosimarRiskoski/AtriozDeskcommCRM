@@ -140,7 +140,7 @@ function SendWhatsappForm({
           <SelectContent>
             {(sessions ?? []).map((s) => (
               <SelectItem key={s.id} value={s.id} disabled={s.status !== "WORKING"}>
-                {(s.display_name ?? s.waha_session_name) +
+                {(s.display_name ?? s.external_session_name) +
                   (s.status !== "WORKING" ? " — desconectado" : "")}
               </SelectItem>
             ))}

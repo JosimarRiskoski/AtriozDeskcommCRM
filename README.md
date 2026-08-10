@@ -30,7 +30,7 @@ The project was born as an e-commerce CRM — and the open-source community took
 - 🔁 **Self-improving agents** — resolved conversations become new RAG knowledge; handoffs mark where the agent falls short; metrics close the loop. Every month of operation makes the agent better, with a human gate where it matters.
 - 🧩 **Multi-niche by design** — configurable vocabulary per pipeline: a lead becomes a *Customer*, *Patient* or *Buyer*; "won" becomes *Paid*, *Booked* or *Closed*. The same core serves e-commerce (our birthplace, with native Nuvemshop integration), clinics, real estate or info-products.
 - 🔌 **MCP-ready** — internal MCP server for the built-in agents; a public contract for external agents is in the works. The CRM as infrastructure for any AI agent.
-- 💬 **WhatsApp-native via WAHA** — multi-number, anti-ban (throttle + jitter + time windows), media via Storage, STOP detection.
+- 💬 **WhatsApp-native via Evolution API** — multi-number, anti-ban (throttle + jitter + time windows), media via Storage, STOP detection.
 - 👥 **Support governance** — real server-side RBAC, audited assignment/transfer, queue with position, automatic routing and per-role visibility scopes.
 - 🏢 **Multi-tenant + privacy by design (LGPD)** — RLS on every tenant-aware table with an isolation test as a CI gate; anonymization preferred over deletion; append-only audit log with 5-year retention.
 - 🖥️ **Truly self-hosted** — your data on your VPS; one-command install; no paid tier, no gated features.
@@ -40,8 +40,8 @@ The project was born as an e-commerce CRM — and the open-source community took
 > ### ☁️ Run this CRM in production with one command
 >
 > DeskcommCRM is developed in **partnership with HostGator**: the [`hostgator-setup-kit/`](hostgator-setup-kit/)
-> installs the full CRM (app + WAHA + database) on a VPS with a single command, and the
-> [production runbook](docs/runbooks/waha-hostgator.md) assumes that environment.
+> installs the full CRM (app + Evolution API + database) on a VPS with a single command, and the
+> [production runbook](docs/runbooks/evolution-hostgator.md) assumes that environment.
 >
 > **[👉 Get the HostGator VPS with the partnership discount](https://www.hostgator.com.br/52708-141-3-52.html)** —
 > São Paulo datacenter, ideal for WhatsApp running 24/7. *(partner link — subscribing through it supports the project and costs you less)*
@@ -72,7 +72,7 @@ pnpm install
 cp .env.example .env.local
 # Edit .env.local — full guide in docs/SETUP.md
 
-# 4. Local WAHA (optional in dev without WhatsApp)
+# 4. Local Evolution API (optional in dev without WhatsApp)
 docker compose up -d
 
 # 5. Supabase migrations
@@ -85,7 +85,7 @@ pnpm dev
 
 App: <http://localhost:3000> · Health check: <http://localhost:3000/api/v1/health>
 
-> 🆕 **First time? Don't skip steps.** [`docs/SETUP.md`](docs/SETUP.md) is the complete step-by-step tutorial for **every integration** (Supabase, WAHA, Anthropic, Upstash, Sentry, Resend, Nuvemshop) — written for people who have never configured any of this. ~60–90 min from zero to a running app. *(Docs are in Brazilian Portuguese; translations welcome!)*
+> 🆕 **First time? Don't skip steps.** [`docs/SETUP.md`](docs/SETUP.md) is the complete step-by-step tutorial for **every integration** (Supabase, Evolution API, Anthropic, Upstash, Sentry, Resend, Nuvemshop) — written for people who have never configured any of this. ~60–90 min from zero to a running app. *(Docs are in Brazilian Portuguese; translations welcome!)*
 
 ---
 
@@ -99,13 +99,13 @@ App: <http://localhost:3000> · Health check: <http://localhost:3000/api/v1/heal
 | **Auth** | Supabase Auth via `@supabase/ssr` | SameSite=Strict, HttpOnly cookies |
 | **Realtime** | Supabase Realtime | postgres_changes + broadcast |
 | **Storage** | Supabase Storage (signed URLs) | Private `whatsapp-media` bucket |
-| **WhatsApp** | WAHA Plus (NOWEB engine) | Multi-tenant, retry, S3 |
+| **WhatsApp** | Evolution API | Multi-number, webhooks, receipts and media |
 | **Queues** | `event_log` table + workers (cron) | No Inngest/Trigger in the MVP |
 | **Rate limit** | Upstash Redis (sliding window) | Serverless, free tier is enough |
 | **AI** | Vercel AI SDK v7 (Anthropic/Google/OpenAI providers v4) via AI Gateway | Automatic fallback, ZDR |
 | **Validation** | Zod | External input, env, payloads |
 | **Observability** | Sentry (sanitized `beforeSend`) | No PII in breadcrumbs |
-| **Hosting** | Vercel (app) + HostGator VPS Turing/SP (WAHA) | Edge + dedicated box for WhatsApp; Brazil datacenter |
+| **Hosting** | Vercel or VPS (app) + HostGator VPS (Evolution API) | Dedicated WhatsApp transport; Brazil datacenter |
 
 Details: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
@@ -139,7 +139,7 @@ Among them is the **RLS isolation test**: it creates 2 organizations, simulates 
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | PR flow |
 | [`docs/prd/`](docs/prd/) | PRDs (master, platform, customer 360, WhatsApp, pipeline, AI-RAG, Nuvemshop) |
 | [`docs/specs/`](docs/specs/) | Technical specs 01–13 (SQL schema, payloads, MCP, governance) |
-| [`docs/runbooks/waha-hostgator.md`](docs/runbooks/waha-hostgator.md) | Full production runbook for WAHA (HostGator VPS) |
+| [`docs/runbooks/evolution-hostgator.md`](docs/runbooks/evolution-hostgator.md) | Full production runbook for Evolution API (HostGator VPS) |
 
 > Most docs are written in Brazilian Portuguese — our primary community. Translation contributions are very welcome.
 
@@ -170,11 +170,11 @@ For **security vulnerabilities**, **do NOT open a public issue** — use [privat
 ### ✅ Shipped
 
 - **Foundation & platform** — auth (MFA for admins), multi-tenancy with RLS + isolation test, 4-role RBAC, append-only audit log, tenant onboarding.
-- **WhatsApp support** — real-time 3-pane inbox, multi-number WAHA connections, media via Storage, anti-ban (throttle + jitter + time windows), STOP detection.
+- **WhatsApp support** — real-time 3-pane inbox, multi-number Evolution connections, media via Storage, anti-ban (throttle + jitter + time windows), STOP detection.
 - **CRM & orders** — kanban with per-niche configurable vocabulary (fractional indexing), customer 360, contacts, tags, Nuvemshop integration for e-commerce.
 - **Native AI** — agents with per-tenant RAG (pgvector), sentiment analysis, AI→human handoff, per-org budget control, internal MCP server.
 - **Privacy (LGPD)** — export and redact via workers, cascading anonymization, audited consent.
-- **Self-host** — `hostgator-setup-kit` (app + WAHA + database with one command), self-healing `baseline.sql`, production runbook.
+- **Self-host** — `hostgator-setup-kit` (app + Evolution API + database with one command), self-healing `baseline.sql`, production runbook.
 - **Webhooks & automation** — capture sources + WHEN/IF/THEN rules + triggers for external systems.
 - **Support governance** — server-side RBAC across the API, audited assignment/transfer (AI as a first-class assignee), per-role visibility (RLS) + per-agent metrics, automatic routing with queue and management panel, and a governance contract for external AI agents ([`docs/specs/14`](docs/specs/14-contrato-governanca-agentes-externos.md)). Epic driven by 100+ invariants (G1–G6).
 - **Visible operation** — screens that let operators understand the agent: anti-ban hold reasons translated in the conversation, a notice center with severities, send-protection controls (window/pace/cap) and flywheel proposals applicable as a new version (human-gated).
@@ -217,7 +217,7 @@ This is a **self-hosted** project: each person runs the CRM on their **own infra
 
 ## 🙏 Acknowledgements
 
-- **WAHA** ([devlikeapro](https://waha.devlikeapro.com/)) — WhatsApp engine.
+- **Evolution API** ([Evolution API](https://github.com/EvolutionAPI/evolution-api)) — WhatsApp transport.
 - **Supabase**, **Vercel**, **Anthropic** (Claude), **shadcn/ui**.
 - The community that took Deskcomm from e-commerce to clinics, real estate, info-products and beyond — you defined what this project is.
 

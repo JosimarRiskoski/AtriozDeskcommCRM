@@ -59,7 +59,7 @@ async function seedTenant(org: string, contact: string, session: string, conv: s
     [contact, org, `+55119000${suffix}`],
   );
   await pool.query(
-    `insert into channel_sessions (id, organization_id, waha_session_name, status, webhook_secret_encrypted)
+    `insert into channel_sessions (id, organization_id, external_session_name, status, webhook_secret_encrypted)
      values ($1, $2, $3, 'WORKING', '\\x00'::bytea) on conflict (id) do nothing`,
     [session, org, `hc-proof-session-${suffix}`],
   );

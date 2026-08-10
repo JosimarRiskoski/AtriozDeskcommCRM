@@ -58,7 +58,7 @@ const LINHA_DE_BASE = {
  * entrou. Ela subiu porque a medição que a produziu era inválida.
  *
  * Aquela versão inseria em `messages` direto pelo cliente de serviço e nunca
- * chamava `fn_mark_conversation_message` — a RPC que `lib/waha/ingest.ts` executa
+ * chamava `fn_mark_conversation_message` — a RPC que a ingestão comercial executa
  * DEPOIS do insert e que mantém `last_message_preview`/`last_message_at`. A lista
  * lê essa coluna. Eu pulei o escritor e cobrei o resultado dele.
  *

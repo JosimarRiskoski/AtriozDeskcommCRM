@@ -29,14 +29,15 @@ export default async function NewAgentPage() {
       .eq("organization_id", activeOrg.orgId),
     supabase
       .from("channel_sessions")
-      .select("id, display_name, status, phone_number, waha_session_name")
+      .select("id, display_name, status, phone_number, external_session_name")
+      .eq("provider", "evolution")
       .eq("organization_id", activeOrg.orgId),
   ]);
 
   const credentials = (credentialsRes.data ?? []) as unknown as CredentialRow[];
   const channelSessions: ChannelSessionLite[] = (channelRes.data ?? []).map((c) => ({
     id: c.id as string,
-    display_name: (c.display_name as string | null) ?? (c.waha_session_name as string),
+    display_name: (c.display_name as string | null) ?? (c.external_session_name as string),
     status: c.status as string,
     phone_number: (c.phone_number as string | null) ?? null,
   }));

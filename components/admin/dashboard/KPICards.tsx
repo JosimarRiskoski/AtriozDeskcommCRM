@@ -65,11 +65,11 @@ export function KPICards({ kpis }: KPICardsProps) {
         accent={kpis.conv_pending_10min > 0}
       />
       <KPICard
-        label="Alertas WAHA"
-        value={kpis.waha_ban_alerts}
+        label="Alertas WhatsApp"
+        value={kpis.whatsapp_connection_alerts}
         subtitle="sessões com problema"
         Icon={WifiSlash}
-        accent={kpis.waha_ban_alerts > 0}
+        accent={kpis.whatsapp_connection_alerts > 0}
       />
       <KPICard
         label="LGPD em Risco"

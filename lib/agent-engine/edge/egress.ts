@@ -4,9 +4,9 @@
  * URL é validado contra uma allowlist derivada de CONFIG (nunca hardcoded) ANTES do
  * fetch nativo. Host desconhecido → FAIL CLOSED (lança) + evento de segurança.
  *
- * A allowlist é montada por org/config: host do CRM (CRM_BASE_URL) + WAHA do tenant +
+ * A allowlist é montada por org/config: host do CRM (CRM_BASE_URL) + Evolution +
  * endpoint do provedor LLM (F2-23) + utilitários (count-tokens/embed). Os call sites
- * de edge/ (mcp-client, count-tokens, embed — e o sink WAHA-via-CRM, que passa pelo
+ * de edge/ (mcp-client, count-tokens, embed — e o transporte WhatsApp via CRM, que passa pelo
  * mcp-client) roteiam por `allowlistedFetch`; qualquer outro destino falha closed.
  *
  * Contenção de exfiltração: uma URL de imagem com dados no querystring ou um payload

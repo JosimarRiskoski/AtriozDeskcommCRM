@@ -1,7 +1,6 @@
 /**
  * Tipos canônicos de mídia do messaging — camada provider-agnóstica.
- * Hoje só o WAHA produz mídia; a Meta Cloud API (futura) implementa a mesma
- * interface de fetch e o resto do sistema não muda (spec Onda 0).
+ * A Evolution produz a mídia e o restante do sistema consome esta interface.
  */
 
 export const MAX_MEDIA_BYTES = 52_428_800; // 50MB — espelha file_size_limit do bucket
@@ -24,7 +23,7 @@ const MIME_EXT: Record<string, string> = {
   "image/webp": "webp",
   "image/gif": "gif",
   "video/mp4": "mp4",
-  "application/mp4": "mp4", // WAHA/NOWEB anuncia vídeo do WhatsApp com esse mime
+  "application/mp4": "mp4", // Alguns clientes anunciam vídeo do WhatsApp com esse MIME.
   "video/3gpp": "3gp",
   "audio/ogg": "ogg",
   "audio/mpeg": "mp3",

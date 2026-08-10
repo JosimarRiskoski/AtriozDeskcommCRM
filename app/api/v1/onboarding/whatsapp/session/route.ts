@@ -28,7 +28,6 @@ async function ensureChannelSession(orgId: string, sessionName: string) {
       organization_id: orgId,
       provider: "evolution",
       external_session_name: sessionName,
-      waha_session_name: sessionName,
       engine: "EVOLUTION",
       webhook_path_token: token,
       webhook_secret_encrypted: Buffer.from([0]),

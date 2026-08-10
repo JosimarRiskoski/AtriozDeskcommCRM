@@ -62,7 +62,7 @@ export function EdgeConfigPanel({ sourceNode, targetNode, condition, onChange }:
         </Select>
         {sourceNode?.type === "ai_classify" && (
           <p className="text-xs text-text-muted">
-            As opções vêm das classes configuradas no nó "{sourceNode.label}".
+            As opções vêm das classes configuradas no nó &quot;{sourceNode.label}&quot;.
           </p>
         )}
       </div>

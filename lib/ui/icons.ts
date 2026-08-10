@@ -26,6 +26,8 @@ export {
   FlowArrow,
   ChatsCircle,
   ClipboardText,
+  Briefcase,
+  ChatText,
   Scales,
   Gauge,
   WifiSlash,

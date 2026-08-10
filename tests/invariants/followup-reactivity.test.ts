@@ -228,7 +228,7 @@ async function seedContact(org: string, opts?: { isBlocked?: boolean }): Promise
 
 async function seedConversation(org: string, contactId: string): Promise<string> {
   const { rows: sessRows } = await pool.query<{ id: string }>(
-    `insert into channel_sessions (organization_id, waha_session_name, status, webhook_secret_encrypted)
+    `insert into channel_sessions (organization_id, external_session_name, status, webhook_secret_encrypted)
      values ($1, $2, 'WORKING', '\\x00'::bytea) returning id`,
     [org, `reactivity-session-${Date.now()}-${Math.random()}`],
   );

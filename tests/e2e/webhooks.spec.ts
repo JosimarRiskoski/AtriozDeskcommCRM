@@ -197,7 +197,7 @@ test.describe("webhooks & automações — fluxo completo", () => {
       const internalSecret = loadInternalSecret();
       for (let i = 0; i < 3; i++) {
         // Batch de até 50 eventos pendentes, cada um com handlers que fazem
-        // vários round-trips de DB (e potencialmente WAHA/IA) — bem mais lento
+        // vários round-trips de DB (e potencialmente Evolution/IA) — bem mais lento
         // que uma ação de UI; timeout maior que o actionTimeout padrão do teste.
         const drainRes = await request.post(`${APP_URL}/api/v1/cron/event-log-drain`, {
           headers: { Authorization: `Bearer ${internalSecret}` },

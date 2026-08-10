@@ -685,7 +685,7 @@ export function carimbar(dependencias: string[]): string {
  * ⚠️ EXISTE PORQUE `insert` DIRETO EM `messages` PLANTA ACHADO FALSO. As colunas
  * derivadas da conversa (`last_message_at`, `last_message_preview`,
  * `last_inbound_at`, `unread_count_for_assignee`) não são mantidas pela tabela:
- * quem as escreve são os DOIS caminhos de produção — `lib/waha/ingest.ts` pela
+ * quem as escreve são os DOIS caminhos de produção — ingestão Evolution pela
  * RPC `fn_mark_conversation_message`, e a API de mensagens por `update`.
  * Inserindo à mão, a sonda pula o escritor e depois lê uma coluna que ninguém
  * mandou atualizar. A tela mostra "Sem mensagens" numa conversa com mensagens, e

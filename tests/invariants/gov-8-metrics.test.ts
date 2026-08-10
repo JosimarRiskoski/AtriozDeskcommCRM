@@ -58,7 +58,7 @@ beforeAll(() => {
     on conflict do nothing;
 
     do $m4$ begin
-      insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted)
+      insert into public.channel_sessions (id, organization_id, external_session_name, webhook_secret_encrypted)
         values ('${SESSION}', '${ORG}', 'gov-metrics', '\\x00'::bytea);
     exception when unique_violation then null; end $m4$;
 

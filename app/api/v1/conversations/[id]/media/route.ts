@@ -1,7 +1,7 @@
 /**
  * POST /api/v1/conversations/[id]/media — upload outbound (multipart).
  * Storage-first: sobe pro bucket whatsapp-media; o envio da mensagem
- * referencia o storage_path (o WAHA recebe signed URL, nunca base64).
+ * referencia o storage_path (a Evolution recebe URL assinada, nunca base64).
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";

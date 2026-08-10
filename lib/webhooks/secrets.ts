@@ -1,13 +1,13 @@
 /**
  * Cifra/decifra de secrets de webhooks (at-rest) — retrofit da spec §10.
  *
- * Reusa a infra do Nuvemshop/WAHA: RPCs `fn_encrypt_oauth`/`fn_decrypt_oauth`
+ * Reusa a infraestrutura de segredos dos webhooks: RPCs `fn_encrypt_oauth`/`fn_decrypt_oauth`
  * (pgp_sym AES-256 com a chave na GUC `app.nuvemshop_oauth_key`). As RPCs têm
  * GRANT apenas para service_role — sempre chame com o admin client.
  *
  * Contrato de erro: encrypt SEM chave configurada retorna null (o caller
  * decide — rotas de escrita respondem 422 com instrução); decrypt que falha
- * retorna null (o caller aplica o precedente WAHA: hmacSkipped, nunca 500).
+ * retorna null (o chamador registra `hmacSkipped`, sem derrubar a entrada com 500).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";

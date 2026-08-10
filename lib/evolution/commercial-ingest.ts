@@ -1,25 +1,22 @@
 /**
- * lib/waha/ingest.ts — pipeline de ingestão WAHA compartilhado pelos dois route
- * handlers de webhook (`/waha` global e `/waha/[token]` per-tenant).
+ * Pipeline comercial compartilhado pela ingestão Evolution.
  *
  * Fonte única da verdade para: parse de identidade WhatsApp, resolução de
  * contato/conversa e persistência de mensagem. Resolução é ATÔMICA via RPC
  * (fn_upsert_wa_contact / fn_upsert_wa_conversation) — o padrão check-then-act
- * antigo criava um contato/conversa novo a cada mensagem porque o WAHA NOWEB
- * emite `message` E `message.any` para a mesma mensagem (corrida). Ver migration
- * 0027 para o modelo de identidade canônica.
+ * antigo criava um contato/conversa novo a cada mensagem concorrente. Ver
+ * migration 0027 para o modelo de identidade canônica.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { audit } from "@/lib/audit";
 import { findActiveContactByPhone } from "@/lib/contacts/find-by-phone";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { ackToStatus } from "@/lib/types/messaging";
-import { getWahaClient } from "@/lib/waha/client";
-import { parseChatId, type ChatIdentity } from "@/lib/waha/identity";
-export { parseChatId } from "@/lib/waha/identity";
-import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
-import { isExplicitStopRequest } from "@/lib/waha/stop-detection";
+import { parseChatId, type ChatIdentity } from "@/lib/whatsapp/chat-identity";
+export { parseChatId } from "@/lib/whatsapp/chat-identity";
+import { bareWhatsAppMessageId, chatIdFromWhatsAppMessageId } from "@/lib/whatsapp/message-id";
+import { isExplicitStopRequest } from "@/lib/whatsapp/stop-detection";
+import { advanceEvolutionReceipt, type ReceiptRpc } from "@/lib/evolution/receipts";
 import { handleManagerGroupCommand } from "@/lib/human-support/group-commands";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -27,8 +24,7 @@ type Admin = ReturnType<typeof createAdminClient>;
 interface Session {
   id: string;
   organization_id: string;
-  waha_session_name?: string | null;
-  provider?: "waha" | "evolution";
+  provider?: "evolution";
   external_session_name?: string | null;
 }
 
@@ -37,14 +33,14 @@ interface PendingInboundRow {
   organization_id: string;
   channel_session_id: string;
   external_id: string;
-  payload: WahaPayload;
+  payload: CommercialMessagePayload;
   lid: string;
   attempts: number | null;
 }
 
-export interface WahaPayload {
-  /** Provedor de origem. Mantém o pipeline comercial único durante a migração. */
-  provider?: "waha" | "evolution";
+export interface CommercialMessagePayload {
+  /** Provedor de origem. */
+  provider?: "evolution";
   id?: string;
   from?: string;
   to?: string;
@@ -60,7 +56,7 @@ export interface WahaPayload {
   timestamp?: number;
   mediaUrl?: string;
   mimetype?: string;
-  /** WAHA >= 2026.x (NOWEB): mídia vem aninhada em payload.media. */
+  /** Mídia normalizada pelo adaptador da Evolution. */
   media?: { url?: string | null; mimetype?: string | null; filename?: string | null } | null;
   _data?: {
     notifyName?: string;
@@ -79,10 +75,10 @@ export interface WahaPayload {
   poll?: { id?: string };
 }
 
-export interface WahaEnvelope {
+export interface CommercialEventEnvelope {
   event?: string;
   session?: string;
-  payload?: WahaPayload;
+  payload?: CommercialMessagePayload;
 }
 
 /**
@@ -90,12 +86,12 @@ export interface WahaEnvelope {
  * NOWEB costuma preencher `to`; GOWS envia `to: null` e coloca o destinatario
  * em `from` (e tambem em `_data.Info.Chat`).
  */
-export function outboundChatIdOf(p: WahaPayload): string {
+export function outboundChatIdOf(p: CommercialMessagePayload): string {
   if (p.to) return p.to;
   // NOWEB pode omitir `to` quando a mensagem foi escrita no celular. O id
   // serializado tem a forma `{fromMe}_{chatId}_{bareId}`, então é a fonte mais
   // confiável antes de recorrer a `from` (que varia de significado por engine).
-  const chatFromMessageId = chatIdFromWaMessageId(p.id ?? "");
+  const chatFromMessageId = chatIdFromWhatsAppMessageId(p.id ?? "");
   if (chatFromMessageId) return chatFromMessageId;
   if (p.fromMe && p.from) return p.from;
 
@@ -111,7 +107,7 @@ export function outboundChatIdOf(p: WahaPayload): string {
 async function preservePendingIdentity(
   admin: Admin,
   session: Session,
-  payload: WahaPayload,
+  payload: CommercialMessagePayload,
   chatId: string,
   lid: string,
   requestId: string,
@@ -131,7 +127,7 @@ async function preservePendingIdentity(
     { onConflict: "organization_id,channel_session_id,external_id", ignoreDuplicates: true },
   );
   if (error) {
-    console.error("[waha.ingest] nao foi possivel preservar mensagem @lid", error.message);
+    console.error("[evolution.ingest] nao foi possivel preservar mensagem @lid", error.message);
     return;
   }
   await audit({
@@ -173,7 +169,7 @@ async function reconcilePendingIdentity(
       .in("status", ["pending", "failed"]);
 
     try {
-      const pendingPayload = item.payload as unknown as WahaPayload;
+      const pendingPayload = item.payload as unknown as CommercialMessagePayload;
       const replayPayload =
         session.provider === "evolution" && resolvedPhone
           ? {
@@ -237,7 +233,7 @@ async function reconcilePendingIdentity(
  * instantânea via webhook; este é apenas o cinto de segurança para não deixar
  * uma mensagem real invisível até a próxima fala do mesmo contato.
  */
-export async function reconcilePendingWahaInbound(
+export async function reconcilePendingEvolutionInbound(
   admin: Admin,
   limit = 50,
 ): Promise<{ scanned: number; reconciled: number; still_pending: number; failed: number }> {
@@ -270,7 +266,7 @@ export async function reconcilePendingWahaInbound(
 
     const { data: session } = await admin
       .from("channel_sessions")
-      .select("id,organization_id,waha_session_name")
+      .select("id,organization_id,external_session_name")
       .eq("id", row.channel_session_id)
       .eq("organization_id", row.organization_id)
       .maybeSingle();
@@ -339,7 +335,7 @@ export async function reconcilePendingWahaInbound(
 
 function evolutionIdentityFromPayload(
   parsed: ChatIdentity,
-  payload?: WahaPayload,
+  payload?: CommercialMessagePayload,
 ): ChatIdentity | null {
   if (parsed.kind !== "phone" || payload?.provider !== "evolution") return null;
   const original = payload._data?.original_remote_jid;
@@ -353,29 +349,13 @@ function evolutionIdentityFromPayload(
 }
 
 async function resolveLidIdentity(
-  session: Session,
+  _session: Session,
   parsed: ChatIdentity,
-  payload?: WahaPayload,
+  payload?: CommercialMessagePayload,
 ): Promise<ChatIdentity> {
   const evolutionIdentity = evolutionIdentityFromPayload(parsed, payload);
   if (evolutionIdentity) return evolutionIdentity;
-  if (parsed.kind !== "lid" || !session.waha_session_name) return parsed;
-  if (session.provider === "evolution" || payload?.provider === "evolution") return parsed;
-  const client = getWahaClient();
-  if (!client) return parsed;
-
-  try {
-    const phone = await client.getPhoneByLid(session.waha_session_name, parsed.lid);
-    return phone ? { kind: "resolved", phone, lid: parsed.lid } : parsed;
-  } catch (error) {
-    // Enriquecimento nao bloqueia a mensagem: o LID continua valido.
-    console.warn("[waha.ingest] LID ainda nao resolvido", {
-      session: session.waha_session_name,
-      lid: parsed.lid,
-      error: error instanceof Error ? error.message : "unknown",
-    });
-    return parsed;
-  }
+  return parsed;
 }
 
 export function verifyHmacSha512(
@@ -394,25 +374,25 @@ export function verifyHmacSha512(
   }
 }
 
-function previewFromMessage(p: WahaPayload): string {
+function previewFromMessage(p: CommercialMessagePayload): string {
   if (p.body) return p.body.slice(0, 280);
   const t = resolveMessageType(p);
   return t !== "text" ? `[${t}]` : "";
 }
 
-/** URL da mídia: WAHA novo (payload.media.url) com fallback legado (payload.mediaUrl). */
-export function mediaUrlOf(p: WahaPayload): string | null {
+/** URL da mídia normalizada pelo adaptador da Evolution. */
+export function mediaUrlOf(p: CommercialMessagePayload): string | null {
   return p.mediaUrl ?? p.media?.url ?? null;
 }
 
 /** MIME da mídia: idem (payload.media.mimetype é o campo do NOWEB atual). */
-export function mediaMimeOf(p: WahaPayload): string | null {
+export function mediaMimeOf(p: CommercialMessagePayload): string | null {
   return p.mimetype ?? p.media?.mimetype ?? null;
 }
 
 /**
- * Mapeia o `type` cru do WAHA NOWEB para o vocabulário de messages.type do CRM
- * (check constraint messages_type_check). WAHA usa `chat` p/ texto, `ptt` p/
+ * Mapeia o tipo normalizado pela Evolution para o vocabulário de messages.type do CRM
+ * (check constraint messages_type_check). O adaptador usa `chat` para texto e `ptt` para
  * áudio de voz, `vcard` p/ contato, etc. Sem esse mapa o INSERT viola a
  * constraint e a mensagem some. O type cru fica em metadata.raw_type.
  */
@@ -432,7 +412,7 @@ const WA_TYPE_MAP: Record<string, string> = {
   reaction: "reaction",
 };
 
-function mapWahaMessageType(raw: string | undefined): string {
+function mapCommercialMessageType(raw: string | undefined): string {
   if (!raw) return "text";
   // Fallback "text": só chegamos ao insert com body/mídia presente (guarda acima),
   // então tratar tipo desconhecido como texto não perde a mensagem.
@@ -440,7 +420,7 @@ function mapWahaMessageType(raw: string | undefined): string {
 }
 
 /**
- * NOWEB (WAHA 2026.x) não envia `type` no payload — o tipo real está nas
+ * Quando o evento não envia `type`, o tipo real é inferido pelas
  * chaves de `_data.message` (imageMessage, stickerMessage, …). Ordem de
  * resolução: `type` explícito → chave do message → prefixo do MIME → text.
  */
@@ -454,8 +434,8 @@ const NOWEB_MESSAGE_KEY_TYPE: Record<string, string> = {
   documentWithCaptionMessage: "document",
 };
 
-export function resolveMessageType(p: WahaPayload): string {
-  if (p.type) return mapWahaMessageType(p.type);
+export function resolveMessageType(p: CommercialMessagePayload): string {
+  if (p.type) return mapCommercialMessageType(p.type);
   const msg = p._data?.message;
   if (msg && typeof msg === "object") {
     for (const [key, mapped] of Object.entries(NOWEB_MESSAGE_KEY_TYPE)) {
@@ -473,7 +453,7 @@ export function resolveMessageType(p: WahaPayload): string {
   return "text";
 }
 
-function notifyNameOf(p: WahaPayload): string | null {
+function notifyNameOf(p: CommercialMessagePayload): string | null {
   return p._data?.notifyName ?? p._data?.pushName ?? null;
 }
 
@@ -508,7 +488,7 @@ async function upsertContact(
       exactProviderPhone(chatId),
     );
     if (identity.kind === "ambiguous") {
-      console.error("[waha.ingest] identidade de telefone ambigua", {
+      console.error("[evolution.ingest] identidade de telefone ambigua", {
         organization_id: orgId,
         contact_ids: identity.contactIds,
       });
@@ -532,7 +512,7 @@ async function upsertContact(
     } as never,
   );
   if (error) {
-    console.error("[waha.ingest] fn_upsert_wa_contact failed", error.message);
+    console.error("[evolution.ingest] fn_upsert_wa_contact failed", error.message);
     return null;
   }
   return (data as string) ?? null;
@@ -553,7 +533,7 @@ async function upsertConversation(
     } as never,
   );
   if (error) {
-    console.error("[waha.ingest] fn_upsert_wa_conversation failed", error.message);
+    console.error("[evolution.ingest] fn_upsert_wa_conversation failed", error.message);
     return null;
   }
   return (data as string) ?? null;
@@ -615,7 +595,7 @@ async function markConversation(
   if (erroAviso) {
     // Segunda linha de defesa: o próprio canal de aviso caiu. Aqui o log do
     // processo é o que sobra — é para ESTE caso que ele existe, não como rotina.
-    console.error("[waha.ingest] o carimbo falhou E o aviso também", {
+    console.error("[evolution.ingest] o carimbo falhou E o aviso também", {
       conversa: convId,
       erro: error.message,
       aviso: erroAviso.message,
@@ -629,7 +609,7 @@ async function markConversation(
 async function handleInbound(
   admin: Admin,
   session: Session,
-  p: WahaPayload,
+  p: CommercialMessagePayload,
   requestId: string,
   reconciling = false,
 ): Promise<void> {
@@ -640,8 +620,8 @@ async function handleInbound(
       admin,
       organizationId: session.organization_id,
       sessionId: session.id,
-      sessionName: session.external_session_name ?? session.waha_session_name,
-      provider: session.provider ?? p.provider ?? "waha",
+      sessionName: session.external_session_name,
+      provider: "evolution",
       groupChatId: chatId,
       senderChatId: p.author ?? p.participant,
       body: p.body,
@@ -651,7 +631,7 @@ async function handleInbound(
     return; // grupos nunca fazem binding CRM nem entram no Inbox comercial
   }
   if (!p.id || !chatId) return;
-  // WAHA emite eventos vazios p/ status/read-receipt/presence — não viram mensagem.
+  // Eventos vazios de status/read-receipt/presence não viram mensagem.
   if (!p.body && !mediaUrlOf(p) && !p.hasMedia) return;
   if (parsed.kind === "lid") {
     await preservePendingIdentity(admin, session, p, chatId, parsed.lid, requestId);
@@ -698,9 +678,12 @@ async function handleInbound(
       sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
       delivered_at: now,
       metadata: {
-        channel_provider: p.provider ?? "waha",
+        channel_provider: "evolution",
         raw_type: p.type,
         ack_name: p.ackName,
+        ...(p.provider === "evolution" && p._data?.evolution_message
+          ? { evolution_message: p._data.evolution_message }
+          : {}),
         ...(p._data?.poll_id ? { poll_id: p._data.poll_id } : {}),
         ...(p._data?.poll_vote ? { poll_vote: true } : {}),
       },
@@ -710,7 +693,7 @@ async function handleInbound(
 
   // Idempotência: 23505 = unique (organization_id, external_id) já ingerido.
   if (insertErr && insertErr.code !== "23505") {
-    console.error("[waha.ingest] message insert failed", insertErr.message);
+    console.error("[evolution.ingest] message insert failed", insertErr.message);
     return;
   }
   // Mesmo em uma reentrega do webhook, ainda precisamos garantir que o pedido
@@ -762,7 +745,7 @@ async function handleInbound(
       } as never,
     );
     if (blockError) {
-      console.error("[waha.ingest] central opt-out failed", blockError.message);
+      console.error("[evolution.ingest] central opt-out failed", blockError.message);
       await admin
         .from("contacts")
         .update({ is_blocked: true, blocked_reason: "stop_keyword", blocked_at: now })
@@ -821,7 +804,7 @@ async function handleInbound(
           channel_session_id: session.id,
           body_preview: (p.body ?? "").slice(0, 280),
         },
-        p_metadata: { source: "waha_webhook", request_id: requestId },
+        p_metadata: { source: "evolution_webhook", request_id: requestId },
         p_organization_id: session.organization_id,
       } as never,
     );
@@ -835,13 +818,13 @@ async function handleInbound(
             p_entity_kind: "message",
             p_entity_id: inboundMessageId,
             p_payload: { message_id: inboundMessageId, conversation_id: conversationId },
-            p_metadata: { source: "waha_webhook", request_id: requestId },
+            p_metadata: { source: "evolution_webhook", request_id: requestId },
             p_organization_id: session.organization_id,
           } as never,
         )
         .then(({ error }) => {
           if (error)
-            console.error("[waha.ingest] emit media.persist_requested failed", error.message);
+            console.error("[evolution.ingest] emit media.persist_requested failed", error.message);
         });
     }
   }
@@ -855,7 +838,7 @@ async function handleInbound(
 async function handleOutboundFromUserPhone(
   admin: Admin,
   session: Session,
-  p: WahaPayload,
+  p: CommercialMessagePayload,
   requestId: string,
 ): Promise<void> {
   const chatId = outboundChatIdOf(p);
@@ -898,12 +881,19 @@ async function handleOutboundFromUserPhone(
       media_mime: mediaMimeOf(p),
       sent_via: "external_device",
       sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
-      metadata: { channel_provider: p.provider ?? "waha", raw_type: p.type, fromMe: true },
+      metadata: {
+        channel_provider: "evolution",
+        raw_type: p.type,
+        fromMe: true,
+        ...(p.provider === "evolution" && p._data?.evolution_message
+          ? { evolution_message: p._data.evolution_message }
+          : {}),
+      },
     })
     .select("id")
     .maybeSingle();
   if (insertErr && insertErr.code !== "23505") {
-    console.error("[waha.ingest] outbound insert failed", insertErr.message);
+    console.error("[evolution.ingest] outbound insert failed", insertErr.message);
     return;
   }
   if (insertErr?.code === "23505") return;
@@ -939,38 +929,33 @@ async function handleOutboundFromUserPhone(
           p_entity_kind: "message",
           p_entity_id: insertedOutbound.id,
           p_payload: { message_id: insertedOutbound.id, conversation_id: conversationId },
-          p_metadata: { source: "waha_webhook", request_id: requestId },
+          p_metadata: { source: "evolution_webhook", request_id: requestId },
           p_organization_id: session.organization_id,
         } as never,
       )
       .then(({ error }) => {
         if (error)
-          console.error("[waha.ingest] emit media.persist_requested failed", error.message);
+          console.error("[evolution.ingest] emit media.persist_requested failed", error.message);
       });
   }
 }
 
-async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promise<void> {
+async function handleAck(admin: Admin, session: Session, p: CommercialMessagePayload): Promise<void> {
   if (!p.id) return;
   const ack = p.ack ?? 0;
-  const status = ackToStatus(ack);
-  const now = new Date().toISOString();
-
-  const update: Record<string, unknown> = { ack, status };
-  if (ack >= 2) update.delivered_at = now;
-  if (ack >= 3) update.read_at = now;
-
-  // O ack do WAHA 2026.x vem como `{fromMe}_{chatId}_{bareId}`. O NOWEB grava
-  // `external_id` = bareId (id interno), o WEBJS grava o `_serialized` completo.
-  // Casar as duas formas cobre ambos os engines sem tocar no external_id de
+  // Alguns conectores serializam o ack como `{fromMe}_{chatId}_{bareId}`.
+  // Casar a forma completa e a forma curta preserva compatibilidade dos IDs sem tocar no external_id de
   // inbound (que é full e sustenta o dedup 23505).
-  const bare = bareWaMessageId(p.id);
+  const bare = bareWhatsAppMessageId(p.id);
   const candidates = bare === p.id ? [p.id] : [p.id, bare];
-  await admin
-    .from("messages")
-    .update(update)
-    .eq("organization_id", session.organization_id)
-    .in("external_id", candidates);
+  const rpc: ReceiptRpc = (name, args) =>
+    admin.rpc(name as never, args as never) as unknown as ReturnType<ReceiptRpc>;
+  await advanceEvolutionReceipt(rpc, {
+    organizationId: session.organization_id,
+    externalIds: candidates,
+    ack,
+    provider: "evolution",
+  });
 }
 
 interface SessionStatusRow extends Session {
@@ -981,7 +966,7 @@ interface SessionStatusRow extends Session {
 async function handleSessionStatus(
   admin: Admin,
   session: SessionStatusRow,
-  p: WahaPayload,
+  p: CommercialMessagePayload,
 ): Promise<void> {
   const status = (p.status ?? "").toUpperCase() || null;
   if (!status) return;
@@ -998,13 +983,12 @@ async function handleSessionStatus(
 }
 
 /**
- * Roteador único de eventos WAHA. Os dois route handlers convergem aqui após
- * resolver a sessão e validar HMAC.
+ * Roteador único dos eventos comerciais normalizados pela Evolution.
  */
-export async function dispatchWahaEvent(
+export async function dispatchCommercialEvent(
   admin: Admin,
   session: SessionStatusRow,
-  envelope: WahaEnvelope,
+  envelope: CommercialEventEnvelope,
   requestId: string,
 ): Promise<void> {
   const eventType = envelope.event ?? "unknown";
