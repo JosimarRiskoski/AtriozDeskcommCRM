@@ -58,9 +58,16 @@ async function resolveAgent(
   let query = admin
     .from("ai_agents")
     .select("id, organization_id, active_kb_version_id, is_active, is_default")
-    .eq("organization_id", organizationId)
-    .eq("is_active", true);
-  if (preferredAgentId) query = query.eq("id", preferredAgentId);
+    .eq("organization_id", organizationId);
+
+  // Um evento de conhecimento aponta para um agente específico e deve poder
+  // preparar sua base mesmo quando ele está pausado. `is_active` controla se o
+  // agente responde clientes; não deve bloquear edição, teste ou indexação.
+  if (preferredAgentId) {
+    query = query.eq("id", preferredAgentId);
+  } else {
+    query = query.eq("is_active", true);
+  }
   const { data } = await query
     .order("is_default", { ascending: false })
     .order("created_at", { ascending: true })
