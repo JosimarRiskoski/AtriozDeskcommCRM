@@ -20,7 +20,6 @@
  */
 
 import { embedText } from "@/lib/ai/embed";
-import { isEmbeddingProviderConfigured } from "@/lib/ai/gateway";
 import { anonymize, detectResidualPii } from "@/lib/ai/anonymize";
 import { chunkText, computeContentHash } from "@/lib/ai/rag/chunker";
 import {
@@ -84,10 +83,7 @@ async function ensureConversationsSource(
     .single();
 
   if (error || !inserted) {
-    console.error(
-      "[kb-conversations] failed to ensure conversations source",
-      error?.message,
-    );
+    console.error("[kb-conversations] failed to ensure conversations source", error?.message);
     return null;
   }
   return (inserted as { id: string }).id;
@@ -121,14 +117,6 @@ export async function ingestConversationsBatch(
   const { organizationId, agentId, sinceTs } = args;
   const cap = args.cap ?? 50;
   const admin = createAdminClient();
-
-  if (!isEmbeddingProviderConfigured()) {
-    console.warn(
-      "[kb-conversations] embedding provider missing; skipping batch for org",
-      organizationId,
-    );
-    return { processed: 0, flaggedReview: 0, skipped: 0, embeddingSkipped: true };
-  }
 
   const sourceId = await ensureConversationsSource(organizationId, agentId);
   if (!sourceId) {
@@ -200,11 +188,7 @@ export async function ingestConversationsBatch(
       .order("sent_at", { ascending: true });
 
     if (msgErr) {
-      console.warn(
-        "[kb-conversations] messages query failed for conv",
-        conv.id,
-        msgErr.message,
-      );
+      console.warn("[kb-conversations] messages query failed for conv", conv.id, msgErr.message);
       skipped++;
       continue;
     }

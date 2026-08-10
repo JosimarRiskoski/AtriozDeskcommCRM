@@ -14,6 +14,7 @@
  *     de fallback: playbook por ponteiro + settings.llm da org + knobs de env).
  */
 import type pg from "pg";
+import { SAFE_AGENT_FALLBACK } from "@/lib/ai/guardrails-schema";
 
 export interface PublishedAgentConfig {
   agentId: string;
@@ -51,6 +52,15 @@ export interface PublishedAgentConfig {
   fallbackMessage?: string;
   dailyBudgetCents?: number;
   monthlyBudgetCents?: number;
+  triggerFilters?: {
+    keywordRegex: string | null;
+    businessHours: {
+      timezone: string;
+      start: string;
+      end: string;
+      weekdays: number[];
+    } | null;
+  };
   /** criadores (p/ mint do token efêmero de audit — padrão do runtime nativo). */
   versionCreatedBy: string | null;
   agentCreatedBy: string | null;
@@ -82,6 +92,7 @@ interface Row {
   selection_mode: "manual" | "connection" | "origin" | "stage";
   selection_reason: string;
   organization_handoff_rules: Record<string, unknown> | null;
+  trigger_config: Record<string, unknown> | null;
 }
 
 export async function loadPublishedAgentConfig(
@@ -139,6 +150,7 @@ export async function loadPublishedAgentConfig(
             v.cases_enabled,
             v.tool_ids,
             v.contact_field_access,
+            v.trigger_config,
             a.active_kb_version_id,
             a.config,
             (select hs.handoff_rules from human_support_settings hs where hs.organization_id = a.organization_id) as organization_handoff_rules,
@@ -203,6 +215,12 @@ export async function loadPublishedAgentConfig(
 
   const cfg = (r.config ?? {}) as Record<string, unknown>;
   const orgRules = (r.organization_handoff_rules ?? {}) as Record<string, unknown>;
+  const triggerConfig = (r.trigger_config ?? {}) as Record<string, unknown>;
+  const triggerFilters = (triggerConfig.filters ?? {}) as Record<string, unknown>;
+  const rawBusinessHours = triggerFilters.business_hours;
+  const businessHours = rawBusinessHours && typeof rawBusinessHours === "object"
+    ? rawBusinessHours as Record<string, unknown>
+    : null;
   const ragTopK =
     typeof cfg.rag_top_k === "number" &&
     Number.isInteger(cfg.rag_top_k) &&
@@ -273,12 +291,75 @@ export async function loadPublishedAgentConfig(
     fallbackMessage:
       typeof cfg.fallback_message === "string" && cfg.fallback_message.trim()
         ? cfg.fallback_message.trim()
-        : "Não encontrei essa informação na base autorizada. Vou encaminhar para uma pessoa.",
+        : SAFE_AGENT_FALLBACK,
     dailyBudgetCents: cents(cfg.daily_budget_cents),
     monthlyBudgetCents: cents(cfg.monthly_budget_cents),
+    triggerFilters: {
+      keywordRegex: typeof triggerFilters.keyword_regex === "string" && triggerFilters.keyword_regex.trim()
+        ? triggerFilters.keyword_regex.trim()
+        : null,
+      businessHours:
+        businessHours &&
+        typeof businessHours.timezone === "string" &&
+        typeof businessHours.start === "string" &&
+        typeof businessHours.end === "string" &&
+        Array.isArray(businessHours.weekdays)
+          ? {
+              timezone: businessHours.timezone,
+              start: businessHours.start,
+              end: businessHours.end,
+              weekdays: businessHours.weekdays.filter(
+                (day): day is number => typeof day === "number" && day >= 0 && day <= 6,
+              ),
+            }
+          : null,
+    },
     versionCreatedBy: r.version_created_by,
     agentCreatedBy: r.agent_created_by,
   };
+}
+
+export function evaluateAgentTrigger(
+  signal: string,
+  filters: PublishedAgentConfig["triggerFilters"],
+  now = new Date(),
+): { allowed: true } | { allowed: false; reason: "keyword_filter" | "business_hours" | "invalid_filter" } {
+  if (!filters) return { allowed: true };
+  if (filters.keywordRegex) {
+    try {
+      const expression = filters.keywordRegex.startsWith("(?i)")
+        ? new RegExp(filters.keywordRegex.slice(4), "i")
+        : new RegExp(filters.keywordRegex, "i");
+      if (!expression.test(signal)) return { allowed: false, reason: "keyword_filter" };
+    } catch {
+      return { allowed: false, reason: "invalid_filter" };
+    }
+  }
+  if (filters.businessHours) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: filters.businessHours.timezone,
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(now);
+      const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      const weekday = weekdayMap[parts.find((part) => part.type === "weekday")?.value ?? ""];
+      const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+      const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+      const current = `${hour}:${minute}`;
+      if (weekday === undefined || !filters.businessHours.weekdays.includes(weekday)) {
+        return { allowed: false, reason: "business_hours" };
+      }
+      if (current < filters.businessHours.start || current > filters.businessHours.end) {
+        return { allowed: false, reason: "business_hours" };
+      }
+    } catch {
+      return { allowed: false, reason: "invalid_filter" };
+    }
+  }
+  return { allowed: true };
 }
 
 /**
@@ -288,21 +369,32 @@ export async function loadPublishedAgentConfig(
  */
 export function matchesHandoffKeyword(signal: string, keywords: readonly string[]): boolean {
   if (keywords.length === 0) return false;
-  const lower = signal.toLowerCase();
-  return keywords.some((k) => lower.includes(k));
+  const normalize = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[\s;,.!?]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const normalizedSignal = normalize(signal);
+  return keywords.some((keyword) => {
+    const normalizedKeyword = normalize(keyword);
+    return normalizedKeyword.length > 0 && normalizedSignal.includes(normalizedKeyword);
+  });
 }
 
 export function renderAgentControlPolicy(config: PublishedAgentConfig): string {
   const forbiddenTopics = config.forbiddenTopics ?? [];
   const fixedResponses = config.fixedResponses ?? [];
-  const fallbackMessage =
-    config.fallbackMessage ?? "Não encontrei essa informação na base autorizada.";
+  const fallbackMessage = config.fallbackMessage ?? SAFE_AGENT_FALLBACK;
   const lines = [
     "## Limites obrigatórios deste agente",
     config.externalInternetAllowed
       ? "Use somente as ferramentas explicitamente habilitadas; acesso externo é permitido apenas por elas."
       : "Não busque nem use informações da internet externa.",
     `Quando a informação não estiver nas fontes autorizadas, responda exatamente: “${fallbackMessage}”`,
+    "Não ofereça atendimento humano por iniciativa própria. Encaminhe somente quando o cliente pedir uma pessoa ou quando uma regra obrigatória de handoff for acionada.",
     "Nunca invente preços, políticas, prazos, disponibilidade ou fatos ausentes.",
   ];
   if (forbiddenTopics.length > 0) {

@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import { useUpdateAgent } from "@/hooks/ai/useAgent";
-import { AGENT_CONFIG_DEFAULTS } from "@/lib/ai/guardrails-schema";
+import { AGENT_CONFIG_DEFAULTS, SAFE_AGENT_FALLBACK } from "@/lib/ai/guardrails-schema";
 
 const asLines = (value: unknown) =>
   Array.isArray(value) ? value.filter((item) => typeof item === "string").join("\n") : "";
@@ -17,7 +17,7 @@ const parseLines = (value: string) => [
   ...new Set(
     value
       .split("\n")
-      .map((item) => item.trim())
+      .map((item) => item.trim().replace(/[;,.!?]+$/g, "").trim())
       .filter(Boolean),
   ),
 ];
@@ -156,6 +156,10 @@ export function ControlPolicyTab({ agent, readOnly }: { agent: AgentRow; readOnl
             onChange={(e) => setFallback(e.target.value)}
             disabled={readOnly}
           />
+          <p className="text-xs text-muted-foreground">
+            Não use frases como “vou encaminhar” aqui. O CRM só promete atendimento humano depois
+            de criar um caso real; este texto deve pedir mais detalhes sem desistir da conversa.
+          </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
@@ -206,6 +210,11 @@ export function ControlPolicyTab({ agent, readOnly }: { agent: AgentRow; readOnl
             }
           >
             {update.isPending ? "Salvando…" : "Salvar controles"}
+          </Button>
+        )}
+        {!readOnly && fallback.trim() !== SAFE_AGENT_FALLBACK && /encaminhar|atendente|humano/i.test(fallback) && (
+          <Button type="button" variant="outline" onClick={() => setFallback(SAFE_AGENT_FALLBACK)}>
+            Usar fallback seguro recomendado
           </Button>
         )}
       </Card>

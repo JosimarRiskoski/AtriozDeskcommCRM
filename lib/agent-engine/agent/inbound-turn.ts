@@ -89,6 +89,7 @@ import {
 import { loadPlaybook } from "./playbook";
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from "./org-memory";
 import {
+  evaluateAgentTrigger,
   loadPublishedAgentConfig,
   matchesHandoffKeyword,
   renderAgentControlPolicy,
@@ -627,6 +628,7 @@ export async function runAgentTurn(
   };
   // Contexto do RUN em toda linha de log do turno (F2-16): job_id É o run id.
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId });
+  const clock = deps.clock ?? ((): Date => new Date());
 
   // A chave geral controla respostas a mensagens recebidas. Follow-ups possuem
   // inscrição e publicação próprias e não podem ser ligados/desligados por ela.
@@ -666,6 +668,14 @@ export async function runAgentTurn(
       model: agentConfig.model,
     });
   }
+  const { rows: channelRows } = await pool.query<{ daily_message_limit: number | null }>(
+    `select daily_message_limit
+       from channel_sessions
+      where id = $1 and organization_id = $2
+      limit 1`,
+    [input.channelSessionId, tenantId],
+  );
+  const crmDailyLimit = channelRows[0]?.daily_message_limit ?? null;
   // Knobs por-turno: a versão publicada vence o env; sem ela, env (main.ts).
   const maxSteps = agentConfig?.maxSteps ?? deps.knobs.maxSteps;
   // Fallback de modelo das chamadas AUXILIARES (classificadores/compaction/promessa):
@@ -785,6 +795,18 @@ export async function runAgentTurn(
   // modelo BARATO; o resumo compactado entra no lugar do rolling summary e o transcript
   // integral é trocado por uma cauda recente sob orçamento (regra de cache 15). O rolling
   // summary DURÁVEL segue vindo do checkpoint de fechamento; aqui ele só alimenta o prompt.
+  if (agentConfig !== null) {
+    const triggerDecision = evaluateAgentTrigger(inboundSignal, agentConfig.triggerFilters, clock());
+    if (!triggerDecision.allowed) {
+      runLog.info("turno ignorado pelos filtros publicados do agente", {
+        kind: job.kind,
+        reason: triggerDecision.reason,
+        agent_id: agentConfig.agentId,
+      });
+      return;
+    }
+  }
+
   let effectivePrevious = previous;
   let effectiveContext = openingContext.context;
   if (deps.knobs.compaction !== undefined) {
@@ -869,7 +891,6 @@ export async function runAgentTurn(
   const turnCrmCfg =
     agentConfig !== null ? { ...deps.crmCfg, agentActorId: agentConfig.agentId } : deps.crmCfg;
   const channel = (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, turnCrmCfg)))(pool);
-  const clock = deps.clock ?? ((): Date => new Date());
   // STOP lido no turno (fonte: CRM via get_lead_context) — combinado com o cache
   // durável leads.is_opted_out no gate 1 da cadeia (F2-13).
   const optedOutThisTurn = openingContext.context.contact.is_blocked;
@@ -1026,10 +1047,8 @@ export async function runAgentTurn(
             channelSessionId: input.channelSessionId,
             body,
             optedOutThisTurn,
-            // ponytail: channel_sessions.daily_message_limit do CRM ainda não é lido
-            // no runtime — null cai nos degraus de warm-up (conservadores). Injetar
-            // aqui quando o drain expuser o limite da sessão.
-            crmDailyLimit: null,
+            // Limite absoluto configurado na conexão do CRM.
+            crmDailyLimit,
             now: clock(),
             sleep: deps.sleep,
             lgpd,

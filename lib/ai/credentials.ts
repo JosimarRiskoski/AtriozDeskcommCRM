@@ -18,13 +18,10 @@ export interface LoadedCredential {
 }
 
 export class CredentialUnavailableError extends Error {
-  constructor(public readonly reason:
-    | "not_found"
-    | "inactive"
-    | "not_validated"
-    | "wrong_org"
-    | "decrypt_failed",
-  message: string,
+  constructor(
+    public readonly reason:
+      "not_found" | "inactive" | "not_validated" | "wrong_org" | "decrypt_failed",
+    message: string,
   ) {
     super(message);
     this.name = "CredentialUnavailableError";
@@ -98,4 +95,33 @@ export async function loadCredential(
   }
 
   return { apiKey, provider: data.provider, label: data.label };
+}
+
+/**
+ * Resolve a credencial validada mais recente de um provedor para tarefas
+ * internas que não estão vinculadas a uma versão específica, como embeddings.
+ */
+export async function loadLatestCredential(
+  provider: Provider,
+  organizationId: string,
+): Promise<LoadedCredential> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("ai_provider_credentials")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("provider", provider)
+    .eq("is_active", true)
+    .not("validated_at", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
+  if (error || !data) {
+    throw new CredentialUnavailableError(
+      "not_found",
+      error ? `query_error: ${error.message}` : `credential ${provider} validada não encontrada`,
+    );
+  }
+  return loadCredential(data.id, organizationId);
 }

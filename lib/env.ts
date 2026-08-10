@@ -173,7 +173,7 @@ if (!env.AI_GATEWAY_API_KEY && !env.ANTHROPIC_API_KEY) {
 }
 if (!env.OPENAI_API_KEY) {
   console.warn(
-    "[env] Server OPENAI_API_KEY is not configured. The RAG embedding pipeline is unavailable, but published agents can still answer with a validated BYO credential saved in the CRM.",
+    "[env] Server OPENAI_API_KEY is not configured. RAG will use a validated OpenAI credential saved in the CRM; without one, knowledge indexing and retrieval remain unavailable.",
   );
 }
 if (!env.IMPERSONATE_COOKIE_SECRET || env.IMPERSONATE_COOKIE_SECRET.length < 32) {

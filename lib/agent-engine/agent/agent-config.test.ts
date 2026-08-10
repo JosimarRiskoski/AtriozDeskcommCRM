@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 
 import {
+  evaluateAgentTrigger,
   loadPublishedAgentConfig,
   matchesHandoffKeyword,
   renderAgentControlPolicy,
@@ -97,6 +98,20 @@ describe("controles compreensíveis do agente", () => {
       true,
     );
   });
+
+  it("ignora acentos e pontuação acidental no fim da regra de handoff", () => {
+    expect(matchesHandoffKeyword("Enviei meu documento pessoal", ["Documento pessoal;"])).toBe(
+      true,
+    );
+    expect(matchesHandoffKeyword("Segue a fatura de energia", ["FÁTURA DE ENERGIA."])).toBe(true);
+  });
+
+  it("a política não oferece atendimento humano por iniciativa própria", async () => {
+    const cfg = await loadPublishedAgentConfig(poolWith(baseRow), "org1", "cs1");
+    const policy = renderAgentControlPolicy(cfg!);
+    expect(policy).toContain("Não ofereça atendimento humano por iniciativa própria");
+    expect(policy).not.toContain("Vou encaminhar para uma pessoa");
+  });
 });
 
 describe("seleção de agente por conversa", () => {
@@ -124,5 +139,35 @@ describe("seleção de agente por conversa", () => {
       "origin",
       "Regra automática: Tráfego pago",
     ]);
+  });
+});
+
+describe("filtros publicados do agente", () => {
+  it("aceita regex com o prefixo (?i) mostrado na própria tela", () => {
+    expect(
+      evaluateAgentTrigger("Quero saber o STATUS", {
+        keywordRegex: "(?i)\\b(pedido|status)\\b",
+        businessHours: null,
+      }),
+    ).toEqual({ allowed: true });
+  });
+
+  it("respeita horário e fuso configurados", () => {
+    const filters = {
+      keywordRegex: null,
+      businessHours: {
+        timezone: "America/Sao_Paulo",
+        start: "08:00",
+        end: "20:00",
+        weekdays: [1, 2, 3, 4, 5],
+      },
+    };
+    expect(evaluateAgentTrigger("oi", filters, new Date("2026-08-10T15:00:00Z"))).toEqual({
+      allowed: true,
+    });
+    expect(evaluateAgentTrigger("oi", filters, new Date("2026-08-10T01:00:00Z"))).toEqual({
+      allowed: false,
+      reason: "business_hours",
+    });
   });
 });

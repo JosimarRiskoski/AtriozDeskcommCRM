@@ -81,6 +81,9 @@ export type Guardrails = z.infer<typeof guardrailsSchema>;
 // Agent config (vai dentro de ai_agents.config jsonb)
 // ---------------------------------------------------------------------------
 
+export const SAFE_AGENT_FALLBACK =
+  "Não encontrei essa informação nas fontes autorizadas. Pode detalhar um pouco mais a sua dúvida?";
+
 export const agentConfigSchema = z.object({
   temperature: z.number().min(0).max(2).default(0.4),
   max_tokens: z.number().int().min(64).max(4096).default(1024),
@@ -106,7 +109,7 @@ export const agentConfigSchema = z.object({
     .trim()
     .min(1)
     .max(500)
-    .default("Não encontrei essa informação na base autorizada. Vou encaminhar para uma pessoa."),
+    .default(SAFE_AGENT_FALLBACK),
   daily_budget_cents: z.number().int().min(0).max(10000000).default(0),
   monthly_budget_cents: z.number().int().min(0).max(100000000).default(0),
 });
@@ -124,8 +127,7 @@ export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
   forbidden_topics: [],
   human_required_topics: [],
   fixed_responses: [],
-  fallback_message:
-    "Não encontrei essa informação na base autorizada. Vou encaminhar para uma pessoa.",
+  fallback_message: SAFE_AGENT_FALLBACK,
   daily_budget_cents: 0,
   monthly_budget_cents: 0,
 };

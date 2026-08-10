@@ -47,6 +47,8 @@ import { mintEphemeralToken, revokeEphemeralToken } from "./mcp_token";
 import { pickToolsFromMcp, type RuntimeHandoffSignal } from "./tools";
 import { serializeSteps } from "./serialize";
 import { resolveWahaChatId } from "@/lib/waha/send";
+import { searchKnowledge } from "@/lib/agent-engine/agent/search-knowledge";
+import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 
 export interface RunAgentInput {
   runId: string;
@@ -111,6 +113,8 @@ interface AgentRow {
   id: string;
   organization_id: string;
   created_by: string | null;
+  active_kb_version_id: string | null;
+  config: Record<string, unknown> | null;
 }
 
 function buildSentinelRegex(keywords: string[]): RegExp | null {
@@ -242,7 +246,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
 
     const { data: agentRaw } = await admin
       .from("ai_agents")
-      .select("id, organization_id, created_by")
+      .select("id, organization_id, created_by, active_kb_version_id, config")
       .eq("id", run.agent_id)
       .eq("organization_id", run.organization_id)
       .maybeSingle();
@@ -425,9 +429,87 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       { role: "user" as const, content: inboundBody },
     ];
 
+    let ragContext = "";
+    let ragTrace: ReturnType<typeof serializeSteps> = [];
+    if (run.is_dry_run && agent?.active_kb_version_id) {
+      const rawConfig = agent.config ?? {};
+      const topK = typeof rawConfig.rag_top_k === "number" ? rawConfig.rag_top_k : 5;
+      const threshold =
+        typeof rawConfig.rag_similarity_threshold === "number"
+          ? rawConfig.rag_similarity_threshold
+          : 0.72;
+      const retrieval = await (async () => {
+        try {
+          return await searchKnowledge(getRequestPool(), {
+            organizationId: run.organization_id,
+            kbVersionId: agent.active_kb_version_id!,
+            query: inboundBody,
+            topK,
+            threshold,
+          });
+        } catch (error) {
+          return {
+            ok: false as const,
+            error: {
+              code: "knowledge_unavailable",
+              message:
+                error instanceof Error ? error.message : "Falha ao acessar a base de conhecimento.",
+            },
+          };
+        }
+      })();
+      if (retrieval.ok) {
+        ragContext =
+          retrieval.results.length > 0
+            ? `\n\n[BASE DE CONHECIMENTO AUTORIZADA]\n${retrieval.results.map((hit) => hit.content).join("\n\n")}`
+            : "\n\n[BASE DE CONHECIMENTO] Nenhum trecho relevante foi encontrado para esta pergunta.";
+        ragTrace = [
+          {
+            step: 0,
+            tool_calls: [
+              {
+                tool_name: "search_knowledge",
+                args: {
+                  query: inboundBody,
+                  kb_version_id: agent.active_kb_version_id,
+                  top_k: topK,
+                },
+                result: {
+                  count: retrieval.results.length,
+                  sources: retrieval.results.map((hit) => ({
+                    chunk_id: hit.chunk_id,
+                    knowledge_source_id: hit.knowledge_source_id,
+                    similarity: hit.similarity,
+                  })),
+                },
+              },
+            ],
+          },
+        ];
+      } else {
+        ragContext = `\n\n[BASE DE CONHECIMENTO INDISPONÍVEL] ${retrieval.error.message}`;
+        ragTrace = [
+          {
+            step: 0,
+            tool_calls: [
+              {
+                tool_name: "search_knowledge",
+                args: {
+                  query: inboundBody,
+                  kb_version_id: agent.active_kb_version_id,
+                  top_k: topK,
+                },
+                result: retrieval.error,
+              },
+            ],
+          },
+        ];
+      }
+    }
+
     const result = await generateText({
       model,
-      system: version.system_prompt,
+      system: `${version.system_prompt}${ragContext}`,
       messages,
       tools,
       stopWhen: [stepCountIs(version.max_steps), budgetGuard],
@@ -444,7 +526,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       outputTokens: usage.outputTokens,
     });
     const latencyMs = Date.now() - startedAt;
-    const trace = serializeSteps(result.steps as never);
+    const trace = [...ragTrace, ...serializeSteps(result.steps as never)];
 
     // 13) Handoff via tool call?
     if (handoffSignal.triggered) {

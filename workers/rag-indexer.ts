@@ -4,17 +4,18 @@
  *
  * Events handled:
  *   - nuvemshop.product_synced  → fetches product, embeds chunks, activates version
- *   - knowledge_source.updated  → stub (full reindex deferred to S-06.05..07)
+ *   - knowledge_source.updated  → reconstrói e ativa uma versão com conteúdo real
  *
  * Service-role caveat (CLAUDE.md §multi-tenancy): every query filters
  * `organization_id` from the trusted event row, never from user input.
  */
 
-import { isEmbeddingProviderConfigured } from "@/lib/ai/gateway";
 import { embedText } from "@/lib/ai/embed";
 import { acquireDebounce } from "@/lib/ai/rag/debounce";
 import { chunkText, computeContentHash } from "@/lib/ai/rag/chunker";
+import { estimateTokens } from "@/lib/ai/runtime/history";
 import { formatProductForRag, type NuvemshopProduct } from "@/lib/ai/rag/format-product";
+import { ingestPolicyFile } from "@/lib/ai/rag/ingest/policy";
 import {
   createKnowledgeVersion,
   markVersionReady,
@@ -51,13 +52,16 @@ function skip(reason: string): SkipResult {
  */
 async function resolveAgent(
   organizationId: string,
+  preferredAgentId?: string,
 ): Promise<{ id: string; active_kb_version_id: string | null } | null> {
   const admin = createAdminClient();
-  const { data } = await admin
+  let query = admin
     .from("ai_agents")
     .select("id, organization_id, active_kb_version_id, is_active, is_default")
     .eq("organization_id", organizationId)
-    .eq("is_active", true)
+    .eq("is_active", true);
+  if (preferredAgentId) query = query.eq("id", preferredAgentId);
+  const { data } = await query
     .order("is_default", { ascending: false })
     .order("created_at", { ascending: true })
     .limit(1)
@@ -92,9 +96,7 @@ async function resolveNuvemshopCredentials(
 
   // store_metadata carries the storeId as { store_id: string } or { id: number }
   const meta = (data as { store_metadata: Record<string, unknown> | null }).store_metadata ?? {};
-  const storeId = String(
-    meta["store_id"] ?? meta["id"] ?? "",
-  );
+  const storeId = String(meta["store_id"] ?? meta["id"] ?? "");
   if (!storeId) return null;
 
   // Decrypt the access token via Postgres helper fn_decrypt_oauth.
@@ -157,10 +159,7 @@ async function fetchNuvemshopProduct(
 // Event handlers
 // ---------------------------------------------------------------------------
 
-async function handleProductSynced(
-  row: EventRow,
-  agentId: string,
-): Promise<ProcessResult> {
+async function handleProductSynced(row: EventRow, agentId: string): Promise<ProcessResult> {
   const productId = String(row.payload["product_id"] ?? "");
   if (!productId) {
     return skip("missing_product_id_in_payload");
@@ -209,37 +208,38 @@ async function handleProductSynced(
     }
 
     // Upsert chunk — conflict on (organization_id, kb_version_id, content_hash) → do nothing
-    const { error: upsertErr } = await admin
-      .from("ai_chunks")
-      .upsert(
-        {
-          organization_id: row.organization_id,
-          kb_version_id: versionId,
-          knowledge_source_id: null, // product-level indexing; source link deferred to S-06.05
-          position: i,
-          content,
-          content_hash: contentHash,
-          embedding: embedding as unknown as string,
-          metadata: {
-            source_type: "nuvemshop_product",
-            product_id: productId,
-          },
+    const { error: upsertErr } = await admin.from("ai_chunks").upsert(
+      {
+        organization_id: row.organization_id,
+        kb_version_id: versionId,
+        knowledge_source_id: null, // product-level indexing; source link deferred to S-06.05
+        position: i,
+        content,
+        content_hash: contentHash,
+        token_count: estimateTokens(content),
+        embedding: embedding as unknown as string,
+        metadata: {
+          source_type: "nuvemshop_product",
+          product_id: productId,
         },
-        {
-          onConflict: "organization_id,kb_version_id,content_hash",
-          ignoreDuplicates: true,
-        },
-      );
+      },
+      {
+        onConflict: "knowledge_source_id,kb_version_id,position",
+        ignoreDuplicates: true,
+      },
+    );
 
     if (upsertErr) {
       // Log but don't fail the whole version for a single chunk upsert error.
-      console.warn(
-        `[rag-indexer] chunk upsert error at position ${i}:`,
-        upsertErr.message,
-      );
+      console.warn(`[rag-indexer] chunk upsert error at position ${i}:`, upsertErr.message);
     } else {
       successCount++;
     }
+  }
+
+  if (successCount === 0) {
+    await markVersionFailed(versionId, row.organization_id, "nenhum chunk gravado");
+    return { type: "error", detail: "no_chunks_written" };
   }
 
   await markVersionReady(versionId, row.organization_id, successCount);
@@ -252,6 +252,180 @@ async function handleProductSynced(
   return { type: "ok", versionId, chunkCount: successCount };
 }
 
+/**
+ * Reconstrói uma única versão com todas as fontes prontas do agente. A versão
+ * nova só é ativada depois de possuir chunks reais; se algo falhar, a versão
+ * anterior permanece atendendo.
+ */
+async function handleKnowledgeSourceUpdated(
+  row: EventRow,
+  agentId: string,
+): Promise<ProcessResult> {
+  const admin = createAdminClient();
+  const { data: sourceRows, error: sourceError } = await admin
+    .from("ai_knowledge_sources")
+    .select("id, source_type, name, source_metadata")
+    .eq("organization_id", row.organization_id)
+    .eq("agent_id", agentId)
+    .eq("status", "ready")
+    .eq("is_active", true);
+  if (sourceError) return { type: "error", detail: `sources_query_failed: ${sourceError.message}` };
+
+  const sources = (sourceRows ?? []) as Array<{
+    id: string;
+    source_type: string;
+    name: string;
+    source_metadata: Record<string, unknown> | null;
+  }>;
+  if (sources.length === 0) return skip("no_sources");
+
+  const { data: itemRows, error: itemError } = await admin
+    .from("ai_faq_items")
+    .select("knowledge_source_id, question, answer, position")
+    .eq("organization_id", row.organization_id)
+    .in(
+      "knowledge_source_id",
+      sources.map((source) => source.id),
+    )
+    .order("position", { ascending: true });
+  if (itemError) return { type: "error", detail: `items_query_failed: ${itemError.message}` };
+
+  const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const chunks: Array<{ content: string; sourceId: string; sourceType: string }> = [];
+  for (const item of (itemRows ?? []) as Array<{
+    knowledge_source_id: string;
+    question: string;
+    answer: string;
+  }>) {
+    const source = sourceById.get(item.knowledge_source_id);
+    if (!source) continue;
+    for (const content of chunkText(`Pergunta: ${item.question}\nResposta: ${item.answer}`)) {
+      chunks.push({ content, sourceId: source.id, sourceType: source.source_type });
+    }
+  }
+
+  for (const source of sources.filter((candidate) => candidate.source_type === "policy")) {
+    const blobPath = source.source_metadata?.["blob_path"];
+    const filename = String(source.source_metadata?.["filename"] ?? "").toLowerCase();
+    if (typeof blobPath !== "string" || (!filename.endsWith(".pdf") && !filename.endsWith(".md"))) {
+      continue;
+    }
+    try {
+      const extracted = await ingestPolicyFile({
+        organizationId: row.organization_id,
+        agentId,
+        knowledgeSourceId: source.id,
+        blobPath,
+        ext: filename.endsWith(".pdf") ? "pdf" : "md",
+      });
+      for (const content of extracted.chunks) {
+        chunks.push({ content, sourceId: source.id, sourceType: source.source_type });
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await admin
+        .from("ai_knowledge_sources")
+        .update({ last_index_status: "failed", last_index_error: detail })
+        .eq("id", source.id)
+        .eq("organization_id", row.organization_id);
+      return { type: "error", detail: `policy_extract_failed: ${detail}` };
+    }
+  }
+
+  const reusableSources = sources.filter(
+    (source) => !["faq", "policy"].includes(source.source_type),
+  );
+  if (reusableSources.length > 0) {
+    const { data: reusableRows, error: reusableError } = await admin
+      .from("ai_chunks")
+      .select("knowledge_source_id, content")
+      .eq("organization_id", row.organization_id)
+      .in(
+        "knowledge_source_id",
+        reusableSources.map((source) => source.id),
+      );
+    if (reusableError) {
+      return { type: "error", detail: `existing_chunks_query_failed: ${reusableError.message}` };
+    }
+    for (const item of (reusableRows ?? []) as Array<{
+      knowledge_source_id: string | null;
+      content: string;
+    }>) {
+      if (!item.knowledge_source_id) continue;
+      const source = sourceById.get(item.knowledge_source_id);
+      if (!source) continue;
+      chunks.push({ content: item.content, sourceId: source.id, sourceType: source.source_type });
+    }
+  }
+  const uniqueChunks = Array.from(
+    new Map(
+      chunks.map((chunk) => [`${chunk.sourceId}:${computeContentHash(chunk.content)}`, chunk]),
+    ).values(),
+  );
+  if (uniqueChunks.length === 0) return skip("no_content_to_index");
+
+  const { versionId } = await createKnowledgeVersion({
+    agentId,
+    organizationId: row.organization_id,
+    sourceType: "knowledge_source",
+  });
+  let written = 0;
+  const writtenBySource = new Map<string, number>();
+
+  for (let index = 0; index < uniqueChunks.length; index++) {
+    const chunk = uniqueChunks[index]!;
+    try {
+      const { embedding } = await embedText(chunk.content, { organizationId: row.organization_id });
+      const { error } = await admin.from("ai_chunks").upsert(
+        {
+          organization_id: row.organization_id,
+          kb_version_id: versionId,
+          knowledge_source_id: chunk.sourceId,
+          position: index,
+          content: chunk.content,
+          content_hash: computeContentHash(chunk.content),
+          token_count: estimateTokens(chunk.content),
+          embedding: embedding as unknown as string,
+          metadata: { source_type: chunk.sourceType },
+        },
+        { onConflict: "knowledge_source_id,kb_version_id,position", ignoreDuplicates: true },
+      );
+      if (error) throw new Error(error.message);
+      written++;
+      writtenBySource.set(chunk.sourceId, (writtenBySource.get(chunk.sourceId) ?? 0) + 1);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await markVersionFailed(versionId, row.organization_id, `index_failed@${index}: ${detail}`);
+      return { type: "error", detail: `index_failed at chunk ${index}: ${detail}` };
+    }
+  }
+
+  if (written === 0) {
+    await markVersionFailed(versionId, row.organization_id, "nenhum chunk gravado");
+    return { type: "error", detail: "no_chunks_written" };
+  }
+
+  await markVersionReady(versionId, row.organization_id, written);
+  await activateVersion({ agentId, versionId, organizationId: row.organization_id });
+
+  const indexedAt = new Date().toISOString();
+  for (const source of sources) {
+    const sourceCount = writtenBySource.get(source.id) ?? 0;
+    await admin
+      .from("ai_knowledge_sources")
+      .update({
+        last_index_status: sourceCount > 0 ? "success" : "failed",
+        last_index_error: sourceCount > 0 ? null : "nenhum chunk foi gravado nesta indexação",
+        last_indexed_at: indexedAt,
+        chunks_count: sourceCount,
+      })
+      .eq("id", source.id)
+      .eq("organization_id", row.organization_id);
+  }
+
+  return { type: "ok", versionId, chunkCount: written };
+}
+
 // ---------------------------------------------------------------------------
 // Main processor — exported for handler adapter + unit tests
 // ---------------------------------------------------------------------------
@@ -260,22 +434,19 @@ export async function processRagIndexer(row: EventRow): Promise<HandlerResult> {
   const consumerKey = "rag-indexer.v1";
 
   // Lag monitor (IA-11)
-  const lagMs = Date.now() - new Date(row.payload["created_at"] as string ?? row.id).getTime();
+  const lagMs = Date.now() - new Date((row.payload["created_at"] as string) ?? row.id).getTime();
   if (lagMs > LAG_WARN_MS) {
     console.warn(
       `[rag-indexer] lag exceeded 5min: ${Math.round(lagMs / 1000)}s for event ${row.id} (${row.event_type})`,
     );
   }
 
-  // Guard: embedding provider must be configured.
-  if (!isEmbeddingProviderConfigured()) {
-    return { consumer_key: consumerKey, status: "skipped", detail: "openai_key_missing" };
-  }
-
   // Resolve the active agent for this org.
   let agentId: string;
   try {
-    const agent = await resolveAgent(row.organization_id);
+    const eventAgentId =
+      typeof row.payload["agent_id"] === "string" ? row.payload["agent_id"] : undefined;
+    const agent = await resolveAgent(row.organization_id, eventAgentId);
     if (!agent) {
       return { consumer_key: consumerKey, status: "skipped", detail: "agent_inactive_or_missing" };
     }
@@ -304,14 +475,15 @@ export async function processRagIndexer(row: EventRow): Promise<HandlerResult> {
         break;
 
       case "knowledge_source.updated":
-        // Wave 4 stub — full reindex deferred to S-06.05/06/07
-        console.warn(
-          "[rag-indexer] knowledge_source.updated reindex deferred to S-06.05/06/07",
-        );
-        return { consumer_key: consumerKey, status: "skipped", detail: "knowledge_source_reindex_deferred" };
+        result = await handleKnowledgeSourceUpdated(row, agentId);
+        break;
 
       default:
-        return { consumer_key: consumerKey, status: "skipped", detail: `unhandled_event:${row.event_type}` };
+        return {
+          consumer_key: consumerKey,
+          status: "skipped",
+          detail: `unhandled_event:${row.event_type}`,
+        };
     }
 
     if (result.type === "skip") {

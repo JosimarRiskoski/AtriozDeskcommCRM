@@ -82,6 +82,7 @@ export interface IngestPolicyArgs {
 
 export interface IngestPolicyResult {
   chunkCount: number;
+  chunks: string[];
 }
 
 /**
@@ -122,5 +123,5 @@ export async function ingestPolicyFile(args: IngestPolicyArgs): Promise<IngestPo
     `[ai-policy-upload] ingestPolicyFile: ks=${knowledgeSourceId} ext=${ext} chunks=${chunks.length}`,
   );
 
-  return { chunkCount: chunks.length };
+  return { chunkCount: chunks.length, chunks };
 }

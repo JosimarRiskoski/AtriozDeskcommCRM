@@ -15,28 +15,28 @@
  * Ids de envio (conversa + número) vêm da ROW do lead no harness (fonte confiável),
  * NUNCA do payload do modelo — o cron só carrega o snapshot da promessa (F3-02).
  */
-import { z } from 'zod';
-import type pg from 'pg';
+import { z } from "zod";
+import type pg from "pg";
 
-import { withFields } from '../obs/logger';
-import type { JobRow } from '../queue/queue';
-import { getLeadContext, type LeadContext } from '../edge/crm/get-lead-context';
-import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
-import { applySendOutcome } from '../edge/crm/send-message';
-import { runBeforeSend } from '../guardrails/before-send';
-import { classifyPromise } from '../guardrails/promise/semantic';
-import { scheduleCronJob } from '../cron/scheduler';
+import { withFields } from "../obs/logger";
+import type { JobRow } from "../queue/queue";
+import { getLeadContext, type LeadContext } from "../edge/crm/get-lead-context";
+import { WahaChannelAdapter } from "../edge/channel/waha-adapter";
+import { applySendOutcome } from "../edge/crm/send-message";
+import { runBeforeSend } from "../guardrails/before-send";
+import { classifyPromise } from "../guardrails/promise/semantic";
+import { scheduleCronJob } from "../cron/scheduler";
 import {
   JobSettledError,
   ritualBlocks,
   runAgentTurn,
   type InboundTurnDeps,
   type LeadCheckpointRow,
-} from './inbound-turn';
-import { isLeadInHandoff } from './human-handoff';
-import type { LeadStateRow } from './lead-state';
-import { loadReentryTemplate, pickReentryVariant } from './reentry-template';
-import { classifyFollowupReply, decideFollowupTiming } from './followup-flow-classify';
+} from "./inbound-turn";
+import { isLeadInHandoff } from "./human-handoff";
+import type { LeadStateRow } from "./lead-state";
+import { loadReentryTemplate, pickReentryVariant } from "./reentry-template";
+import { classifyFollowupReply, decideFollowupTiming } from "./followup-flow-classify";
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -56,14 +56,14 @@ export const followupTurnPayloadSchema = z
     // F3-04: 'template' = re-entrada DETERMINÍSTICA — envia a variante versionada
     // direto pela cadeia de guardrails, sem LLM (custo $0, blueprint). Ausente/'agent'
     // = run normal do agente (comportamento F3-03 intocado).
-    mode: z.enum(['agent', 'template']).optional(),
+    mode: z.enum(["agent", "template"]).optional(),
     // Onda 5 (Task 5.1): turno DIRIGIDO POR FLUXO (lib/followup/engine.ts enfileira
     // este payload, campo a campo IDÊNTICO ao FollowupJobRequest.payload de lá).
     // Presente ⇒ ramo guardado em runFlowDrivenTurn; ausente ⇒ comportamento LEGADO
     // (schedule_followup / F3-03 / F3-04) intocado — nem lido.
     followup_enrollment_id: z.string().uuid().optional(),
     node_id: z.string().min(1).optional(),
-    purpose: z.enum(['send_message', 'classify', 'decide_timing']).optional(),
+    purpose: z.enum(["send_message", "classify", "decide_timing"]).optional(),
     prompt_hint: z.string().optional(),
     classes: z.array(z.string()).optional(),
     hint: z.string().optional(),
@@ -74,9 +74,9 @@ export const followupTurnPayloadSchema = z
 /** Resultado de um turno dirigido por fluxo — espelha `TurnResult` de lib/followup/turn-bridge.ts
  *  (agent-engine não importa followup/* — regra dura de dependência numa direção só). */
 export type FollowupFlowTurnResult =
-  | { kind: 'sent' }
-  | { kind: 'classified'; class: string }
-  | { kind: 'timing'; proposed_at: string };
+  | { kind: "sent" }
+  | { kind: "classified"; class: string }
+  | { kind: "timing"; proposed_at: string };
 
 /**
  * `InboundTurnDeps` + o callback que fecha o turno dirigido por fluxo de volta
@@ -87,7 +87,12 @@ export type FollowupFlowTurnResult =
 export interface FollowupTurnDeps extends InboundTurnDeps {
   completeFollowupTurn?: (
     pool: pg.Pool,
-    input: { organizationId: string; enrollmentId: string; nodeId: string; result: FollowupFlowTurnResult },
+    input: {
+      organizationId: string;
+      enrollmentId: string;
+      nodeId: string;
+      result: FollowupFlowTurnResult;
+    },
   ) => Promise<void>;
 }
 
@@ -95,13 +100,13 @@ export interface FollowupTurnDeps extends InboundTurnDeps {
 function humanizeElapsed(ms: number): string {
   if (ms >= DAY_MS) {
     const days = Math.floor(ms / DAY_MS);
-    return days === 1 ? '1 dia' : `${days} dias`;
+    return days === 1 ? "1 dia" : `${days} dias`;
   }
   if (ms >= HOUR_MS) {
     const hours = Math.floor(ms / HOUR_MS);
-    return hours === 1 ? '1 hora' : `${hours} horas`;
+    return hours === 1 ? "1 hora" : `${hours} horas`;
   }
-  return 'menos de uma hora';
+  return "menos de uma hora";
 }
 
 /**
@@ -123,17 +128,21 @@ export function buildTemporalBlock(input: {
     const elapsedMs = input.now.getTime() - Date.parse(input.lastInbound.sentAt);
     parts.push(
       Number.isNaN(elapsedMs)
-        ? 'Você está retomando o contato com o lead após o intervalo combinado.'
+        ? "Você está retomando o contato com o lead após o intervalo combinado."
         : `Passaram ${humanizeElapsed(Math.max(0, elapsedMs))} desde a última resposta do lead.`,
     );
   } else {
-    parts.push('Você está retomando o contato com o lead; não há resposta recente registrada na conversa.');
+    parts.push(
+      "Você está retomando o contato com o lead; não há resposta recente registrada na conversa.",
+    );
   }
 
   const promise = input.promise?.trim();
   if (promise) {
     parts.push(
-      input.promisedAt ? `Você prometeu: ${promise} (para ${input.promisedAt}).` : `Você prometeu: ${promise}.`,
+      input.promisedAt
+        ? `Você prometeu: ${promise} (para ${input.promisedAt}).`
+        : `Você prometeu: ${promise}.`,
     );
   }
 
@@ -146,7 +155,7 @@ export function buildTemporalBlock(input: {
     parts.push(`A última coisa que o lead disse foi: "${input.lastInbound.body}".`);
   }
 
-  return parts.join(' ');
+  return parts.join(" ");
 }
 
 /** Abertura do follow-up: bloco temporal no topo do sufixo + o ritual padrão. */
@@ -158,25 +167,25 @@ function buildFollowupOpeningMessage(
   notesIndexBlock: string,
 ): string {
   return [
-    'Follow-up agendado: você havia combinado retornar a este lead — NÃO houve nova mensagem dele desde então.',
-    '',
-    '## Contexto temporal do follow-up',
+    "Follow-up agendado: você havia combinado retornar a este lead — NÃO houve nova mensagem dele desde então.",
+    "",
+    "## Contexto temporal do follow-up",
     temporalBlock,
-    '',
+    "",
     ...ritualBlocks(previous, leadState, context, notesIndexBlock),
-    '',
-    'Retome a conversa com naturalidade usando a tool send_message — NUNCA escreva a resposta como texto direto',
-    '(texto fora de tool é descartado pelo runtime). Use get_lead_context se precisar reler o contexto.',
-    'Houve avanço REAL no funil neste turno? Marque-o com update_lead_state (só o próximo estágio válido).',
-    'Aprendeu algo durável sobre o lead? Salve com save_lead_note (a headline entra no índice de memória).',
-  ].join('\n');
+    "",
+    "Retome a conversa com naturalidade usando a tool send_message — NUNCA escreva a resposta como texto direto",
+    "(texto fora de tool é descartado pelo runtime). Use get_lead_context se precisar reler o contexto.",
+    "Houve avanço REAL no funil neste turno? Marque-o com update_lead_state (só o próximo estágio válido).",
+    "Aprendeu algo durável sobre o lead? Salve com save_lead_note (a headline entra no índice de memória).",
+  ].join("\n");
 }
 
 /** Última mensagem inbound do contexto (a "última coisa que o lead disse" — Z). */
 function lastInboundOf(context: LeadContext): { body: string; sentAt: string } | null {
   for (let i = context.messages.length - 1; i >= 0; i -= 1) {
     const m = context.messages[i]!;
-    if (m.direction === 'inbound') {
+    if (m.direction === "inbound") {
       return { body: m.body, sentAt: m.sent_at };
     }
   }
@@ -191,11 +200,11 @@ function lastInboundOf(context: LeadContext): { body: string; sentAt: string } |
 function lastInboundSinceLastOutbound(context: LeadContext): string | null {
   let lastOutboundAt: number | null = null;
   for (const m of context.messages) {
-    if (m.direction === 'outbound') lastOutboundAt = Date.parse(m.sent_at);
+    if (m.direction === "outbound") lastOutboundAt = Date.parse(m.sent_at);
   }
   for (let i = context.messages.length - 1; i >= 0; i -= 1) {
     const m = context.messages[i]!;
-    if (m.direction === 'inbound') {
+    if (m.direction === "inbound") {
       const at = Date.parse(m.sent_at);
       return lastOutboundAt === null || at > lastOutboundAt ? m.body : null;
     }
@@ -213,7 +222,7 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
     const tenantId = job.organization_id;
     const leadId = job.contact_id;
     if (leadId === null) {
-      throw new Error('job followup_turn sem contact_id — o CHECK da fila deveria impedir');
+      throw new Error("job followup_turn sem contact_id — o CHECK da fila deveria impedir");
     }
     const payload = followupTurnPayloadSchema.parse(job.payload);
 
@@ -228,11 +237,18 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
     );
     const conv = rows[0];
     if (conv === undefined || conv.channel_session_id === null) {
-      throw new Error('followup_turn sem conversa/número do contato — impossível retomar o contato');
+      throw new Error(
+        "followup_turn sem conversa/número do contato — impossível retomar o contato",
+      );
     }
 
     const clock = deps.clock ?? ((): Date => new Date());
-    const target: ReentrySendTarget = { tenantId, leadId, channelSessionId: conv.channel_session_id, conversationId: conv.id };
+    const target: ReentrySendTarget = {
+      tenantId,
+      leadId,
+      channelSessionId: conv.channel_session_id,
+      conversationId: conv.id,
+    };
 
     // Onda 5 (Task 5.1): turno DIRIGIDO POR FLUXO — guard exclusivo, nunca cai nos
     // caminhos legados abaixo (F3-03/F3-04 seguem intocados quando o campo falta).
@@ -252,7 +268,7 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
     // F3-04: caminho determinístico ($0) — envia o template versionado direto pela
     // cadeia de guardrails, sem chamar o modelo. É um CAMINHO ADICIONAL: o run do
     // agente (abaixo) segue intocado quando o modo não é 'template'.
-    if (payload.mode === 'template') {
+    if (payload.mode === "template") {
       await runDeterministicReentry(deps, job, pool, ctx, clock, {
         tenantId,
         leadId,
@@ -273,7 +289,13 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
           promisedAt: payload.promised_at,
           lastInbound: lastInboundOf(context),
         });
-        return buildFollowupOpeningMessage(temporalBlock, previous, leadState, context, notesIndexBlock);
+        return buildFollowupOpeningMessage(
+          temporalBlock,
+          previous,
+          leadState,
+          context,
+          notesIndexBlock,
+        );
       },
     });
   };
@@ -303,7 +325,7 @@ async function runFlowDrivenTurn(
   input: {
     enrollmentId: string;
     nodeId: string | undefined;
-    purpose: 'send_message' | 'classify' | 'decide_timing' | undefined;
+    purpose: "send_message" | "classify" | "decide_timing" | undefined;
     promptHint: string | undefined;
     classes: string[] | undefined;
     hint: string | undefined;
@@ -311,40 +333,68 @@ async function runFlowDrivenTurn(
   },
 ): Promise<void> {
   if (input.nodeId === undefined || input.purpose === undefined) {
-    throw new Error('followup_turn dirigido por fluxo sem node_id/purpose no payload — payload do engine incompleto');
+    throw new Error(
+      "followup_turn dirigido por fluxo sem node_id/purpose no payload — payload do engine incompleto",
+    );
   }
   const complete = deps.completeFollowupTurn;
   if (!complete) {
     throw new Error(
-      'followup_turn dirigido por fluxo sem completeFollowupTurn nos deps do handler — a ponte não foi injetada na wiring (workers/agent-worker/main.ts)',
+      "followup_turn dirigido por fluxo sem completeFollowupTurn nos deps do handler — a ponte não foi injetada na wiring (workers/agent-worker/main.ts)",
     );
   }
   const { enrollmentId, nodeId } = input;
-  const runLog = withFields(deps.log, { job_id: job.id, tenant_id: target.tenantId, lead_id: target.leadId, enrollment_id: enrollmentId });
+  const runLog = withFields(deps.log, {
+    job_id: job.id,
+    tenant_id: target.tenantId,
+    lead_id: target.leadId,
+    enrollment_id: enrollmentId,
+  });
 
-  if (input.purpose === 'send_message') {
+  if (input.purpose === "send_message") {
     await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: target.channelSessionId,
       conversationId: target.conversationId,
       buildOpening: ({ previous, leadState, context, notesIndexBlock }) => {
-        const temporalBlock = buildTemporalBlock({ now: clock(), lastInbound: lastInboundOf(context) });
-        const opening = buildFollowupOpeningMessage(temporalBlock, previous, leadState, context, notesIndexBlock);
+        const temporalBlock = buildTemporalBlock({
+          now: clock(),
+          lastInbound: lastInboundOf(context),
+        });
+        const opening = buildFollowupOpeningMessage(
+          temporalBlock,
+          previous,
+          leadState,
+          context,
+          notesIndexBlock,
+        );
         if (!input.promptHint) return opening;
         return `${opening}\n\n## Orientação do passo do fluxo\n${input.promptHint}`;
       },
     });
-    await complete(pool, { organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'sent' } });
+    await complete(pool, {
+      organizationId: target.tenantId,
+      enrollmentId,
+      nodeId,
+      result: { kind: "sent" },
+    });
     return;
   }
 
-  if (input.purpose === 'classify') {
+  if (input.purpose === "classify") {
     const classes = input.classes ?? [];
-    const context = await getLeadContext(pool, deps.crmCfg, { tenantId: target.tenantId, leadId: target.leadId }, {
-      historyLimit: deps.knobs.historyLimit,
-      maxTokens: deps.knobs.maxContextTokens,
-    });
+    const context = await getLeadContext(
+      pool,
+      deps.crmCfg,
+      { tenantId: target.tenantId, leadId: target.leadId },
+      {
+        historyLimit: deps.knobs.historyLimit,
+        maxTokens: deps.knobs.maxContextTokens,
+      },
+    );
     if (!context.ok) {
-      throw new Error(`turno de classificação do fluxo falhou em get_lead_context (${context.error.code})`);
+      throw new Error(
+        `turno de classificação do fluxo falhou em get_lead_context (${context.error.code})`,
+      );
     }
     const cls = await classifyFollowupReply(
       pool,
@@ -354,21 +404,35 @@ async function runFlowDrivenTurn(
         candidateText: lastInboundSinceLastOutbound(context.context),
         classes,
         ...(input.hint !== undefined ? { hint: input.hint } : {}),
-        ...(deps.knobs.followupAi?.model !== undefined ? { model: deps.knobs.followupAi.model } : {}),
+        ...(deps.knobs.followupAi?.model !== undefined
+          ? { model: deps.knobs.followupAi.model }
+          : {}),
       },
       { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog },
     );
-    await complete(pool, { organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'classified', class: cls } });
+    await complete(pool, {
+      organizationId: target.tenantId,
+      enrollmentId,
+      nodeId,
+      result: { kind: "classified", class: cls },
+    });
     return;
   }
 
   // 'decide_timing'
-  const context = await getLeadContext(pool, deps.crmCfg, { tenantId: target.tenantId, leadId: target.leadId }, {
-    historyLimit: deps.knobs.historyLimit,
-    maxTokens: deps.knobs.maxContextTokens,
-  });
+  const context = await getLeadContext(
+    pool,
+    deps.crmCfg,
+    { tenantId: target.tenantId, leadId: target.leadId },
+    {
+      historyLimit: deps.knobs.historyLimit,
+      maxTokens: deps.knobs.maxContextTokens,
+    },
+  );
   if (!context.ok) {
-    throw new Error(`turno de decisão de instante do fluxo falhou em get_lead_context (${context.error.code})`);
+    throw new Error(
+      `turno de decisão de instante do fluxo falhou em get_lead_context (${context.error.code})`,
+    );
   }
   const proposedAt = await decideFollowupTiming(
     pool,
@@ -381,7 +445,12 @@ async function runFlowDrivenTurn(
     },
     { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog, clock },
   );
-  await complete(pool, { organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'timing', proposed_at: proposedAt } });
+  await complete(pool, {
+    organizationId: target.tenantId,
+    enrollmentId,
+    nodeId,
+    result: { kind: "timing", proposed_at: proposedAt },
+  });
 }
 
 /**
@@ -407,7 +476,9 @@ async function runDeterministicReentry(
   // caminho do agente (runAgentTurn). Fecha o caso em que o STOP ambíguo silenciou o lead
   // mas o CRM ainda não marcou is_blocked (o stopGate por si não pega esse estado).
   if (await isLeadInHandoff(pool, tenantId, leadId)) {
-    runLog.info('re-entrada determinística pulada — lead silenciado (handoff/opt-out)', { kind: job.kind });
+    runLog.info("re-entrada determinística pulada — lead silenciado (handoff/opt-out)", {
+      kind: job.kind,
+    });
     return;
   }
 
@@ -416,20 +487,35 @@ async function runDeterministicReentry(
   // configuração (permanente): o job vira dead-letter + inbox pela fila, nunca envio mudo.
   const template = await loadReentryTemplate(pool, tenantId);
   if (template === null) {
-    throw new Error('re-entrada determinística sem template apontado para o tenant — publique um template e mova o ponteiro');
+    throw new Error(
+      "re-entrada determinística sem template apontado para o tenant — publique um template e mova o ponteiro",
+    );
   }
   const body = pickReentryVariant(leadId, template.variants);
 
   // STOP no turno (fonte: CRM via get_lead_context — regra dura nº 2), como o caminho
   // do agente. É leitura de CRM, não do modelo: o custo em LLM segue $0.
-  const context = await getLeadContext(pool, deps.crmCfg, { tenantId, leadId }, {
-    historyLimit: deps.knobs.historyLimit,
-    maxTokens: deps.knobs.maxContextTokens,
-  });
+  const context = await getLeadContext(
+    pool,
+    deps.crmCfg,
+    { tenantId, leadId },
+    {
+      historyLimit: deps.knobs.historyLimit,
+      maxTokens: deps.knobs.maxContextTokens,
+    },
+  );
   if (!context.ok) {
     throw new Error(`re-entrada determinística falhou em get_lead_context (${context.error.code})`);
   }
   const optedOutThisTurn = context.context.contact.is_blocked;
+  const { rows: channelRows } = await pool.query<{ daily_message_limit: number | null }>(
+    `select daily_message_limit
+       from channel_sessions
+      where id = $1 and organization_id = $2
+      limit 1`,
+    [channelSessionId, tenantId],
+  );
+  const crmDailyLimit = channelRows[0]?.daily_message_limit ?? null;
 
   const channel = (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(pool);
 
@@ -444,14 +530,15 @@ async function runDeterministicReentry(
     channelSessionId,
     body,
     optedOutThisTurn,
-    // ponytail: mesmo débito do caminho do agente — o daily_message_limit do CRM ainda
-    // não é lido no runtime; null cai nos degraus de warm-up (conservadores).
-    crmDailyLimit: null,
+    // Usa o mesmo limite diário configurado na conexão do CRM.
+    crmDailyLimit,
     now: clock(),
     sleep: deps.sleep,
     // Gate LGPD (F4-09): base legal/anonimização do CRM lidas no turno (fonte confiável).
     lgpd: context.lgpd,
-    ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
+    ...(deps.knobs.disclosureMode !== undefined
+      ? { disclosureMode: deps.knobs.disclosureMode }
+      : {}),
     // Gate 5 (F4-02/F4-08): mesma camada semântica do caminho do agente — a re-entrada
     // determinística também passa a candidata pela cadeia completa (ids da ROW do job).
     ...(deps.knobs.promiseSemantic?.enabled === true
@@ -461,20 +548,26 @@ async function runDeterministicReentry(
               pool,
               deps.llmCfg,
               { tenantId, leadId, jobId: job.id },
-              { candidate, ...(deps.knobs.promiseSemantic?.model !== undefined ? { model: deps.knobs.promiseSemantic.model } : {}) },
+              {
+                candidate,
+                ...(deps.knobs.promiseSemantic?.model !== undefined
+                  ? { model: deps.knobs.promiseSemantic.model }
+                  : {}),
+              },
               { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog },
             ),
         }
       : {}),
     // finalBody = corpo após a cadeia (disclosureGate F4-05 pode prependar o disclosure).
-    send: (finalBody) => channel.send({ tenantId, leadId, jobId: job.id, seq: 1, conversationId, body: finalBody }),
+    send: (finalBody) =>
+      channel.send({ tenantId, leadId, jobId: job.id, seq: 1, conversationId, body: finalBody }),
   });
 
-  if (chain.status === 'vetoed') {
+  if (chain.status === "vetoed") {
     // acc3: veto por JANELA anti-ban não dropa — re-agenda para a próxima abertura
     // (7h + jitter, já calculada pelo gate). Demais vetos (STOP irrevogável, spinning)
     // NÃO re-agendam: o trace do gate já os registrou.
-    if (chain.code === 'outside_window' && chain.nextAllowedAt !== undefined) {
+    if (chain.code === "outside_window" && chain.nextAllowedAt !== undefined) {
       await rescheduleReentry(pool, {
         tenantId,
         leadId,
@@ -482,36 +575,49 @@ async function runDeterministicReentry(
         at: chain.nextAllowedAt,
         payload: job.payload,
       });
-      runLog.info('re-entrada re-agendada por janela anti-ban', {
+      runLog.info("re-entrada re-agendada por janela anti-ban", {
         code: chain.code,
         next_run_at: chain.nextAllowedAt.toISOString(),
       });
       return;
     }
-    runLog.info('re-entrada determinística vetada pela cadeia — não re-agendada', { code: chain.code });
+    runLog.info("re-entrada determinística vetada pela cadeia — não re-agendada", {
+      code: chain.code,
+    });
     return;
   }
 
   const outcome = chain.outcome;
   switch (outcome.kind) {
-    case 'sent':
-    case 'already_sent':
-    case 'queued':
+    case "sent":
+    case "already_sent":
+    case "queued":
       // 'queued' = o canal aceitou e segura (sessão fora) — sob custódia do CRM, não
       // re-agenda (mesma disposição do caminho do agente).
-      runLog.info('re-entrada determinística concluída', { kind: outcome.kind });
+      runLog.info("re-entrada determinística concluída", { kind: outcome.kind });
       return;
-    case 'blocked':
+    case "blocked":
       // veto permanente do sink (is_blocked): cancela o job e cacheia o opt-out — a
       // fonte é o CRM, nunca revertido (regra dura nº 2).
-      await applySendOutcome(pool, outcome, { jobId: job.id, workerId: ctx.workerId, tenantId, leadId }, {
-        queuedRetryDelayMs: deps.knobs.queuedRetryDelayMs,
-      });
-      throw new JobSettledError('re-entrada determinística vetada pelo sink (is_blocked) — job cancelado em definitivo');
-    case 'failed':
-      throw new Error('re-entrada determinística: CRM marcou o envio como failed — run re-tentado pela fila');
-    case 'unavailable':
-      throw new Error(`re-entrada determinística: canal indisponível (${outcome.reason}) — run re-tentado pela fila`);
+      await applySendOutcome(
+        pool,
+        outcome,
+        { jobId: job.id, workerId: ctx.workerId, tenantId, leadId },
+        {
+          queuedRetryDelayMs: deps.knobs.queuedRetryDelayMs,
+        },
+      );
+      throw new JobSettledError(
+        "re-entrada determinística vetada pelo sink (is_blocked) — job cancelado em definitivo",
+      );
+    case "failed":
+      throw new Error(
+        "re-entrada determinística: CRM marcou o envio como failed — run re-tentado pela fila",
+      );
+    case "unavailable":
+      throw new Error(
+        `re-entrada determinística: canal indisponível (${outcome.reason}) — run re-tentado pela fila`,
+      );
   }
 }
 
@@ -527,7 +633,13 @@ async function runDeterministicReentry(
  */
 async function rescheduleReentry(
   pool: pg.Pool,
-  input: { tenantId: string; leadId: string; jobId: string; at: Date; payload: Record<string, unknown> },
+  input: {
+    tenantId: string;
+    leadId: string;
+    jobId: string;
+    at: Date;
+    payload: Record<string, unknown>;
+  },
 ): Promise<void> {
   const { rowCount } = await pool.query(
     `select 1 from cron_jobs
@@ -539,8 +651,8 @@ async function rescheduleReentry(
   }
   await scheduleCronJob(pool, input.tenantId, {
     leadId: input.leadId,
-    spec: { kind: 'at', at: input.at },
-    jobKind: 'followup_turn',
+    spec: { kind: "at", at: input.at },
+    jobKind: "followup_turn",
     payload: { ...input.payload, reschedule_of: input.jobId },
     staggerWindowMs: 0,
   });

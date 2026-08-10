@@ -241,17 +241,56 @@ export async function runModelCall(
   const startedAt = Date.now();
   // `system` aceita SystemModelMessage (com providerOptions de cache) — igual
   // em v6 e v7 (smoke prova que o cacheControl continua virando cache_control).
-  const result = await generateText({
-    model: factory(config.apiKey, model),
-    system: prefix.system,
-    messages: input.messages,
-    tools: prefix.tools,
-    stopWhen: input.maxSteps === undefined ? undefined : stepCountIs(input.maxSteps),
-    temperature,
-    topP,
-    topK,
-    maxOutputTokens,
-  });
+  let result: Awaited<ReturnType<typeof generateText>>;
+  try {
+    result = await generateText({
+      model: factory(config.apiKey, model),
+      system: prefix.system,
+      messages: input.messages,
+      tools: prefix.tools,
+      stopWhen: input.maxSteps === undefined ? undefined : stepCountIs(input.maxSteps),
+      temperature,
+      topP,
+      topK,
+      maxOutputTokens,
+    });
+  } catch (error) {
+    const failure = normalizeProviderError(error);
+    await db
+      .query(
+        `insert into llm_calls
+           (organization_id, contact_id, job_id, variant_id, agent_id, purpose, provider, model,
+            input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_cents, latency_ms,
+            status, error_code, error_message, http_status, origem_da_escolha)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, 0, 0, null, $9,
+                 'erro', $10, $11, $12, $13)`,
+        [
+          input.tenantId,
+          input.leadId ?? null,
+          input.jobId ?? null,
+          input.variantId ?? null,
+          input.agentId ?? null,
+          input.purpose ?? "agent_turn",
+          config.provider,
+          model,
+          Date.now() - startedAt,
+          failure.errorCode,
+          failure.errorMessage,
+          failure.httpStatus,
+          input.llmOverride ? "agente_publicado" : "padrao_da_organizacao",
+        ],
+      )
+      .catch(() => undefined);
+    deps.log?.error("llm: chamada falhou", {
+      organization_id: input.tenantId,
+      provider: config.provider,
+      model,
+      purpose: input.purpose ?? "agent_turn",
+      error_code: failure.errorCode,
+      http_status: failure.httpStatus,
+    });
+    throw error;
+  }
   const latencyMs = Date.now() - startedAt;
 
   const usage = {
@@ -265,8 +304,10 @@ export async function runModelCall(
   const { rows } = await db.query<{ id: string }>(
     `insert into llm_calls
        (organization_id, contact_id, job_id, variant_id, agent_id, purpose, provider, model,
-        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_cents, latency_ms)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_cents, latency_ms,
+        status, origem_da_escolha)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+             'ok', $15)
      returning id`,
     [
       input.tenantId,
@@ -283,6 +324,7 @@ export async function runModelCall(
       usage.cacheWriteTokens,
       cost,
       latencyMs,
+      input.llmOverride ? "agente_publicado" : "padrao_da_organizacao",
     ],
   );
 
@@ -306,4 +348,46 @@ export async function runModelCall(
     costCents: cost,
     latencyMs,
   };
+}
+
+export function normalizeProviderError(error: unknown): {
+  errorCode: string;
+  errorMessage: string;
+  httpStatus: number | null;
+} {
+  const raw = error instanceof Error ? error.message : String(error);
+  const possibleStatus =
+    (error as { statusCode?: unknown; status?: unknown })?.statusCode ??
+    (error as { status?: unknown })?.status;
+  const httpStatus = typeof possibleStatus === "number" ? possibleStatus : null;
+  let errorCode = "erro_desconhecido";
+  if (
+    httpStatus === 401 ||
+    httpStatus === 403 ||
+    /unauthor|invalid.*api.?key|authentication|incorrect api key/i.test(raw)
+  ) {
+    errorCode = "credencial_recusada";
+  } else if (httpStatus === 404 || /model.*not.*found|does not exist/i.test(raw)) {
+    errorCode = "modelo_inexistente";
+  } else if (
+    httpStatus === 429 ||
+    /rate.?limit|quota|insufficient.*credit|insufficient.*balance/i.test(raw)
+  ) {
+    errorCode = "limite_ou_saldo";
+  } else if (
+    (httpStatus !== null && httpStatus >= 500) ||
+    /timeout|ECONNREFUSED|fetch failed|network/i.test(raw)
+  ) {
+    errorCode = "provedor_indisponivel";
+  } else if (/tool|function.?call/i.test(raw)) {
+    errorCode = "modelo_sem_ferramentas";
+  }
+
+  const errorMessage = raw
+    .replace(/\b(?:sk|key|token)-[A-Za-z0-9_-]{10,}\b/gi, "[CHAVE_REMOVIDA]")
+    .replace(/Bearer\s+\S+/gi, "Bearer [REMOVIDO]")
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[EMAIL_REMOVIDO]")
+    .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, "[CPF_REMOVIDO]")
+    .slice(0, 500);
+  return { errorCode, errorMessage, httpStatus };
 }

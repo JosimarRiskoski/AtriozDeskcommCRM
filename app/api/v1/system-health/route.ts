@@ -46,41 +46,71 @@ export async function GET(_req: NextRequest): Promise<Response> {
     "conversation.snooze_watcher_run",
   ];
 
-  const [database, sessions, credentials, workerRun, webhookFailure, webhookSources] =
-    await Promise.all([
-      admin.from("organizations").select("id").eq("id", orgId).maybeSingle(),
-      admin
-        .from("channel_sessions")
-        .select("id, status, last_health_check_at, status_reason")
-        .eq("organization_id", orgId)
-        .is("archived_at", null),
-      admin
-        .from("ai_provider_credentials")
-        .select("id, provider, is_active, validated_at, validation_error")
-        .eq("organization_id", orgId)
-        .eq("is_active", true),
-      admin
-        .from("api_audit_log")
-        .select("action, created_at")
-        .eq("organization_id", orgId)
-        .in("action", workerActions)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      admin
-        .from("webhook_events_log")
-        .select("id, received_at, error_message")
-        .eq("organization_id", orgId)
-        .eq("status", "failed")
-        .order("received_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      admin
-        .from("webhook_sources")
-        .select("id, is_active, last_received_at")
-        .eq("organization_id", orgId)
-        .eq("is_active", true),
-    ]);
+  const [
+    database,
+    sessions,
+    credentials,
+    workerRun,
+    webhookFailure,
+    webhookSources,
+    aiJobs,
+    llmFailure,
+    pendingDispatches,
+  ] = await Promise.all([
+    admin.from("organizations").select("id").eq("id", orgId).maybeSingle(),
+    admin
+      .from("channel_sessions")
+      .select("id, status, last_health_check_at, status_reason")
+      .eq("organization_id", orgId)
+      .is("archived_at", null),
+    admin
+      .from("ai_provider_credentials")
+      .select("id, provider, is_active, validated_at, validation_error")
+      .eq("organization_id", orgId)
+      .eq("is_active", true),
+    admin
+      .from("api_audit_log")
+      .select("action, created_at")
+      .eq("organization_id", orgId)
+      .in("action", workerActions)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("webhook_events_log")
+      .select("id, received_at, error_message")
+      .eq("organization_id", orgId)
+      .eq("status", "failed")
+      .order("received_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("webhook_sources")
+      .select("id, is_active, last_received_at")
+      .eq("organization_id", orgId)
+      .eq("is_active", true),
+    admin
+      .from("job_queue")
+      .select("id, status, last_error, created_at, run_after")
+      .eq("organization_id", orgId)
+      .in("kind", ["inbound_turn", "case_reply_turn"])
+      .order("created_at", { ascending: false })
+      .limit(100),
+    admin
+      .from("llm_calls")
+      .select("id, error_code, error_message, http_status, created_at")
+      .eq("organization_id", orgId)
+      .eq("status", "erro")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("event_log")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .eq("event_type", "ai_agent.dispatch_requested")
+      .eq("status", "pending"),
+  ]);
 
   if (database.error) {
     return fail("internal_error", "Não foi possível consultar a saúde da organização.", 500, {
@@ -89,6 +119,28 @@ export async function GET(_req: NextRequest): Promise<Response> {
   }
 
   const now = Date.now();
+  const recentAiJobs = aiJobs.data ?? [];
+  const failureWindowStart = now - 24 * 60 * 60_000;
+  const failedAiJobs = recentAiJobs.filter(
+    (job) =>
+      ["failed", "dead"].includes(job.status) &&
+      new Date(job.created_at).getTime() >= failureWindowStart,
+  );
+  const stalledAiJobs = recentAiJobs.filter(
+    (job) =>
+      job.status === "pending" &&
+      now - new Date(job.run_after ?? job.created_at).getTime() > 5 * 60_000,
+  );
+  const latestCompletedAiJob = recentAiJobs.find((job) => job.status === "done") ?? null;
+  const recentLlmFailure = llmFailure.data;
+  const llmFailureAgeMinutes = recentLlmFailure
+    ? Math.round((now - new Date(recentLlmFailure.created_at).getTime()) / 60_000)
+    : null;
+  const aiHasCriticalFailure =
+    failedAiJobs.length > 0 ||
+    stalledAiJobs.length > 0 ||
+    (llmFailureAgeMinutes !== null && llmFailureAgeMinutes <= 60);
+  const pendingAiDispatches = pendingDispatches.count ?? 0;
   const connected = (sessions.data ?? []).filter((session) => session.status === "WORKING");
   const failedSessions = (sessions.data ?? []).filter((session) =>
     ["FAILED", "STOPPED"].includes(session.status),
@@ -100,9 +152,7 @@ export async function GET(_req: NextRequest): Promise<Response> {
   const workerAgeMinutes = lastWorkerAt
     ? Math.round((now - new Date(lastWorkerAt).getTime()) / 60_000)
     : null;
-  const resendConfigured = Boolean(
-    process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL,
-  );
+  const resendConfigured = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
   const activeWebhookSources = webhookSources.data?.length ?? 0;
   const recentWebhookFailure = webhookFailure.data;
   const failureAgeHours = recentWebhookFailure
@@ -137,37 +187,53 @@ export async function GET(_req: NextRequest): Promise<Response> {
     },
     {
       id: "automation",
-      label: "Workers e agendamentos",
-      status:
-        !process.env.INTERNAL_CRON_SECRET || workerAgeMinutes === null || workerAgeMinutes > 60
+      label: "Motor de IA e agendamentos",
+      status: aiHasCriticalFailure
+        ? "critical"
+        : !process.env.INTERNAL_CRON_SECRET ||
+            workerAgeMinutes === null ||
+            workerAgeMinutes > 60 ||
+            pendingAiDispatches > 0
           ? "warning"
           : "ok",
       summary:
-        workerAgeMinutes === null
-          ? "Nenhuma execução recente registrada"
-          : `Última execução automática há ${workerAgeMinutes} min`,
-      detail: !process.env.INTERNAL_CRON_SECRET
-        ? "O segredo interno dos agendamentos não está configurado."
-        : workerAgeMinutes !== null && workerAgeMinutes <= 60
-          ? "O sistema registrou atividade recente de um worker."
-          : "Confira scheduler e worker no EasyPanel antes de ativar automações.",
-      action_label: "Ver follow-ups",
-      action_url: "/app/ai/followups",
+        failedAiJobs.length > 0
+          ? `${failedAiJobs.length} execução(ões) de IA falharam`
+          : stalledAiJobs.length > 0
+            ? `${stalledAiJobs.length} mensagem(ns) aguardando IA há mais de 5 min`
+            : pendingAiDispatches > 0
+              ? `${pendingAiDispatches} evento(s) de IA aguardando processamento`
+              : workerAgeMinutes === null
+                ? "Nenhuma execução recente registrada"
+                : `Última execução automática há ${workerAgeMinutes} min`,
+      detail: failedAiJobs[0]?.last_error
+        ? `Falha mais recente: ${failedAiJobs[0].last_error}`
+        : latestCompletedAiJob
+          ? `O motor concluiu uma execução em ${new Date(latestCompletedAiJob.created_at).toLocaleString("pt-BR")}.`
+          : !process.env.INTERNAL_CRON_SECRET
+            ? "O segredo interno dos agendamentos não está configurado."
+            : "Confira o serviço worker no EasyPanel antes de ativar automações.",
+      action_label: "Ver execuções de IA",
+      action_url: "/app/ai/runs",
     },
     {
       id: "ai",
       label: "Inteligência artificial",
-      status: validCredentials.length > 0 ? "ok" : "warning",
+      status: aiHasCriticalFailure ? "critical" : validCredentials.length > 0 ? "ok" : "warning",
       summary:
-        validCredentials.length > 0
-          ? `${validCredentials.length} credencial(is) validada(s)`
-          : "Nenhuma credencial validada",
+        recentLlmFailure && llmFailureAgeMinutes !== null && llmFailureAgeMinutes <= 60
+          ? `Falha recente: ${recentLlmFailure.error_code ?? "erro do provedor"}`
+          : validCredentials.length > 0
+            ? `${validCredentials.length} credencial(is) validada(s)`
+            : "Nenhuma credencial validada",
       detail:
-        validCredentials.length > 0
-          ? "Existe provedor disponível; limites e saldo ainda devem ser acompanhados."
-          : "Cadastre e valide uma credencial antes de publicar o agente.",
-      action_label: "Abrir credenciais",
-      action_url: "/app/ai/credentials",
+        recentLlmFailure && llmFailureAgeMinutes !== null && llmFailureAgeMinutes <= 60
+          ? recentLlmFailure.error_message || "A chamada ao provedor de IA falhou."
+          : validCredentials.length > 0
+            ? "A credencial está validada e o painel também verifica a execução real do motor."
+            : "Cadastre e valide uma credencial antes de publicar o agente.",
+      action_label: aiHasCriticalFailure ? "Ver execuções" : "Abrir credenciais",
+      action_url: aiHasCriticalFailure ? "/app/ai/runs" : "/app/ai/credentials",
     },
     {
       id: "email",

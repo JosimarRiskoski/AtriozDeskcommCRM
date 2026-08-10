@@ -20,7 +20,7 @@ export interface BusinessHoursValue {
 }
 
 export interface TriggerValue {
-  events: ("message")[];
+  events: "message"[];
   filters: {
     ignore_groups: boolean;
     ignore_self: boolean;
@@ -56,12 +56,12 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
   function setBhEnabled(enabled: boolean) {
     patchFilters({
       business_hours: enabled
-        ? bh ?? {
+        ? (bh ?? {
             timezone: "America/Sao_Paulo",
             start: "08:00",
             end: "20:00",
             weekdays: [1, 2, 3, 4, 5],
-          }
+          })
         : null,
     });
   }
@@ -88,7 +88,7 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
             return (
               <label
                 key={ev}
-                className="flex cursor-pointer items-center gap-2 rounded border border-border/60 px-2 py-1 text-xs"
+                className="border-border/60 flex cursor-pointer items-center gap-2 rounded border px-2 py-1 text-xs"
               >
                 <input
                   type="checkbox"
@@ -145,7 +145,8 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
           spellCheck={false}
         />
         <p className="text-xs text-muted-foreground">
-          Quando preenchido, agent só responde se a mensagem casar com o regex.
+          Quando preenchido, o agente só responde se a mensagem combinar com o filtro. Mensagens
+          fora do filtro continuam visíveis no Inbox para atendimento humano.
         </p>
       </div>
 
@@ -153,7 +154,9 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
         <Label>Concorrência</Label>
         <Select
           value={value.concurrency}
-          onValueChange={(v) => onChange({ ...value, concurrency: v as TriggerValue["concurrency"] })}
+          onValueChange={(v) =>
+            onChange({ ...value, concurrency: v as TriggerValue["concurrency"] })
+          }
           disabled={disabled}
         >
           <SelectTrigger>
@@ -166,7 +169,7 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
         </Select>
       </div>
 
-      <div className="space-y-2 rounded-md border border-border/60 p-3">
+      <div className="border-border/60 space-y-2 rounded-md border p-3">
         <div className="flex items-center gap-2">
           <Switch
             checked={!!bh}
@@ -176,6 +179,10 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
           />
           <Label htmlFor="bh_enabled">Restringir a horário comercial</Label>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Fora deste horário a IA não responde nem agenda resposta automática; a mensagem permanece
+          no Inbox. Esta regra é diferente da janela de proteção do número usada nos envios ativos.
+        </p>
         {bh ? (
           <div className="space-y-2">
             <div className="grid grid-cols-3 gap-2">
@@ -222,7 +229,7 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
                       disabled={disabled}
                       className={`rounded border px-2 py-1 text-xs ${
                         active
-                          ? "border-primary bg-primary/10 text-primary"
+                          ? "bg-primary/10 border-primary text-primary"
                           : "border-border/60 text-muted-foreground"
                       } disabled:cursor-not-allowed disabled:opacity-50`}
                     >
