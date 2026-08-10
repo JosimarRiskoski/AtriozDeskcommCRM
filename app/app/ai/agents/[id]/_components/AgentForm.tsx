@@ -141,6 +141,8 @@ interface FormState {
   cost_budget_cents: number;
   history_message_window: number;
   history_token_window: number;
+  split_messages: boolean;
+  split_max_chars: number;
   handoff_keywords: string[];
   handoff_tool_enabled: boolean;
   cases_enabled: boolean;
@@ -188,6 +190,8 @@ function buildState(args: { agent?: AgentRow; version: AgentVersionRow | null })
     cost_budget_cents: version?.cost_budget_cents ?? 50,
     history_message_window: version?.history_message_window ?? 20,
     history_token_window: version?.history_token_window ?? 8_000,
+    split_messages: version?.split_messages ?? false,
+    split_max_chars: version?.split_max_chars ?? 220,
     handoff_keywords: version?.handoff_keywords ?? ["falar com humano", "atendente", "pessoa real"],
     handoff_tool_enabled: version?.handoff_tool_enabled ?? true,
     cases_enabled: version?.cases_enabled ?? false,
@@ -210,6 +214,8 @@ function toVersionPayload(s: FormState) {
     cost_budget_cents: s.cost_budget_cents,
     history_message_window: s.history_message_window,
     history_token_window: s.history_token_window,
+    split_messages: s.split_messages,
+    split_max_chars: s.split_max_chars,
     handoff_keywords: s.handoff_keywords,
     handoff_tool_enabled: s.handoff_tool_enabled,
     cases_enabled: s.cases_enabled,
@@ -733,6 +739,40 @@ export function AgentForm(props: Props) {
             ) : null}
           </Card>
 
+          <Card className={activeStep === "behavior" ? "space-y-3 p-4" : "hidden"}>
+            <div>
+              <h3 className="text-sm font-medium">Formato das mensagens</h3>
+              <p className="text-xs text-muted-foreground">
+                Divide uma resposta em mensagens curtas no WhatsApp, preservando frases e
+                parágrafos completos.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="split_messages"
+                checked={form.split_messages}
+                onCheckedChange={(value) => patch({ split_messages: value })}
+                disabled={disabled}
+              />
+              <Label htmlFor="split_messages">Enviar a resposta em mensagens separadas</Label>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="split_max_chars">Tamanho aproximado de cada mensagem</Label>
+              <Input
+                id="split_max_chars"
+                type="number"
+                min={80}
+                max={1000}
+                value={form.split_max_chars}
+                onChange={(event) => patch({ split_max_chars: Number(event.target.value) })}
+                disabled={disabled || !form.split_messages}
+              />
+              <p className="text-xs text-muted-foreground">
+                Para respostas objetivas em até três blocos, use aproximadamente 140 caracteres.
+              </p>
+            </div>
+          </Card>
+
           {/* Tools */}
           <Card className={activeStep === "tools" ? "space-y-2 p-4" : "hidden"}>
             <h3 className="text-sm font-medium">Tools (catálogo MCP)</h3>
@@ -923,6 +963,14 @@ export function AgentForm(props: Props) {
               <div>
                 <dt className="text-muted-foreground">Follow-up</dt>
                 <dd className="font-medium">{form.followup.enabled ? "Ativo" : "Desativado"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Formato da resposta</dt>
+                <dd className="font-medium">
+                  {form.split_messages
+                    ? `Mensagens separadas (aprox. ${form.split_max_chars} caracteres)`
+                    : "Uma mensagem única"}
+                </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Handoff humano</dt>

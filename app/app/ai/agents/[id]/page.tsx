@@ -18,7 +18,7 @@ const AGENT_COLUMNS =
   "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, split_messages, split_max_chars, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
 
 const CREDENTIAL_COLUMNS =
   "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
@@ -50,7 +50,7 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
   if ((agent.kind ?? "rag_bot") !== "mcp_agent") {
     return (
       <div className="flex h-full flex-col gap-6 p-6">
-        <BackNavigation fallbackHref="/app/ai" label="Voltar aos agentes" />
+        <BackNavigation fallbackHref="/app/ai/agents" label="Voltar aos agentes" />
         <LegacyAgentUpgrade agent={agent} readOnly={readOnly} />
       </div>
     );
@@ -93,7 +93,7 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <BackNavigation fallbackHref="/app/ai" label="Voltar aos agentes" />
+      <BackNavigation fallbackHref="/app/ai/agents" label="Voltar aos agentes" />
       <AgentTabs
         agent={agent}
         draft={draft}

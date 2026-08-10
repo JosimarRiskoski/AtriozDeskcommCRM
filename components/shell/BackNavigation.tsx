@@ -14,11 +14,9 @@ export function BackNavigation({
   const router = useRouter();
 
   const goBack = () => {
-    const sameOriginReferrer = document.referrer.startsWith(window.location.origin);
-    if (sameOriginReferrer && window.history.length > 1) {
-      router.back();
-      return;
-    }
+    // Este componente representa um breadcrumb conhecido, não o histórico do
+    // navegador. `router.back()` podia retornar para uma rota 404 ou para outra
+    // área do CRM quando o usuário havia aberto o detalhe por busca/atalho.
     router.push(fallbackHref);
   };
 

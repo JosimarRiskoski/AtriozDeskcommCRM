@@ -1,6 +1,6 @@
 "use client";
-import { HelpCircle, ShieldCheck, MessageSquare, Package, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { HelpCircle, ShieldCheck, MessageSquare, Package, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SourceStatusBadge, deriveBadgeStatus } from "@/components/ai/SourceStatusBadge";
@@ -13,6 +13,7 @@ interface Props {
   type: KnowledgeSourceType;
   onReindex?: () => void;
   onConfigure?: () => void;
+  onEdit?: () => void;
   isReindexing?: boolean;
 }
 
@@ -57,7 +58,7 @@ function formatRelative(iso: string | null): string {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
-export function KnowledgeSourceCard({ source, type, onReindex, onConfigure, isReindexing }: Props) {
+export function KnowledgeSourceCard({ source, type, onReindex, onConfigure, onEdit, isReindexing }: Props) {
   const meta = TYPE_META[type];
   const Icon = meta.Icon;
 
@@ -99,7 +100,8 @@ export function KnowledgeSourceCard({ source, type, onReindex, onConfigure, isRe
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => toast.info("Editor de FAQ em breve.")}
+          onClick={onEdit}
+          disabled={!onEdit}
         >
           Editar conteúdo
         </Button>

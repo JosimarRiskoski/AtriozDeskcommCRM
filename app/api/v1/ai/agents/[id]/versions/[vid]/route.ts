@@ -17,7 +17,7 @@ import { versionPatchSchema } from "@/lib/ai/agents/validation";
 export const dynamic = "force-dynamic";
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, split_messages, split_max_chars, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -111,6 +111,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     update.history_message_window = patch.history_message_window;
   if (patch.history_token_window !== undefined)
     update.history_token_window = patch.history_token_window;
+  if (patch.split_messages !== undefined) update.split_messages = patch.split_messages;
+  if (patch.split_max_chars !== undefined) update.split_max_chars = patch.split_max_chars;
   if (patch.handoff_keywords !== undefined) update.handoff_keywords = patch.handoff_keywords;
   if (patch.handoff_tool_enabled !== undefined)
     update.handoff_tool_enabled = patch.handoff_tool_enabled;

@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import { agentRunsKey } from "@/hooks/ai/useAgentRuns";
+import { splitIntoBubbles } from "@/lib/agent-engine/agent/split-message";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 
@@ -58,6 +59,12 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
   const [pending, setPending] = React.useState(false);
   const [result, setResult] = React.useState<TestResponse["data"] | null>(null);
   const explanation = React.useMemo(() => explainTestResult(result), [result]);
+  const previewMessages = React.useMemo(() => {
+    const text = result?.final_text?.trim();
+    if (!text) return [];
+    if (!target?.split_messages) return [text];
+    return splitIntoBubbles(text, target.split_max_chars);
+  }, [result?.final_text, target?.split_max_chars, target?.split_messages]);
 
   if (!target) {
     return (
@@ -202,6 +209,7 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
             <RunTrace
               toolCalls={result.tool_calls}
               finalText={result.final_text ?? null}
+              finalMessages={previewMessages}
               emptyMessage="Sem tool calls (resposta direta do LLM)."
             />
 

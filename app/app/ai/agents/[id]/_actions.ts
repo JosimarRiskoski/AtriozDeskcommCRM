@@ -35,7 +35,7 @@ import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, split_messages, split_max_chars, handoff_keywords, handoff_tool_enabled, cases_enabled, followup, status, published_at, superseded_at, created_at, created_by";
 
 type ActionResult<T = void> =
   { ok: true; data?: T } | { ok: false; error: string; message?: string; details?: unknown };
@@ -167,6 +167,8 @@ export async function saveAgentDraftAction(
         cost_budget_cents: v.cost_budget_cents,
         history_message_window: v.history_message_window,
         history_token_window: v.history_token_window,
+        split_messages: v.split_messages,
+        split_max_chars: v.split_max_chars,
         handoff_keywords: v.handoff_keywords,
         handoff_tool_enabled: v.handoff_tool_enabled,
         cases_enabled: v.cases_enabled,
@@ -349,6 +351,8 @@ export async function revertToVersionAction(
     cost_budget_cents: number;
     history_message_window: number;
     history_token_window: number;
+    split_messages: boolean;
+    split_max_chars: number;
     handoff_keywords: string[];
     handoff_tool_enabled: boolean;
     cases_enabled: boolean;
@@ -387,6 +391,8 @@ export async function revertToVersionAction(
         cost_budget_cents: src.cost_budget_cents,
         history_message_window: src.history_message_window,
         history_token_window: src.history_token_window,
+        split_messages: src.split_messages,
+        split_max_chars: src.split_max_chars,
         handoff_keywords: src.handoff_keywords,
         handoff_tool_enabled: src.handoff_tool_enabled,
         cases_enabled: src.cases_enabled,
@@ -533,6 +539,8 @@ export async function createMcpAgentAction(
     cost_budget_cents: v.cost_budget_cents,
     history_message_window: v.history_message_window,
     history_token_window: v.history_token_window,
+    split_messages: v.split_messages,
+    split_max_chars: v.split_max_chars,
     handoff_keywords: v.handoff_keywords,
     handoff_tool_enabled: v.handoff_tool_enabled,
     cases_enabled: v.cases_enabled,
@@ -621,6 +629,8 @@ export async function upgradeLegacyAgentAction(
       cost_budget_cents: v.cost_budget_cents,
       history_message_window: v.history_message_window,
       history_token_window: v.history_token_window,
+      split_messages: v.split_messages,
+      split_max_chars: v.split_max_chars,
       handoff_keywords: v.handoff_keywords,
       handoff_tool_enabled: v.handoff_tool_enabled,
       cases_enabled: v.cases_enabled,

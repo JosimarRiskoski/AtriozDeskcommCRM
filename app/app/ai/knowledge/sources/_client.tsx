@@ -14,6 +14,7 @@ import {
   type KnowledgeSourceType,
 } from "@/components/ai/KnowledgeSourceCard";
 import { ConfigureKnowledgeSourceDialog } from "./ConfigureKnowledgeSourceDialog";
+import { EditFaqDialog } from "./EditFaqDialog";
 
 interface Props {
   agentId: string;
@@ -33,6 +34,7 @@ function canonicalType(t: string): KnowledgeSourceType | "other" {
 export function KnowledgeSourcesClient({ agentId, initialSources }: Props) {
   const qc = useQueryClient();
   const [configuring, setConfiguring] = useState<KnowledgeSourceType | null>(null);
+  const [editingFaq, setEditingFaq] = useState<SourceRow | null>(null);
   const { data: sources } = useKnowledgeSources(agentId, { initialData: initialSources });
   const reindex = useReindexSource(agentId);
 
@@ -88,6 +90,7 @@ export function KnowledgeSourcesClient({ agentId, initialSources }: Props) {
             isReindexing={isReindexing}
             onReindex={source ? () => reindex.mutate(source.id) : undefined}
             onConfigure={!source ? () => setConfiguring(slot) : undefined}
+            onEdit={slot === "faq" && source ? () => setEditingFaq(source) : undefined}
           />
         );
         })}
@@ -100,6 +103,14 @@ export function KnowledgeSourcesClient({ agentId, initialSources }: Props) {
           if (!open) setConfiguring(null);
         }}
         onCreated={onChange}
+      />
+      <EditFaqDialog
+        source={editingFaq}
+        open={editingFaq !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingFaq(null);
+        }}
+        onSaved={onChange}
       />
     </>
   );

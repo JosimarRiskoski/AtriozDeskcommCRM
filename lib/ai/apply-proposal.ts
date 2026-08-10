@@ -31,7 +31,7 @@ export type ApplyProposalErrorCode =
 
 /** Colunas copiadas da versão publicada para a nova (conteúdo imutável — cópia integral). */
 const VERSION_COPY_COLUMNS =
-  "id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled";
+  "id, version_number, system_prompt, provider, model, credential_id, tool_ids, contact_field_access, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, split_messages, split_max_chars, handoff_keywords, handoff_tool_enabled";
 
 export async function applyProposal(
   admin: SupabaseClient,
@@ -150,6 +150,8 @@ export async function applyProposal(
       cost_budget_cents: base.cost_budget_cents,
       history_message_window: base.history_message_window,
       history_token_window: base.history_token_window,
+      split_messages: base.split_messages,
+      split_max_chars: base.split_max_chars,
       handoff_keywords: base.handoff_keywords,
       handoff_tool_enabled: base.handoff_tool_enabled,
       status: "draft",

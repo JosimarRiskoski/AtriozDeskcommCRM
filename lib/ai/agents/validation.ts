@@ -107,6 +107,8 @@ const versionShapeSchema = z
     cost_budget_cents: z.number().int().min(1).max(10000).default(50),
     history_message_window: z.number().int().min(0).max(200).default(20),
     history_token_window: z.number().int().min(0).max(50000).default(8000),
+    split_messages: z.boolean().default(false),
+    split_max_chars: z.number().int().min(80).max(1000).default(220),
     handoff_keywords: z
       .array(z.string().trim().min(1).max(60))
       .max(20)

@@ -43,12 +43,8 @@ export default async function NewAgentPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <BackNavigation fallbackHref="/app/ai" label="Voltar aos agentes" />
-      <AgentForm
-        mode="create"
-        credentials={credentials}
-        channelSessions={channelSessions}
-      />
+      <BackNavigation fallbackHref="/app/ai/agents" label="Voltar aos agentes" />
+      <AgentForm mode="create" credentials={credentials} channelSessions={channelSessions} />
     </div>
   );
 }

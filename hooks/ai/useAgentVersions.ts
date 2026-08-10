@@ -22,6 +22,8 @@ export interface AgentVersionRow {
   cost_budget_cents: number;
   history_message_window: number;
   history_token_window: number;
+  split_messages: boolean;
+  split_max_chars: number;
   handoff_keywords: string[];
   handoff_tool_enabled: boolean;
   cases_enabled: boolean;

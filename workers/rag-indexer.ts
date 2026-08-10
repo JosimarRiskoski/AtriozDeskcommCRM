@@ -369,7 +369,24 @@ async function handleKnowledgeSourceUpdated(
       chunks.map((chunk) => [`${chunk.sourceId}:${computeContentHash(chunk.content)}`, chunk]),
     ).values(),
   );
-  if (uniqueChunks.length === 0) return skip("no_content_to_index");
+  const requestedSourceId =
+    typeof row.payload["knowledge_source_id"] === "string"
+      ? row.payload["knowledge_source_id"]
+      : null;
+  if (uniqueChunks.length === 0) {
+    if (requestedSourceId) {
+      await admin
+        .from("ai_knowledge_sources")
+        .update({
+          last_index_status: "partial",
+          last_index_error: "Nenhum conteúdo disponível para indexar nesta fonte.",
+          chunks_count: 0,
+        })
+        .eq("id", requestedSourceId)
+        .eq("organization_id", row.organization_id);
+    }
+    return skip("no_content_to_index");
+  }
 
   const { versionId } = await createKnowledgeVersion({
     agentId,
@@ -418,11 +435,13 @@ async function handleKnowledgeSourceUpdated(
   const indexedAt = new Date().toISOString();
   for (const source of sources) {
     const sourceCount = writtenBySource.get(source.id) ?? 0;
+    if (sourceCount === 0 && source.id !== requestedSourceId) continue;
     await admin
       .from("ai_knowledge_sources")
       .update({
-        last_index_status: sourceCount > 0 ? "success" : "failed",
-        last_index_error: sourceCount > 0 ? null : "nenhum chunk foi gravado nesta indexação",
+        last_index_status: sourceCount > 0 ? "success" : "partial",
+        last_index_error:
+          sourceCount > 0 ? null : "Nenhum conteúdo disponível para indexar nesta fonte.",
         last_indexed_at: indexedAt,
         chunks_count: sourceCount,
       })
