@@ -25,7 +25,7 @@ import { useFollowupFlows } from "@/hooks/followup/useFollowupFlows";
 import { useStartFollowupEnrollment } from "@/hooks/followup/useFollowupEnrollments";
 import type { PipelineRow } from "@/app/api/v1/pipelines/_handler";
 import type { BoardData } from "@/lib/kanban/types";
-import { StepProgress } from "@/components/ui/step-progress";
+import { StepDialogForm } from "@/components/ui/step-dialog-form";
 
 interface FormShape {
   name?: string;
@@ -109,9 +109,7 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
     .split(",")
     .map((tag) => tag.trim().toLowerCase())
     .filter(Boolean);
-  const hasIdentifier = Boolean(
-    form.watch("email")?.trim() || form.watch("phone_number")?.trim(),
-  );
+  const hasIdentifier = Boolean(form.watch("email")?.trim() || form.watch("phone_number")?.trim());
 
   function addKnownTag(tag: string) {
     if (selectedTags.includes(tag)) return;
@@ -209,15 +207,49 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Novo contato</DialogTitle>
           <DialogDescription>
             Preencha pelo menos um identificador (email ou telefone).
           </DialogDescription>
         </DialogHeader>
-        <StepProgress labels={["Contato", "Ações"]} current={step} />
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <StepDialogForm
+          labels={["Contato", "Ações"]}
+          currentStep={step}
+          onSubmit={form.handleSubmit(onSubmit)}
+          footer={
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={create.isPending}
+              >
+                Cancelar
+              </Button>
+              {step === 1 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep(0)}
+                  disabled={create.isPending}
+                >
+                  Voltar
+                </Button>
+              ) : null}
+              {step === 0 ? (
+                <Button type="button" onClick={() => setStep(1)} disabled={!hasIdentifier}>
+                  Continuar
+                </Button>
+              ) : (
+                <Button type="submit" disabled={create.isPending}>
+                  {create.isPending ? "Criando…" : "Criar contato"}
+                </Button>
+              )}
+            </DialogFooter>
+          }
+        >
           <div className="space-y-2">
             <Label htmlFor="name">Nome</Label>
             <Input id="name" {...form.register("name")} />
@@ -368,8 +400,8 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
             <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
             {(knownTags.data ?? []).length > 0 ? (
               <div className="flex flex-wrap gap-1">
-                {knownTags.data!
-                  .filter((tag) => !selectedTags.includes(tag))
+                {knownTags
+                  .data!.filter((tag) => !selectedTags.includes(tag))
                   .slice(0, 12)
                   .map((tag) => (
                     <button
@@ -385,30 +417,7 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
             ) : null}
           </div>
           {serverError && <p className="text-sm text-error-fg">{serverError}</p>}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={create.isPending}
-            >
-              Cancelar
-            </Button>
-            {step === 1 ? (
-              <Button type="button" variant="outline" onClick={() => setStep(0)} disabled={create.isPending}>
-                Voltar
-              </Button>
-            ) : null}
-            {step === 0 ? (
-              <Button type="button" onClick={() => setStep(1)} disabled={!hasIdentifier}>
-                Continuar
-              </Button>
-            ) : null}
-            <Button type="submit" className={step === 0 ? "hidden" : undefined} disabled={create.isPending || step === 0}>
-              {create.isPending ? "Criando…" : "Criar contato"}
-            </Button>
-          </DialogFooter>
-        </form>
+        </StepDialogForm>
       </DialogContent>
     </Dialog>
   );

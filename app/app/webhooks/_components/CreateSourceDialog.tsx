@@ -26,6 +26,7 @@ import {
   usePipelineStages,
   type WebhookSourceRow,
 } from "@/hooks/webhooks/useWebhookSources";
+import { StepDialogForm } from "@/components/ui/step-dialog-form";
 
 interface Props {
   open: boolean;
@@ -34,6 +35,7 @@ interface Props {
 }
 
 export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
+  const [step, setStep] = React.useState(0);
   const [name, setName] = React.useState("");
   const [pipelineId, setPipelineId] = React.useState<string>("");
   const [stageId, setStageId] = React.useState<string>("");
@@ -155,8 +157,14 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setStep(0);
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Nova fonte de captação</DialogTitle>
           <DialogDescription>
@@ -164,227 +172,279 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
             formulário.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="src-name">Nome</Label>
-            <Input
-              id="src-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Landing page de Black Friday"
-              minLength={1}
-              maxLength={120}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Tipo de integração</Label>
-            <Select
-              value={contract}
-              onValueChange={(value) => setContract(value as "generic" | "3c" | "paid_traffic")}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="generic">Formulário ou integração genérica</SelectItem>
-                <SelectItem value="3c">3C — contrato protegido</SelectItem>
-                <SelectItem value="paid_traffic">Tráfego pago — modelo pronto</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              3C exige identificador externo e assinatura, impedindo duplicações e acesso direto ao
-              banco.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="src-secret">
-              {contract === "3c"
-                ? "Credencial compartilhada com a 3C"
-                : "Assinatura da integração (opcional)"}
-            </Label>
-            <Input
-              id="src-secret"
-              type="password"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              minLength={16}
-              required={contract === "3c"}
-            />
-            <p className="text-xs text-muted-foreground">
-              {contract === "3c"
-                ? "Obrigatória na 3C. "
-                : "Quando preenchida, rejeita eventos sem assinatura válida. "}
-              Aparece somente durante a configuração e fica cifrada no servidor.
-            </p>
-          </div>
-          <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
-            <input
-              type="checkbox"
-              checked={createOpportunity}
-              onChange={(event) => setCreateOpportunity(event.target.checked)}
-            />
-            Criar oportunidade no Kanban
-          </label>
-          <details className="rounded-md border p-3 text-sm">
-            <summary className="cursor-pointer font-medium">
-              Mapeamento dos campos recebidos
-            </summary>
-            <div className="mt-3 grid gap-3">
-              <Label>Nomes possíveis para o campo nome</Label>
-              <Input value={nameAliases} onChange={(event) => setNameAliases(event.target.value)} />
-              <Label>Nomes possíveis para o campo telefone</Label>
-              <Input
-                value={phoneAliases}
-                onChange={(event) => setPhoneAliases(event.target.value)}
-              />
-              <Label>Nomes possíveis para o campo e-mail</Label>
-              <Input
-                value={emailAliases}
-                onChange={(event) => setEmailAliases(event.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Separe por vírgulas. O sistema normaliza os dados antes de criar ou atualizar o
-                contato.
-              </p>
-            </div>
-          </details>
-          {createOpportunity && (
-            <>
-              <div className="space-y-2">
-                <Label>Funil de entrada</Label>
-                <Select
-                  value={pipelineId}
-                  onValueChange={setPipelineId}
-                  disabled={pipelinesLoading}
+        <StepDialogForm
+          labels={["Fonte", "Destino", "Automação"]}
+          currentStep={step}
+          onSubmit={onSubmit}
+          footer={
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              {step > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep((current) => current - 1)}
+                  disabled={create.isPending}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Escolha o funil" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pipelines.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Estágio de entrada</Label>
-                <Select
-                  value={stageId}
-                  onValueChange={setStageId}
-                  disabled={!pipelineId || stagesLoading}
+                  Voltar
+                </Button>
+              ) : null}
+              {step < 2 ? (
+                <Button
+                  type="button"
+                  onClick={() => setStep((current) => current + 1)}
+                  disabled={
+                    create.isPending ||
+                    (step === 0 && (!name.trim() || (contract === "3c" && secret.length < 16))) ||
+                    (step === 1 && createOpportunity && (!pipelineId || !stageId))
+                  }
                 >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={pipelineId ? "Escolha o estágio" : "Escolha o funil primeiro"}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stages.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
-          )}
-          {contract !== "generic" && (
-            <div className="space-y-3 rounded-md border p-3">
-              <p className="text-sm font-medium">Automação opcional</p>
-              <p className="text-xs text-muted-foreground">
-                A configuração nasce desligada. Um administrador deverá validar o piloto antes de
-                ativá-la.
-              </p>
-              <Label>Conexão usada pela automação</Label>
-              <select
-                className="w-full rounded-md border bg-background p-2 text-sm"
-                value={channelSessionId}
-                onChange={(event) => setChannelSessionId(event.target.value)}
-              >
-                <option value="">Nenhuma</option>
-                {options.sessions
-                  .filter((session) => session.status === "WORKING")
-                  .map((session) => (
-                    <option key={session.id} value={session.id}>
-                      {session.display_name || session.phone_number || session.id}
-                    </option>
-                  ))}
-              </select>
-              <Label>Agente específico</Label>
-              <select
-                className="w-full rounded-md border bg-background p-2 text-sm"
-                value={agentId}
-                onChange={(event) => setAgentId(event.target.value)}
-              >
-                <option value="">Agente padrão</option>
-                {options.agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))}
-              </select>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={activateAi}
-                  onChange={(event) => setActivateAi(event.target.checked)}
-                />{" "}
-                Ativar IA quando a automação iniciar
-              </label>
-              <Label>Cadência publicada</Label>
-              <select
-                className="w-full rounded-md border bg-background p-2 text-sm"
-                value={followupFlowId}
-                onChange={(event) => setFollowupFlowId(event.target.value)}
-              >
-                <option value="">Não iniciar cadência</option>
-                {options.flows
-                  .filter((flow) => flow.status === "active")
-                  .map((flow) => (
-                    <option key={flow.id} value={flow.id}>
-                      {flow.name}
-                    </option>
-                  ))}
-              </select>
-              {contract === "3c" && (
-                <>
-                  <Label>Campo que indica automação ativa na 3C</Label>
-                  <Input
-                    value={externalStateField}
-                    onChange={(event) => setExternalStateField(event.target.value)}
-                    placeholder="automation_status"
-                  />
-                </>
+                  Continuar
+                </Button>
+              ) : (
+                <Button type="submit" disabled={create.isPending}>
+                  {create.isPending ? "Criando…" : "Criar fonte"}
+                </Button>
               )}
+            </DialogFooter>
+          }
+        >
+          <div className={step === 0 ? "space-y-4" : "hidden"}>
+            <div className="space-y-2">
+              <Label htmlFor="src-name">Nome</Label>
+              <Input
+                id="src-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Landing page de Black Friday"
+                minLength={1}
+                maxLength={120}
+                required
+              />
             </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="src-redirect">URL de obrigado (opcional)</Label>
-            <Input
-              id="src-redirect"
-              type="url"
-              value={redirectTo}
-              onChange={(e) => setRedirectTo(e.target.value)}
-              placeholder="https://seusite.com/obrigado"
-            />
-            <p className="text-xs text-muted-foreground">
-              Para onde enviar a pessoa depois que ela preencher seu formulário.
-            </p>
+            <div className="space-y-2">
+              <Label>Tipo de integração</Label>
+              <Select
+                value={contract}
+                onValueChange={(value) => setContract(value as "generic" | "3c" | "paid_traffic")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="generic">Formulário ou integração genérica</SelectItem>
+                  <SelectItem value="3c">3C — contrato protegido</SelectItem>
+                  <SelectItem value="paid_traffic">Tráfego pago — modelo pronto</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                3C exige identificador externo e assinatura, impedindo duplicações e acesso direto
+                ao banco.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="src-secret">
+                {contract === "3c"
+                  ? "Credencial compartilhada com a 3C"
+                  : "Assinatura da integração (opcional)"}
+              </Label>
+              <Input
+                id="src-secret"
+                type="password"
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+                minLength={16}
+                required={contract === "3c"}
+              />
+              <p className="text-xs text-muted-foreground">
+                {contract === "3c"
+                  ? "Obrigatória na 3C. "
+                  : "Quando preenchida, rejeita eventos sem assinatura válida. "}
+                Aparece somente durante a configuração e fica cifrada no servidor.
+              </p>
+            </div>
+            <details className="rounded-md border p-3 text-sm">
+              <summary className="cursor-pointer font-medium">
+                Mapeamento dos campos recebidos
+              </summary>
+              <div className="mt-3 grid gap-3">
+                <Label>Nomes possíveis para o campo nome</Label>
+                <Input
+                  value={nameAliases}
+                  onChange={(event) => setNameAliases(event.target.value)}
+                />
+                <Label>Nomes possíveis para o campo telefone</Label>
+                <Input
+                  value={phoneAliases}
+                  onChange={(event) => setPhoneAliases(event.target.value)}
+                />
+                <Label>Nomes possíveis para o campo e-mail</Label>
+                <Input
+                  value={emailAliases}
+                  onChange={(event) => setEmailAliases(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separe por vírgulas. O sistema normaliza os dados antes de criar ou atualizar o
+                  contato.
+                </p>
+              </div>
+            </details>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={create.isPending}>
-              Criar fonte
-            </Button>
-          </DialogFooter>
-        </form>
+
+          <div className={step === 1 ? "space-y-4" : "hidden"}>
+            <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={createOpportunity}
+                onChange={(event) => setCreateOpportunity(event.target.checked)}
+              />
+              Criar oportunidade no Kanban
+            </label>
+            {createOpportunity && (
+              <>
+                <div className="space-y-2">
+                  <Label>Funil de entrada</Label>
+                  <Select
+                    value={pipelineId}
+                    onValueChange={setPipelineId}
+                    disabled={pipelinesLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha o funil" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pipelines.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Estágio de entrada</Label>
+                  <Select
+                    value={stageId}
+                    onValueChange={setStageId}
+                    disabled={!pipelineId || stagesLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={pipelineId ? "Escolha o estágio" : "Escolha o funil primeiro"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stages.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="src-redirect">URL de obrigado (opcional)</Label>
+              <Input
+                id="src-redirect"
+                type="url"
+                value={redirectTo}
+                onChange={(e) => setRedirectTo(e.target.value)}
+                placeholder="https://seusite.com/obrigado"
+              />
+              <p className="text-xs text-muted-foreground">
+                Para onde enviar a pessoa depois que ela preencher seu formulário.
+              </p>
+            </div>
+          </div>
+
+          <div className={step === 2 ? "space-y-4" : "hidden"}>
+            {contract !== "generic" ? (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-sm font-medium">Automação opcional</p>
+                <p className="text-xs text-muted-foreground">
+                  A configuração nasce desligada. Um administrador deverá validar o piloto antes de
+                  ativá-la.
+                </p>
+                <Label>Conexão usada pela automação</Label>
+                <select
+                  className="w-full rounded-md border bg-background p-2 text-sm"
+                  value={channelSessionId}
+                  onChange={(event) => setChannelSessionId(event.target.value)}
+                >
+                  <option value="">Nenhuma</option>
+                  {options.sessions
+                    .filter((session) => session.status === "WORKING")
+                    .map((session) => (
+                      <option key={session.id} value={session.id}>
+                        {session.display_name || session.phone_number || session.id}
+                      </option>
+                    ))}
+                </select>
+                <Label>Agente específico</Label>
+                <select
+                  className="w-full rounded-md border bg-background p-2 text-sm"
+                  value={agentId}
+                  onChange={(event) => setAgentId(event.target.value)}
+                >
+                  <option value="">Agente padrão</option>
+                  {options.agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={activateAi}
+                    onChange={(event) => setActivateAi(event.target.checked)}
+                  />{" "}
+                  Ativar IA quando a automação iniciar
+                </label>
+                <Label>Cadência publicada</Label>
+                <select
+                  className="w-full rounded-md border bg-background p-2 text-sm"
+                  value={followupFlowId}
+                  onChange={(event) => setFollowupFlowId(event.target.value)}
+                >
+                  <option value="">Não iniciar cadência</option>
+                  {options.flows
+                    .filter((flow) => flow.status === "active")
+                    .map((flow) => (
+                      <option key={flow.id} value={flow.id}>
+                        {flow.name}
+                      </option>
+                    ))}
+                </select>
+                {contract === "3c" && (
+                  <>
+                    <Label>Campo que indica automação ativa na 3C</Label>
+                    <Input
+                      value={externalStateField}
+                      onChange={(event) => setExternalStateField(event.target.value)}
+                      placeholder="automation_status"
+                    />
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="bg-muted/30 rounded-md border p-4 text-sm">
+                A fonte genérica será criada sem automação. Você poderá configurar regras depois de
+                validar o primeiro evento recebido.
+              </div>
+            )}
+            <div className="rounded-md border p-4 text-sm">
+              <p className="font-medium">Revise antes de criar</p>
+              <p className="mt-1 text-muted-foreground">
+                {name} · {createOpportunity ? "cria oportunidade" : "somente atualiza o contato"}
+              </p>
+            </div>
+          </div>
+        </StepDialogForm>
       </DialogContent>
     </Dialog>
   );

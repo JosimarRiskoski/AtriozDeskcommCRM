@@ -21,7 +21,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
 import { Copy } from "@/lib/ui/icons";
 import { copyToClipboard } from "@/lib/clipboard";
-import { StepProgress } from "@/components/ui/step-progress";
+import { StepDialogForm } from "@/components/ui/step-dialog-form";
 
 const TEMPLATES_KEY = ["message-templates"];
 
@@ -78,7 +78,6 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
 
   React.useEffect(() => {
     if (!open) return;
-    setStep(0);
     // O formulário permanece montado entre aberturas; ao trocar de template,
     // este reset deliberado impede que dados do item anterior sejam salvos no próximo.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -128,16 +127,51 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setStep(0);
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar template" : "Novo template"}</DialogTitle>
           <DialogDescription>
             Scripts salvos para responder mais rápido no atendimento.
           </DialogDescription>
         </DialogHeader>
-        <StepProgress labels={["Dados", "Conteúdo"]} current={step} />
-        <form onSubmit={onSubmit} className="space-y-4">
+        <StepDialogForm
+          labels={["Dados", "Conteúdo"]}
+          currentStep={step}
+          onSubmit={onSubmit}
+          footer={
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              {step === 1 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep(0)}
+                  disabled={pending}
+                >
+                  Voltar
+                </Button>
+              ) : null}
+              {step === 0 ? (
+                <Button type="button" onClick={() => setStep(1)} disabled={!title.trim()}>
+                  Continuar
+                </Button>
+              ) : (
+                <Button type="submit" disabled={pending || !body.trim()}>
+                  {isEdit ? "Salvar" : "Criar template"}
+                </Button>
+              )}
+            </DialogFooter>
+          }
+        >
           <div className={step === 0 ? "space-y-2" : "hidden"}>
             <Label>Formato</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -281,27 +315,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               <Label htmlFor="tpl-shared">Compartilhar com a equipe</Label>
             </div>
           )}
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            {step === 1 ? (
-              <Button type="button" variant="outline" onClick={() => setStep(0)} disabled={pending}>
-                Voltar
-              </Button>
-            ) : null}
-            {step === 0 ? (
-              <Button type="button" onClick={() => setStep(1)} disabled={!title.trim()}>
-                Continuar
-              </Button>
-            ) : null}
-            {step === 1 ? (
-              <Button type="submit" disabled={pending}>
-                {isEdit ? "Salvar" : "Criar template"}
-              </Button>
-            ) : null}
-          </DialogFooter>
-        </form>
+        </StepDialogForm>
       </DialogContent>
     </Dialog>
   );

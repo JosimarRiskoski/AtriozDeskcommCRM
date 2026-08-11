@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ import { useCreateLead } from "@/hooks/kanban/useCreateLead";
 import type { Stage } from "@/lib/kanban/types";
 import { createLeadSchema, type CreateLeadInput } from "@/lib/schemas/leads";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
+import { StepDialogForm } from "@/components/ui/step-dialog-form";
 
 interface FormShape {
   title: string;
@@ -87,6 +88,7 @@ export function NewLeadDialog({
   const create = useCreateLead(pipelineId);
   const members = useAssignableMembers(open);
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
+  const [step, setStep] = useState(0);
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -200,36 +202,85 @@ export function NewLeadDialog({
   const stageId = form.watch("stage_id");
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setStep(0);
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{dialogTitle}</DialogTitle>
           <DialogDescription>
             A oportunidade será vinculada automaticamente ao contato desta conversa.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          {(contactName || contactPhone || primaryOrigin || originHistory.length > 0) && (
-            <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
-              <div className="font-medium">{contactName || "Contato sem nome"}</div>
-              {contactPhone ? (
-                <div className="text-xs text-muted-foreground">{contactPhone}</div>
+        <StepDialogForm
+          labels={["Negócio", "Detalhes", "Valores"]}
+          currentStep={step}
+          onSubmit={form.handleSubmit(onSubmit)}
+          footer={
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={create.isPending}
+              >
+                Cancelar
+              </Button>
+              {step > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep((current) => current - 1)}
+                  disabled={create.isPending}
+                >
+                  Voltar
+                </Button>
               ) : null}
-              {primaryOrigin ? (
-                <div className="mt-2 text-xs">
-                  <span className="text-muted-foreground">Origem principal: </span>
-                  {primaryOrigin}
-                </div>
-              ) : null}
-              {originHistory.length > 0 ? (
-                <div className="mt-1 text-xs">
-                  <span className="text-muted-foreground">Histórico: </span>
-                  {originHistory.join(" · ")}
-                </div>
-              ) : null}
-            </div>
-          )}
-          {pipelineOptions && pipelineOptions.length > 1 ? (
+              {step < 2 ? (
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    const valid = step === 0 ? await form.trigger("title") : Boolean(stageId);
+                    if (valid) setStep((current) => current + 1);
+                  }}
+                  disabled={create.isPending || (step === 1 && !stageId)}
+                >
+                  Continuar
+                </Button>
+              ) : (
+                <Button type="submit" disabled={create.isPending || !stageId}>
+                  {create.isPending ? "Criando…" : "Criar oportunidade"}
+                </Button>
+              )}
+            </DialogFooter>
+          }
+        >
+          {step === 0 &&
+            (contactName || contactPhone || primaryOrigin || originHistory.length > 0) && (
+              <div className="bg-muted/30 rounded-md border border-border p-3 text-sm">
+                <div className="font-medium">{contactName || "Contato sem nome"}</div>
+                {contactPhone ? (
+                  <div className="text-xs text-muted-foreground">{contactPhone}</div>
+                ) : null}
+                {primaryOrigin ? (
+                  <div className="mt-2 text-xs">
+                    <span className="text-muted-foreground">Origem principal: </span>
+                    {primaryOrigin}
+                  </div>
+                ) : null}
+                {originHistory.length > 0 ? (
+                  <div className="mt-1 text-xs">
+                    <span className="text-muted-foreground">Histórico: </span>
+                    {originHistory.join(" · ")}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          {step === 0 && pipelineOptions && pipelineOptions.length > 1 ? (
             <div className="space-y-2">
               <Label>Funil</Label>
               <Select value={pipelineId} onValueChange={(value) => onPipelineChange?.(value)}>
@@ -246,7 +297,7 @@ export function NewLeadDialog({
               </Select>
             </div>
           ) : null}
-          <div className="space-y-2">
+          <div className={step === 0 ? "space-y-2" : "hidden"}>
             <Label htmlFor="title">Título</Label>
             <Input
               id="title"
@@ -255,7 +306,7 @@ export function NewLeadDialog({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className={step === 0 ? "space-y-2" : "hidden"}>
             <Label>Responsável</Label>
             <Select
               value={form.watch("owner_user_id")}
@@ -275,7 +326,7 @@ export function NewLeadDialog({
             </Select>
           </div>
 
-          <div className="space-y-2">
+          <div className={step === 0 ? "space-y-2" : "hidden"}>
             <Label htmlFor="next_action">Próxima ação</Label>
             <Input
               id="next_action"
@@ -284,7 +335,7 @@ export function NewLeadDialog({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className={step === 1 ? "space-y-2" : "hidden"}>
             <Label htmlFor="internal_note">Observação interna</Label>
             <Textarea
               id="internal_note"
@@ -294,7 +345,7 @@ export function NewLeadDialog({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className={step === 1 ? "space-y-2" : "hidden"}>
             <Label htmlFor="description">Descrição</Label>
             <Textarea
               id="description"
@@ -304,7 +355,7 @@ export function NewLeadDialog({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className={step === 1 ? "space-y-2" : "hidden"}>
             <Label>Etapa</Label>
             <Select value={stageId} onValueChange={(v) => form.setValue("stage_id", v)}>
               <SelectTrigger>
@@ -322,7 +373,7 @@ export function NewLeadDialog({
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={step === 2 ? "grid gap-3 sm:grid-cols-2" : "hidden"}>
             <div className="space-y-2">
               <Label htmlFor="valueReais">{valueLabel} (R$)</Label>
               <Input
@@ -345,25 +396,11 @@ export function NewLeadDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className={step === 2 ? "space-y-2" : "hidden"}>
             <Label htmlFor="tagsRaw">Tags (separadas por vírgula)</Label>
             <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
           </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={create.isPending}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={create.isPending || !stageId}>
-              {create.isPending ? "Criando…" : "Criar oportunidade"}
-            </Button>
-          </DialogFooter>
-        </form>
+        </StepDialogForm>
       </DialogContent>
     </Dialog>
   );

@@ -14,6 +14,7 @@ import { emitLeadActivity, stageChangeReason } from "@/lib/leads/activity-emitte
 import { listaLegivel } from "@/lib/leads/activity-vocabulary";
 import { camposAlterados } from "@/lib/leads/campos-alterados";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
+import { conversationLeadLink } from "@/lib/leads/conversation-link";
 import type { CreateLeadInput, UpdateLeadInput } from "@/lib/schemas";
 
 type SB = SupabaseClient;
@@ -240,7 +241,13 @@ export async function createLeadHandler(
       .eq("organization_id", ctx.organization_id)
       .maybeSingle();
     if (conversationError) {
-      throw new ApiError(500, "internal_error", undefined, ctx.requestId, conversationError.message);
+      throw new ApiError(
+        500,
+        "internal_error",
+        undefined,
+        ctx.requestId,
+        conversationError.message,
+      );
     }
     if (!conversation || (input.contact_id && conversation.contact_id !== input.contact_id)) {
       throw new ApiError(
@@ -308,8 +315,7 @@ export async function createLeadHandler(
       value_cents: input.value_cents ?? null,
       currency: input.currency ?? "BRL",
       ...ownerPatch,
-      assigned_at:
-        ownerPatch.owner_kind === null ? null : new Date().toISOString(),
+      assigned_at: ownerPatch.owner_kind === null ? null : new Date().toISOString(),
       expected_close_date: input.expected_close_date ?? null,
       tags: input.tags ?? [],
       source: input.source,
@@ -350,12 +356,14 @@ export async function createLeadHandler(
   }
 
   if (input.conversation_id) {
-    const { error: linkError } = await supabase.from("crm_lead_links").insert({
-      organization_id: ctx.organization_id,
-      lead_id: (lead as { id: string }).id,
-      target_kind: "conversation",
-      target_id: input.conversation_id,
-    });
+    const { error: linkError } = await supabase.from("crm_lead_links").insert(
+      conversationLeadLink({
+        organizationId: ctx.organization_id,
+        leadId: (lead as { id: string }).id,
+        conversationId: input.conversation_id,
+        actorUserId: ctx.actor.type === "user" ? ctx.actor.id : null,
+      }),
+    );
     if (linkError) {
       await supabase
         .from("crm_leads")
@@ -481,31 +489,34 @@ export async function updateLeadHandler(
   // dossie e clicar Salvar geraria "Dados do negocio alterados" com a lista
   // vazia — ruido na timeline exatamente na superficie que promete contar a
   // vida do negocio.
-  const atividadeEdicao = fields.length === 0 ? { ok: true as const } : await emitLeadActivity(supabase, {
-    organizationId: existing.organization_id,
-    leadId,
-    contactId: (updated as { contact_id?: string | null }).contact_id ?? null,
-    type: "lead_edited",
-    sourceModule: "crm",
-    sourceId: leadId,
-    actor: ctx.actor,
-    // ⚠️ O REASON NOMEIA OS CAMPOS, NUNCA OS VALORES. Se você veio aqui para
-    // deixar a timeline "mais informativa" pondo o antes-e-depois — pare: neste
-    // produto o TÍTULO É O NOME DO CLIENTE ("Carlos — Clínica Vida Odonto"), e
-    // `custom_fields` é dado arbitrário do tenant, sem limite conhecido. O
-    // reason é RENDERIZADO NA TELA e vai junto em captura, exportação e ticket
-    // de suporte; o §9 proíbe PII nova em log, reason ou evidence.
-    //
-    // Quem precisa do valor anterior tem `api_audit_log`, que já registra a
-    // mutação SOB CONTROLE DE ACESSO. Duplicar aqui criaria um segundo lugar
-    // com o mesmo dado e menos proteção.
-    //
-    // NÃO confunda com a atividade de autorização vencida (wave 4), que mostra
-    // antes-e-depois DE PROPÓSITO: lá o texto é a proposta do PRÓPRIO AGENTE,
-    // escrita por máquina. A origem do texto é que decide, não a forma da frase.
-    reason: `Alterou ${listaLegivel(fields)}`,
-    payload: { fields },
-  });
+  const atividadeEdicao =
+    fields.length === 0
+      ? { ok: true as const }
+      : await emitLeadActivity(supabase, {
+          organizationId: existing.organization_id,
+          leadId,
+          contactId: (updated as { contact_id?: string | null }).contact_id ?? null,
+          type: "lead_edited",
+          sourceModule: "crm",
+          sourceId: leadId,
+          actor: ctx.actor,
+          // ⚠️ O REASON NOMEIA OS CAMPOS, NUNCA OS VALORES. Se você veio aqui para
+          // deixar a timeline "mais informativa" pondo o antes-e-depois — pare: neste
+          // produto o TÍTULO É O NOME DO CLIENTE ("Carlos — Clínica Vida Odonto"), e
+          // `custom_fields` é dado arbitrário do tenant, sem limite conhecido. O
+          // reason é RENDERIZADO NA TELA e vai junto em captura, exportação e ticket
+          // de suporte; o §9 proíbe PII nova em log, reason ou evidence.
+          //
+          // Quem precisa do valor anterior tem `api_audit_log`, que já registra a
+          // mutação SOB CONTROLE DE ACESSO. Duplicar aqui criaria um segundo lugar
+          // com o mesmo dado e menos proteção.
+          //
+          // NÃO confunda com a atividade de autorização vencida (wave 4), que mostra
+          // antes-e-depois DE PROPÓSITO: lá o texto é a proposta do PRÓPRIO AGENTE,
+          // escrita por máquina. A origem do texto é que decide, não a forma da frase.
+          reason: `Alterou ${listaLegivel(fields)}`,
+          payload: { fields },
+        });
   if (!atividadeEdicao.ok) {
     // Rastro de mutação já ocorrida: falha BAIXO, mas contada (ver
     // lib/leads/activity-write-failure.ts).
