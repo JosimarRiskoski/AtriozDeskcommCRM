@@ -20,7 +20,11 @@ export async function connectGoogleCalendar(): Promise<ConnectGoogleCalendarResu
     return { ok: false, error: "forbidden" };
   }
   const requestHeaders = await headers();
-  const requestOrigin = requestHeaders.get("origin");
+  const forwardedHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const forwardedProto = requestHeaders.get("x-forwarded-proto") ?? "https";
+  const requestOrigin =
+    requestHeaders.get("origin") ??
+    (forwardedHost ? `${forwardedProto}://${forwardedHost}` : undefined);
   const config = getGoogleCalendarConfig(requestOrigin ?? undefined);
   if (!config) return { ok: false, error: "not_configured" };
   redirect(buildGoogleAuthorizeUrl(config, issueCalendarState(activeOrg.orgId)));
