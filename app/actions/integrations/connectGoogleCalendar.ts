@@ -7,6 +7,7 @@ import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { getGoogleCalendarConfig } from "@/lib/calendar/config";
 import { buildGoogleAuthorizeUrl } from "@/lib/calendar/google";
 import { issueCalendarState } from "@/lib/calendar/state";
+import { resolvePublicOrigin } from "@/lib/http/public-origin";
 
 export type ConnectGoogleCalendarResult =
   | { ok: false; error: "auth_required" | "no_active_org" | "forbidden" | "not_configured" };
@@ -20,11 +21,8 @@ export async function connectGoogleCalendar(): Promise<ConnectGoogleCalendarResu
     return { ok: false, error: "forbidden" };
   }
   const requestHeaders = await headers();
-  const forwardedHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
-  const forwardedProto = requestHeaders.get("x-forwarded-proto") ?? "https";
   const requestOrigin =
-    requestHeaders.get("origin") ??
-    (forwardedHost ? `${forwardedProto}://${forwardedHost}` : undefined);
+    requestHeaders.get("origin") ?? resolvePublicOrigin(requestHeaders);
   const config = getGoogleCalendarConfig(requestOrigin ?? undefined);
   if (!config) return { ok: false, error: "not_configured" };
   redirect(buildGoogleAuthorizeUrl(config, issueCalendarState(activeOrg.orgId)));

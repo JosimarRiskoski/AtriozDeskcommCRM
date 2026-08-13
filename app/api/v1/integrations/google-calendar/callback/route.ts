@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { getGoogleCalendarConfig } from "@/lib/calendar/config";
 import { exchangeGoogleCode, getGoogleAccount } from "@/lib/calendar/google";
 import { verifyCalendarState } from "@/lib/calendar/state";
+import { resolvePublicOrigin } from "@/lib/http/public-origin";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -19,7 +20,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const url = new URL(request.url);
   const state = verifyCalendarState(url.searchParams.get("state"));
   const code = url.searchParams.get("code");
-  const requestOrigin = url.origin;
+  // Atrás do EasyPanel, request.url aponta para 0.0.0.0:3000. O OAuth precisa
+  // usar o domínio público em ambas as pontas para o redirect_uri coincidir.
+  const requestOrigin = resolvePublicOrigin(request.headers, url.origin) ?? url.origin;
   const config = getGoogleCalendarConfig(requestOrigin);
   if (!config) return back("/app/settings/google-calendar?error=not_configured", requestOrigin);
   if (!state) return back("/app/settings/google-calendar?error=invalid_state", requestOrigin);
