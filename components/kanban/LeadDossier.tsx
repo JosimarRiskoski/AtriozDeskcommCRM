@@ -1,5 +1,5 @@
 "use client";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLeadTimeline } from "@/hooks/leads/useLeadTimeline";
@@ -9,6 +9,9 @@ import { ScoreSlot } from "./ScoreSlot";
 import { LeadTimeline } from "./LeadTimeline";
 import { OwnerBadge } from "./OwnerBadge";
 import { resolveLeadOwner } from "@/lib/kanban/owner";
+import { AppointmentDialog } from "@/components/calendar/AppointmentDialog";
+import { Button } from "@/components/ui/button";
+import { CalendarBlank } from "@/lib/ui/icons";
 
 interface Props {
   open: boolean;
@@ -59,6 +62,7 @@ export function LeadDossier({
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
   const owner = resolveLeadOwner(lead, ownerNames);
   const score = lead.score ?? null;
+  const [appointmentOpen, setAppointmentOpen] = useState(false);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -103,6 +107,18 @@ export function LeadDossier({
             />
           )}
 
+          {lead.contact_id ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              onClick={() => setAppointmentOpen(true)}
+            >
+              <CalendarBlank size={13} className="mr-1" /> Agendar
+            </Button>
+          ) : null}
+
           <button
             type="button"
             onClick={() => campos.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -142,6 +158,15 @@ export function LeadDossier({
           </h3>
           <LeadFieldsForm lead={lead} pipelineId={pipelineId} valueLabel={valueLabel} />
         </div>
+        {lead.contact_id ? (
+          <AppointmentDialog
+            open={appointmentOpen}
+            onOpenChange={setAppointmentOpen}
+            contactId={lead.contact_id}
+            leadId={lead.id}
+            contactName={lead.title}
+          />
+        ) : null}
       </SheetContent>
     </Sheet>
   );

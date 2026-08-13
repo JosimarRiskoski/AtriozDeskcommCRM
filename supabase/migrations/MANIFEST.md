@@ -101,6 +101,8 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 
 | `20260813150000` | `0125_channel_display_colors` | Adiciona cor hexadecimal validada e persistente por conexão, com paleta inicial determinística para diferenciar números no Inbox sem depender somente de cor. |
 
+| `20260813160000` | `0126_google_calendar_appointments` | Agenda Google por organizacao, OAuth cifrado, compromissos ligados a contato/conversa/oportunidade e fila propria de lembretes fixos de 24h/1h pelo WhatsApp. |
+
 ## Reproducibility
 
 Migrations were applied directly via the Supabase MCP `apply_migration` tool during the autonomous bootstrap session. The SQL of each migration is also embedded in the corresponding spec under `docs/specs/0X-spec-*.md` and the database keeps them in `supabase_migrations.schema_migrations`.

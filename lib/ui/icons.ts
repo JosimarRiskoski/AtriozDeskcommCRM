@@ -67,6 +67,7 @@ export {
   Eye,
   ChartBar,
   ClockCountdown,
+  CalendarBlank,
   // theme
   Sun,
   Moon,

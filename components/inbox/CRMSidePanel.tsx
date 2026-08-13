@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tag, Receipt, Briefcase, ArrowRight } from "@/lib/ui/icons";
+import { Tag, Receipt, Briefcase, ArrowRight, CalendarBlank } from "@/lib/ui/icons";
 import { apiClient } from "@/lib/api/client";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { activityLabel, actorLabel, actorShape } from "@/lib/leads/activity-vocabulary";
@@ -33,6 +33,7 @@ import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { ChannelBadge } from "@/components/channels/ChannelBadge";
 import type { BoardData } from "@/lib/kanban/types";
 import type { PipelineRow } from "@/app/api/v1/pipelines/_handler";
+import { AppointmentDialog } from "@/components/calendar/AppointmentDialog";
 
 interface Props {
   conversation: ConversationWithContact | null;
@@ -141,6 +142,7 @@ export function CRMSidePanel({ conversation }: Props) {
   const [tentativa, setTentativa] = useState(0);
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
   const [opportunityOpen, setOpportunityOpen] = useState(false);
+  const [appointmentOpen, setAppointmentOpen] = useState(false);
   const [opportunityPipelineId, setOpportunityPipelineId] = useState("");
   const channels = useChannelSessions({ includeArchived: true });
   const notes = useConversationNotes(conversation?.id ?? null);
@@ -337,6 +339,17 @@ export function CRMSidePanel({ conversation }: Props) {
               >
                 <Briefcase size={12} className="mr-1" weight="regular" aria-hidden />
                 Criar oportunidade
+              </Button>
+            )}
+            {contactId && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={() => setAppointmentOpen(true)}
+              >
+                <CalendarBlank size={12} className="mr-1" weight="regular" aria-hidden />
+                Agendar
               </Button>
             )}
             {contactId && (
@@ -579,6 +592,14 @@ export function CRMSidePanel({ conversation }: Props) {
         }))}
         onPipelineChange={setOpportunityPipelineId}
         onCreated={() => setTentativa((value) => value + 1)}
+      />
+      <AppointmentDialog
+        open={appointmentOpen}
+        onOpenChange={setAppointmentOpen}
+        contactId={contactId}
+        conversationId={conversation.id}
+        contactName={displayName === "—" ? null : displayName}
+        contactPhone={contact?.phone_number ?? null}
       />
     </aside>
   );

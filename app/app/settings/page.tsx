@@ -91,6 +91,13 @@ const LINKS: SettingsLink[] = [
     adminOnly: true,
   },
   {
+    href: "/app/settings/google-calendar",
+    title: "Google Agenda",
+    description: "Visitas, consultas, Google Meet e lembretes pelo WhatsApp.",
+    group: "Integrações",
+    managerOnly: true,
+  },
+  {
     href: "/app/settings/meta-capi",
     title: "Conversões da Meta",
     description: "Enviar negócios ganhos ao Dataset/Pixel com segurança.",

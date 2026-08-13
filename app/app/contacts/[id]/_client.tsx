@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ShieldCheck, PencilSimple, Trash, ChatCircle } from "@/lib/ui/icons";
+import { ShieldCheck, PencilSimple, Trash, ChatCircle, CalendarBlank } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import { ContactOriginsCard } from "@/components/contacts/ContactOriginsCard";
 import { CommunicationPrivacyCard } from "@/components/contacts/CommunicationPrivacyCard";
 import { DuplicateContactCard } from "@/components/contacts/DuplicateContactCard";
 import { StartContactConversationDialog } from "@/components/contacts/StartContactConversationDialog";
+import { AppointmentDialog } from "@/components/calendar/AppointmentDialog";
 
 interface Props {
   contactId: string;
@@ -33,6 +34,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const [anonOpen, setAnonOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [startConversationOpen, setStartConversationOpen] = useState(false);
+  const [appointmentOpen, setAppointmentOpen] = useState(false);
 
   if (q.isLoading) {
     return (
@@ -119,6 +121,12 @@ export function ContactDetailClient({ contactId }: Props) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {!contact.is_anonymized && !contact.is_blocked && contact.phone_number ? (
+            <Button variant="outline" onClick={() => setAppointmentOpen(true)}>
+              <CalendarBlank size={16} weight="bold" aria-hidden />
+              <span>Agendar</span>
+            </Button>
+          ) : null}
           {!contact.is_anonymized && !contact.is_blocked && contact.phone_number ? (
             <Button onClick={() => setStartConversationOpen(true)}>
               <ChatCircle size={16} weight="bold" aria-hidden />
@@ -280,6 +288,14 @@ export function ContactDetailClient({ contactId }: Props) {
         contactName={displayName}
         open={startConversationOpen}
         onOpenChange={setStartConversationOpen}
+      />
+      <AppointmentDialog
+        open={appointmentOpen}
+        onOpenChange={setAppointmentOpen}
+        contactId={contactId}
+        contactName={displayName}
+        contactPhone={contact.phone_number}
+        contactEmail={contact.email}
       />
     </div>
   );

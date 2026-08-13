@@ -84,6 +84,12 @@ function actorAuditPayload(actor: Actor): {
       metadataActor: { actor_type: "webhook_source", actor_id: actor.id },
     };
   }
+  if (actor.type === "system") {
+    return {
+      actorUserId: null,
+      metadataActor: { actor_type: "system", actor_id: actor.id },
+    };
+  }
   return {
     actorUserId: null,
     metadataActor: {

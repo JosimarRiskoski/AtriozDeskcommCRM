@@ -9,7 +9,8 @@
 export type Actor =
   | { type: "user"; id: string; role?: string }
   | { type: "ai_agent"; id: string; role: string; api_token_id?: string }
-  | { type: "webhook_source"; id: string };
+  | { type: "webhook_source"; id: string }
+  | { type: "system"; id: string };
 
 export interface HandlerCtx {
   organization_id: string;

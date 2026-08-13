@@ -56,6 +56,8 @@ export const TOOL_CATALOG: ReadonlyArray<McpToolCatalogEntry> = [
     description: "Detalhe de lead (com owner_user_name, stage, tags)",
   },
   { name: "crm_list_pipelines", category: "read", description: "Lista pipelines da org" },
+  { name: "crm_calendar_list_appointments", category: "read", description: "Consulta compromissos da agenda" },
+  { name: "crm_calendar_check_availability", category: "read", description: "Confere disponibilidade no Google Agenda" },
   // write
   { name: "crm_create_lead", category: "write", description: "Cria um lead" },
   {
@@ -81,6 +83,9 @@ export const TOOL_CATALOG: ReadonlyArray<McpToolCatalogEntry> = [
     category: "write",
     description: "Adiciona/remove tags em conversation/contact/lead",
   },
+  { name: "crm_calendar_create_appointment", category: "write", description: "Cria compromisso confirmado no Google Agenda" },
+  { name: "crm_calendar_reschedule_appointment", category: "write", description: "Remarca compromisso confirmado" },
+  { name: "crm_calendar_cancel_appointment", category: "write", description: "Cancela compromisso confirmado" },
   // handoff
   {
     name: "crm_request_human_handoff",

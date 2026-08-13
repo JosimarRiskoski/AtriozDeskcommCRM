@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTransition } from "react";
-import { Kanban, Users, UsersThree, Gear, CaretDoubleLeft, CaretDoubleRight, Inbox, ScalesSimple, Robot, Brain, PlugsConnected, ChartBar, WebhooksLogo, FlowArrow, FileText, ClockCountdown, PaperPlaneTilt, ChatsCircle } from "@/lib/ui/icons";
+import { Kanban, Users, UsersThree, Gear, CaretDoubleLeft, CaretDoubleRight, Inbox, ScalesSimple, Robot, Brain, PlugsConnected, ChartBar, WebhooksLogo, FlowArrow, FileText, ClockCountdown, PaperPlaneTilt, ChatsCircle, CalendarBlank } from "@/lib/ui/icons";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { toggleSidebar } from "@/app/actions/shell/toggleSidebar";
@@ -25,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/app/radar", label: "Radar", icon: ClockCountdown },
   { href: "/app/connections", label: "Conexões", icon: PlugsConnected, healthDot: true },
   { href: "/app/kanban", label: "Kanban", icon: Kanban },
+  { href: "/app/calendar", label: "Agenda", icon: CalendarBlank },
   { href: "/app/contacts", label: "Contatos", icon: Users },
   { href: "/app/team", label: "Equipe", icon: UsersThree },
   { href: "/app/metrics", label: "Desempenho", icon: ChartBar },

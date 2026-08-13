@@ -1471,6 +1471,301 @@ export type Database = {
           },
         ];
       };
+      calendar_appointments: {
+        Row: {
+          appointment_type: string;
+          assigned_user_id: string | null;
+          attendee_email: string | null;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          contact_id: string;
+          conversation_id: string | null;
+          created_at: string;
+          created_by_user_id: string | null;
+          description: string | null;
+          ends_at: string;
+          external_calendar_id: string | null;
+          external_event_id: string | null;
+          id: string;
+          integration_id: string | null;
+          lead_id: string | null;
+          location: string | null;
+          meet_url: string | null;
+          metadata: Json;
+          organization_id: string;
+          reminder_1h_enabled: boolean;
+          reminder_24h_enabled: boolean;
+          starts_at: string;
+          status: string;
+          timezone: string;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          appointment_type?: string;
+          assigned_user_id?: string | null;
+          attendee_email?: string | null;
+          cancellation_reason?: string | null;
+          cancelled_at?: string | null;
+          contact_id: string;
+          conversation_id?: string | null;
+          created_at?: string;
+          created_by_user_id?: string | null;
+          description?: string | null;
+          ends_at: string;
+          external_calendar_id?: string | null;
+          external_event_id?: string | null;
+          id?: string;
+          integration_id?: string | null;
+          lead_id?: string | null;
+          location?: string | null;
+          meet_url?: string | null;
+          metadata?: Json;
+          organization_id: string;
+          reminder_1h_enabled?: boolean;
+          reminder_24h_enabled?: boolean;
+          starts_at: string;
+          status?: string;
+          timezone?: string;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          appointment_type?: string;
+          assigned_user_id?: string | null;
+          attendee_email?: string | null;
+          cancellation_reason?: string | null;
+          cancelled_at?: string | null;
+          contact_id?: string;
+          conversation_id?: string | null;
+          created_at?: string;
+          created_by_user_id?: string | null;
+          description?: string | null;
+          ends_at?: string;
+          external_calendar_id?: string | null;
+          external_event_id?: string | null;
+          id?: string;
+          integration_id?: string | null;
+          lead_id?: string | null;
+          location?: string | null;
+          meet_url?: string | null;
+          metadata?: Json;
+          organization_id?: string;
+          reminder_1h_enabled?: boolean;
+          reminder_24h_enabled?: boolean;
+          starts_at?: string;
+          status?: string;
+          timezone?: string;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "calendar_appointments_contact_id_fkey";
+            columns: ["contact_id"];
+            isOneToOne: false;
+            referencedRelation: "contacts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "calendar_appointments_conversation_id_fkey";
+            columns: ["conversation_id"];
+            isOneToOne: false;
+            referencedRelation: "conversations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "calendar_appointments_integration_id_fkey";
+            columns: ["integration_id"];
+            isOneToOne: false;
+            referencedRelation: "calendar_integrations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "calendar_appointments_lead_id_fkey";
+            columns: ["lead_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_leads";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "calendar_appointments_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      calendar_integrations: {
+        Row: {
+          calendar_id: string;
+          calendar_name: string | null;
+          created_at: string;
+          created_by_user_id: string | null;
+          default_duration_minutes: number;
+          google_account_email: string | null;
+          id: string;
+          last_error: string | null;
+          last_sync_at: string | null;
+          oauth_access_token_encrypted: string;
+          oauth_refresh_token_encrypted: string | null;
+          organization_id: string;
+          provider: string;
+          reminder_1h_enabled: boolean;
+          reminder_1h_template: string;
+          reminder_24h_enabled: boolean;
+          reminder_24h_template: string;
+          scopes: string[];
+          status: string;
+          timezone: string;
+          token_expires_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          calendar_id?: string;
+          calendar_name?: string | null;
+          created_at?: string;
+          created_by_user_id?: string | null;
+          default_duration_minutes?: number;
+          google_account_email?: string | null;
+          id?: string;
+          last_error?: string | null;
+          last_sync_at?: string | null;
+          oauth_access_token_encrypted: string;
+          oauth_refresh_token_encrypted?: string | null;
+          organization_id: string;
+          provider?: string;
+          reminder_1h_enabled?: boolean;
+          reminder_1h_template?: string;
+          reminder_24h_enabled?: boolean;
+          reminder_24h_template?: string;
+          scopes?: string[];
+          status?: string;
+          timezone?: string;
+          token_expires_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          calendar_id?: string;
+          calendar_name?: string | null;
+          created_at?: string;
+          created_by_user_id?: string | null;
+          default_duration_minutes?: number;
+          google_account_email?: string | null;
+          id?: string;
+          last_error?: string | null;
+          last_sync_at?: string | null;
+          oauth_access_token_encrypted?: string;
+          oauth_refresh_token_encrypted?: string | null;
+          organization_id?: string;
+          provider?: string;
+          reminder_1h_enabled?: boolean;
+          reminder_1h_template?: string;
+          reminder_24h_enabled?: boolean;
+          reminder_24h_template?: string;
+          scopes?: string[];
+          status?: string;
+          timezone?: string;
+          token_expires_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "calendar_integrations_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: true;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      calendar_reminders: {
+        Row: {
+          appointment_id: string;
+          attempts: number;
+          claimed_at: string | null;
+          claimed_until: string | null;
+          conversation_id: string | null;
+          created_at: string;
+          id: string;
+          last_error: string | null;
+          message_body: string;
+          organization_id: string;
+          reminder_kind: string;
+          scheduled_for: string;
+          sent_at: string | null;
+          sent_message_id: string | null;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          appointment_id: string;
+          attempts?: number;
+          claimed_at?: string | null;
+          claimed_until?: string | null;
+          conversation_id?: string | null;
+          created_at?: string;
+          id?: string;
+          last_error?: string | null;
+          message_body: string;
+          organization_id: string;
+          reminder_kind: string;
+          scheduled_for: string;
+          sent_at?: string | null;
+          sent_message_id?: string | null;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          appointment_id?: string;
+          attempts?: number;
+          claimed_at?: string | null;
+          claimed_until?: string | null;
+          conversation_id?: string | null;
+          created_at?: string;
+          id?: string;
+          last_error?: string | null;
+          message_body?: string;
+          organization_id?: string;
+          reminder_kind?: string;
+          scheduled_for?: string;
+          sent_at?: string | null;
+          sent_message_id?: string | null;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "calendar_reminders_appointment_id_fkey";
+            columns: ["appointment_id"];
+            isOneToOne: false;
+            referencedRelation: "calendar_appointments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "calendar_reminders_conversation_id_fkey";
+            columns: ["conversation_id"];
+            isOneToOne: false;
+            referencedRelation: "conversations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "calendar_reminders_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "calendar_reminders_sent_message_id_fkey";
+            columns: ["sent_message_id"];
+            isOneToOne: false;
+            referencedRelation: "messages";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       channel_knobs: {
         Row: {
           allow_sunday: boolean | null;
@@ -5482,6 +5777,33 @@ export type Database = {
       fn_can_view_lead: {
         Args: { p_org: string; p_owner_user_id: string };
         Returns: boolean;
+      };
+      fn_claim_due_calendar_reminders: {
+        Args: { p_lease_seconds?: number; p_limit?: number };
+        Returns: {
+          appointment_id: string;
+          attempts: number;
+          claimed_at: string | null;
+          claimed_until: string | null;
+          conversation_id: string | null;
+          created_at: string;
+          id: string;
+          last_error: string | null;
+          message_body: string;
+          organization_id: string;
+          reminder_kind: string;
+          scheduled_for: string;
+          sent_at: string | null;
+          sent_message_id: string | null;
+          status: string;
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "calendar_reminders";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       fn_claim_due_followup_enrollments: {
         Args: { p_lease_seconds: number; p_limit: number };

@@ -19,6 +19,13 @@ import { crmListPipelines } from "./pipelines";
 import { crmSendWhatsappMessage } from "./messages";
 import { crmAssignConversation, crmManageTags, crmGetQueueStatus } from "./governance";
 import { crmRequestHumanHandoff } from "./handoff";
+import {
+  crmCalendarListAppointments,
+  crmCalendarCheckAvailability,
+  crmCalendarCreateAppointment,
+  crmCalendarRescheduleAppointment,
+  crmCalendarCancelAppointment,
+} from "./calendar";
 
 // Cast via `unknown` porque McpToolDefinition<TInput> nao e covariante
 // em TInput (handler usa TInput em posicao contravariante). Coletar
@@ -36,6 +43,8 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmListLeads,
   crmGetLead,
   crmListPipelines,
+  crmCalendarListAppointments,
+  crmCalendarCheckAvailability,
   // write
   crmCreateLead,
   crmUpdateContact,
@@ -45,6 +54,9 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmSendWhatsappMessage,
   crmAssignConversation,
   crmManageTags,
+  crmCalendarCreateAppointment,
+  crmCalendarRescheduleAppointment,
+  crmCalendarCancelAppointment,
   // handoff (special)
   crmRequestHumanHandoff,
 ] as unknown as ReadonlyArray<McpToolDefinition>;
