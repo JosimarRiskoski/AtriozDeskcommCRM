@@ -11,8 +11,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-function back(path: string) {
-  const base = process.env["NEXT_PUBLIC_APP_URL"] || "http://localhost:3000";
+function back(path: string, base: string) {
   return NextResponse.redirect(new URL(path, base));
 }
 
@@ -20,10 +19,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const url = new URL(request.url);
   const state = verifyCalendarState(url.searchParams.get("state"));
   const code = url.searchParams.get("code");
-  const config = getGoogleCalendarConfig();
-  if (!config) return back("/app/settings/google-calendar?error=not_configured");
-  if (!state) return back("/app/settings/google-calendar?error=invalid_state");
-  if (!code) return back("/app/settings/google-calendar?error=missing_code");
+  const requestOrigin = url.origin;
+  const config = getGoogleCalendarConfig(requestOrigin);
+  if (!config) return back("/app/settings/google-calendar?error=not_configured", requestOrigin);
+  if (!state) return back("/app/settings/google-calendar?error=invalid_state", requestOrigin);
+  if (!code) return back("/app/settings/google-calendar?error=missing_code", requestOrigin);
 
   try {
     const tokens = await exchangeGoogleCode(config, code);
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       requestId: randomUUID(),
       metadata: { account_email: account.email ?? null },
     });
-    return back("/app/settings/google-calendar?connected=1");
+    return back("/app/settings/google-calendar?connected=1", requestOrigin);
   } catch (error) {
     await audit({
       action: "google_calendar.oauth_failed",
@@ -73,6 +73,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       requestId: randomUUID(),
       metadata: { error: error instanceof Error ? error.message : "unknown" },
     });
-    return back("/app/settings/google-calendar?error=oauth_failed");
+    return back("/app/settings/google-calendar?error=oauth_failed", requestOrigin);
   }
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { getGoogleCalendarConfig } from "@/lib/calendar/config";
@@ -18,7 +19,9 @@ export async function connectGoogleCalendar(): Promise<ConnectGoogleCalendarResu
   if (activeOrg.role !== "admin" && !user.is_platform_admin) {
     return { ok: false, error: "forbidden" };
   }
-  const config = getGoogleCalendarConfig();
+  const requestHeaders = await headers();
+  const requestOrigin = requestHeaders.get("origin");
+  const config = getGoogleCalendarConfig(requestOrigin ?? undefined);
   if (!config) return { ok: false, error: "not_configured" };
   redirect(buildGoogleAuthorizeUrl(config, issueCalendarState(activeOrg.orgId)));
 }
