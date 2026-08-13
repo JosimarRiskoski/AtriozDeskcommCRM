@@ -13,6 +13,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/500$/,
   /^\/503$/,
   /^\/api\/v1\/health$/,
+  // O Google retorna sem o cookie de sessão porque ele é SameSite=Strict.
+  // A rota valida state assinado, expiração e organização antes de persistir tokens.
+  /^\/api\/v1\/integrations\/google-calendar\/callback$/,
   /^\/api\/v1\/webhooks\//,
   /^\/api\/v1\/cron\//,
   /^\/api\/internal\//,
