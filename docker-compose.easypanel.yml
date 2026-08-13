@@ -53,6 +53,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     environment: *runtime-environment
     depends_on:
       srh:
@@ -78,6 +79,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    restart: unless-stopped
     environment: *runtime-environment
     depends_on:
       app:
@@ -95,6 +97,7 @@ services:
 
   evolution:
     image: ${EVOLUTION_IMAGE:-evoapicloud/evolution-api:v2.3.7}
+    restart: unless-stopped
     depends_on:
       evolution-postgres:
         condition: service_healthy
@@ -126,6 +129,7 @@ services:
 
   evolution-postgres:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${EVOLUTION_DB_NAME:-evolution}
       POSTGRES_USER: ${EVOLUTION_DB_USER:-evolution}
@@ -142,6 +146,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -153,6 +158,7 @@ services:
 
   srh:
     image: hiett/serverless-redis-http:latest
+    restart: unless-stopped
     environment:
       SRH_MODE: env
       SRH_TOKEN: ${SRH_TOKEN}
@@ -165,6 +171,7 @@ services:
 
   scheduler:
     image: alpine:3.20
+    restart: unless-stopped
     depends_on:
       app:
         condition: service_healthy
