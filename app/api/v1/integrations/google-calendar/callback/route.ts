@@ -12,7 +12,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 
 function back(path: string) {
-  const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const base = process.env["NEXT_PUBLIC_APP_URL"] || "http://localhost:3000";
   return NextResponse.redirect(new URL(path, base));
 }
 
