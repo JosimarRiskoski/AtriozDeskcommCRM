@@ -30,6 +30,7 @@ import { useConversationNotes } from "@/hooks/inbox/useConversationNotes";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { contactSourceLabel } from "@/lib/contacts/source-labels";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
+import { ChannelBadge } from "@/components/channels/ChannelBadge";
 import type { BoardData } from "@/lib/kanban/types";
 import type { PipelineRow } from "@/app/api/v1/pipelines/_handler";
 
@@ -141,7 +142,7 @@ export function CRMSidePanel({ conversation }: Props) {
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
   const [opportunityOpen, setOpportunityOpen] = useState(false);
   const [opportunityPipelineId, setOpportunityPipelineId] = useState("");
-  const channels = useChannelSessions();
+  const channels = useChannelSessions({ includeArchived: true });
   const notes = useConversationNotes(conversation?.id ?? null);
   const members = useAssignableMembers(true);
   const origins = useQuery({
@@ -153,8 +154,7 @@ export function CRMSidePanel({ conversation }: Props) {
   const pipelines = useQuery({
     queryKey: ["pipelines", "inbox-opportunity"],
     enabled: opportunityOpen,
-    queryFn: async () =>
-      (await apiClient.get<{ data: PipelineRow[] }>("/api/v1/pipelines")).data,
+    queryFn: async () => (await apiClient.get<{ data: PipelineRow[] }>("/api/v1/pipelines")).data,
   });
   const pipelineId =
     opportunityPipelineId ||
@@ -213,7 +213,10 @@ export function CRMSidePanel({ conversation }: Props) {
   const tags = contact?.tags ?? [];
   const displayName =
     contact?.name?.trim() || contact?.display_name?.trim() || contact?.phone_number || "—";
-  const channel = channels.data?.find((item) => item.id === conversation?.channel_session_id);
+  const channel =
+    channels.data?.find((item) => item.id === conversation?.channel_session_id) ??
+    conversation?.channel_sessions ??
+    null;
   const incomplete = contact?.source_metadata?.cadastro_incompleto === true;
   const consentStatus =
     typeof contact?.consent?.status === "string" ? contact.consent.status : "não informado";
@@ -264,10 +267,11 @@ export function CRMSidePanel({ conversation }: Props) {
           </div>
           <div className="flex items-center justify-between gap-2 text-xs">
             <span className="text-muted-foreground">Conexão da conversa</span>
-            <span className="text-right">
-              {channel?.display_name || channel?.phone_number || "Não identificada"}
-              {channel?.phone_number ? ` · ${channel.phone_number.slice(-4)}` : ""}
-            </span>
+            {channel ? (
+              <ChannelBadge channel={channel} className="max-w-[12rem]" />
+            ) : (
+              <span className="text-right">Não identificada</span>
+            )}
           </div>
           <div className="flex items-center justify-between gap-2 text-xs">
             <span className="text-muted-foreground">Consentimento</span>

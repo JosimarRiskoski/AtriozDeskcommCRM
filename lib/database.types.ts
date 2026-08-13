@@ -1645,6 +1645,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           daily_message_limit: number;
+          display_color: string;
           display_name: string;
           purpose: string | null;
           is_default: boolean;
@@ -1676,6 +1677,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           daily_message_limit?: number;
+          display_color?: string;
           display_name: string;
           purpose?: string | null;
           is_default?: boolean;
@@ -1707,6 +1709,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           daily_message_limit?: number;
+          display_color?: string;
           display_name?: string | null;
           purpose?: string | null;
           is_default?: boolean;

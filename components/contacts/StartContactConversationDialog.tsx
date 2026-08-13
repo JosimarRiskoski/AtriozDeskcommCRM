@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { apiClient } from "@/lib/api/client";
+import { ChannelBadge } from "@/components/channels/ChannelBadge";
 
 interface Props {
   contactId: string;
@@ -26,7 +27,12 @@ interface Props {
 }
 
 /** Abre uma conversa somente quando a primeira mensagem for realmente enviada. */
-export function StartContactConversationDialog({ contactId, contactName, open, onOpenChange }: Props) {
+export function StartContactConversationDialog({
+  contactId,
+  contactName,
+  open,
+  onOpenChange,
+}: Props) {
   const router = useRouter();
   const channels = useChannelSessions({ enabled: open });
   const workingChannels = useMemo(
@@ -39,7 +45,8 @@ export function StartContactConversationDialog({ contactId, contactName, open, o
 
   useEffect(() => {
     if (!open) return;
-    setChannelId((current) => current || workingChannels[0]?.id || "");
+    const defaultChannel = workingChannels.find((channel) => channel.is_default);
+    setChannelId((current) => current || defaultChannel?.id || workingChannels[0]?.id || "");
     setMessage("");
   }, [open, workingChannels]);
 
@@ -87,8 +94,16 @@ export function StartContactConversationDialog({ contactId, contactName, open, o
                 </option>
               ))}
             </select>
+            {workingChannels.find((channel) => channel.id === channelId) ? (
+              <ChannelBadge
+                channel={workingChannels.find((channel) => channel.id === channelId)!}
+                compact
+              />
+            ) : null}
             {!channels.isLoading && workingChannels.length === 0 ? (
-              <p className="text-xs text-destructive">Não há nenhum número WhatsApp ativo para enviar.</p>
+              <p className="text-xs text-destructive">
+                Não há nenhum número WhatsApp ativo para enviar.
+              </p>
             ) : null}
           </div>
           <div className="space-y-2">

@@ -36,8 +36,9 @@ export async function GET(): Promise<Response> {
   const countExact = () =>
     supabase
       .from("conversations")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", org);
+      .select("id, channel_sessions:channel_session_id!inner(id)", { count: "exact", head: true })
+      .eq("organization_id", org)
+      .is("channel_sessions.archived_at", null);
 
   // Espelha tabToFilter (InboxLayout): unassigned = fila aberta sem dono;
   // mine = atribuídas a mim; all = tudo que o usuário VÊ (RLS-scoped).

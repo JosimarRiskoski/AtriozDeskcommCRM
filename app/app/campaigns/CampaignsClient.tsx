@@ -3,15 +3,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { ChannelBadge } from "@/components/channels/ChannelBadge";
 
 type Stage = { id: string; name: string; position: number };
 type Pipeline = { id: string; name: string; crm_stages: Stage[] };
 type Session = {
   id: string;
   display_name: string | null;
+  display_color: string;
   phone_number: string | null;
   status: string;
   daily_message_limit: number;
+  is_default: boolean;
 };
 type Campaign = {
   id: string;
@@ -60,7 +63,10 @@ export function CampaignsClient({
   const [previewSummary, setPreviewSummary] = useState<PreviewSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [pipelineId, setPipelineId] = useState(pipelines[0]?.id ?? "");
-  const firstWorkingSession = sessions.find((item) => item.status === "WORKING")?.id ?? "";
+  const firstWorkingSession =
+    sessions.find((item) => item.status === "WORKING" && item.is_default)?.id ??
+    sessions.find((item) => item.status === "WORKING")?.id ??
+    "";
   const [sessionIds, setSessionIds] = useState<string[]>(
     firstWorkingSession ? [firstWorkingSession] : [],
   );
@@ -232,7 +238,7 @@ export function CampaignsClient({
                   }}
                 />
                 <span>
-                  <b>{session.display_name || session.phone_number || session.id}</b>
+                  <ChannelBadge channel={session} compact />
                   <small className="block text-muted-foreground">
                     {session.phone_number || "Número não informado"} ·{" "}
                     {healthy ? "Ativa" : session.status} · limite {session.daily_message_limit}/dia

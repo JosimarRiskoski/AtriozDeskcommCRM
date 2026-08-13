@@ -11,7 +11,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
-import { InboxFilters, visibleInboxTabs, type InboxFiltersValue } from "@/components/inbox/InboxFilters";
+import {
+  InboxFilters,
+  visibleInboxTabs,
+  type InboxFiltersValue,
+} from "@/components/inbox/InboxFilters";
 import type { ActiveOrg } from "@/lib/auth/types";
 
 const activeOrgRef: { current: ActiveOrg | null } = { current: null };
@@ -29,7 +33,12 @@ vi.mock("@/hooks/inbox/useConversationCounts", () => ({
   useConversationCounts: () => ({ data: { unassigned: 3, mine: 2, all: 5 } }),
 }));
 
-const VALUE: InboxFiltersValue = { tab: "unassigned", search: "", onlyUnread: false };
+const VALUE: InboxFiltersValue = {
+  tab: "unassigned",
+  search: "",
+  onlyUnread: false,
+  includeArchivedConnections: false,
+};
 
 function setOrg(role: ActiveOrg["role"], visibility_mode: ActiveOrg["visibility_mode"]) {
   activeOrgRef.current = { orgId: "org-1", name: "Org", role, visibility_mode };

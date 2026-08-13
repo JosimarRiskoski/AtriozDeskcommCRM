@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+export const channelColorSchema = z
+  .string()
+  .trim()
+  .regex(/^#[0-9A-Fa-f]{6}$/, "Escolha uma cor válida.")
+  .transform((value) => value.toUpperCase());
+
 /**
  * Body para conectar um novo canal WhatsApp. `display_name` é opcional —
  * um rótulo amigável ("Vendas", "Suporte") que a Evolution complementa com o
@@ -9,6 +15,7 @@ export const createChannelSchema = z.object({
   display_name: z.string().trim().min(2).max(80),
   purpose: z.string().trim().max(120).optional(),
   is_default: z.boolean().optional().default(false),
+  display_color: channelColorSchema.optional(),
 });
 
 export const updateChannelSchema = z.discriminatedUnion("action", [
@@ -17,6 +24,7 @@ export const updateChannelSchema = z.discriminatedUnion("action", [
     display_name: z.string().trim().min(2).max(80),
     purpose: z.string().trim().max(120).nullable().optional(),
     is_default: z.boolean().optional(),
+    display_color: channelColorSchema.optional(),
   }),
   z.object({
     action: z.literal("archive"),

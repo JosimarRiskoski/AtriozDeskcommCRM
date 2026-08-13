@@ -21,7 +21,8 @@ const SELECT_COLS = `
   snooze_until, bot_silenced_until, ai_control_mode,
   selected_agent_id, agent_selection_mode, agent_selection_reason,
   agent_selected_at, agent_selected_by_user_id, created_at, updated_at,
-  contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, blocked_reason, blocked_at, consent, source, source_metadata)
+  contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, blocked_reason, blocked_at, consent, source, source_metadata),
+  channel_sessions:channel_session_id!inner (id, display_name, display_color, phone_number, external_session_name, archived_at, status)
 `;
 
 interface CursorPayload {
@@ -98,6 +99,9 @@ export async function listConversationsHandler(
 
   if (q.status) query = query.eq("status", q.status);
   if (q.channel_session_id) query = query.eq("channel_session_id", q.channel_session_id);
+  if (!q.include_archived_connections) {
+    query = query.is("channel_sessions.archived_at", null);
+  }
   if (q.tag) query = query.contains("tags", [q.tag]); // tags @> array[tag] (GIN)
 
   if (q.assigned_to === "me") {

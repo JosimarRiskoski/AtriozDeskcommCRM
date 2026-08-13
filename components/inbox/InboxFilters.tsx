@@ -42,6 +42,7 @@ export interface InboxFiltersValue {
   tab: InboxTab;
   search: string;
   onlyUnread: boolean;
+  includeArchivedConnections: boolean;
   channel_session_id?: string;
   tag?: string;
 }
@@ -53,7 +54,10 @@ interface Props {
 
 export function InboxFilters({ value, onChange }: Props) {
   const [searchInput, setSearchInput] = useState(value.search);
-  const { data: channels } = useChannelSessions({ refetchInterval: 30_000 });
+  const { data: channels } = useChannelSessions({
+    refetchInterval: 30_000,
+    includeArchived: true,
+  });
   const { activeOrg } = useAuth();
   const { data: tagVocabulary } = useConversationTagVocabulary(activeOrg?.orgId ?? null);
   const { data: counts } = useConversationCounts(activeOrg?.orgId ?? null);
@@ -67,7 +71,10 @@ export function InboxFilters({ value, onChange }: Props) {
     all: counts?.all,
   };
   // Alternador só aparece com 2+ números — com um só não há o que alternar.
-  const showChannelSwitch = (channels?.length ?? 0) >= 2;
+  const activeChannels = (channels ?? []).filter((channel) => !channel.archived_at);
+  const archivedChannels = (channels ?? []).filter((channel) => channel.archived_at);
+  const visibleChannels = value.includeArchivedConnections ? (channels ?? []) : activeChannels;
+  const showChannelSwitch = visibleChannels.length >= 2 || value.includeArchivedConnections;
 
   // Debounce search input → propagate to parent.
   useEffect(() => {
@@ -110,14 +117,45 @@ export function InboxFilters({ value, onChange }: Props) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os números</SelectItem>
-            {channels?.map((c) => (
+            {visibleChannels.map((c) => (
               <SelectItem key={c.id} value={c.id}>
-                {c.display_name || c.phone_number || c.external_session_name}
+                <span className="flex items-center gap-2">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: c.display_color }}
+                    aria-hidden
+                  />
+                  {c.display_name || c.phone_number || c.external_session_name}
+                  {c.archived_at ? " (arquivada)" : ""}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       )}
+
+      {archivedChannels.length > 0 ? (
+        <div className="flex items-center justify-between">
+          <Label htmlFor="include-archived-connections" className="text-xs text-muted-foreground">
+            Incluir conexões arquivadas
+          </Label>
+          <Switch
+            id="include-archived-connections"
+            checked={value.includeArchivedConnections}
+            onCheckedChange={(checked) =>
+              onChange({
+                ...value,
+                includeArchivedConnections: checked,
+                channel_session_id:
+                  !checked &&
+                  channels?.find((channel) => channel.id === value.channel_session_id)?.archived_at
+                    ? undefined
+                    : value.channel_session_id,
+              })
+            }
+          />
+        </div>
+      ) : null}
 
       {(tagVocabulary?.length ?? 0) > 0 && (
         <Select
@@ -138,10 +176,7 @@ export function InboxFilters({ value, onChange }: Props) {
         </Select>
       )}
 
-      <Tabs
-        value={value.tab}
-        onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}
-      >
+      <Tabs value={value.tab} onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}>
         <TabsList
           className="grid h-8 w-full"
           style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
@@ -153,9 +188,7 @@ export function InboxFilters({ value, onChange }: Props) {
               <TabsTrigger key={tab} value={tab} className="gap-1 text-[11px]">
                 {meta.label}
                 {typeof count === "number" && count > 0 && (
-                  <span className="text-[10px] tabular-nums text-muted-foreground">
-                    {count}
-                  </span>
+                  <span className="text-[10px] tabular-nums text-muted-foreground">{count}</span>
                 )}
               </TabsTrigger>
             );

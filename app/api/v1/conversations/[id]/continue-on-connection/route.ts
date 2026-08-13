@@ -92,6 +92,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     .from("channel_sessions")
     .select("id,display_name,phone_number,status")
     .eq("organization_id", authz.org.orgId)
+    .is("archived_at", null)
     .neq("id", current.channel_session_id)
     .in("status", ["WORKING", "connected", "active", "online"]);
   return ok(
@@ -159,19 +160,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       { requestId, details: { conversation_id: toConversationId, message_id: message.id } },
     );
   const db = admin as unknown as SupabaseClient;
-  await db
-    .from("conversation_continuations")
-    .insert({
-      organization_id: authz.org.orgId,
-      contact_id: current.contact_id,
-      from_conversation_id: id,
-      to_conversation_id: toConversationId,
-      from_connection_id: current.channel_session_id,
-      to_connection_id: target.id,
-      reason: input.data.reason,
-      context_message: input.data.context_message,
-      created_by_user_id: authz.user.id,
-    });
+  await db.from("conversation_continuations").insert({
+    organization_id: authz.org.orgId,
+    contact_id: current.contact_id,
+    from_conversation_id: id,
+    to_conversation_id: toConversationId,
+    from_connection_id: current.channel_session_id,
+    to_connection_id: target.id,
+    reason: input.data.reason,
+    context_message: input.data.context_message,
+    created_by_user_id: authz.user.id,
+  });
   await audit({
     action: "conversation.continued_on_connection",
     actorUserId: authz.user.id,

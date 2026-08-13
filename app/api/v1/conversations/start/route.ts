@@ -45,12 +45,13 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const { data: channel } = await supabase
     .from("channel_sessions")
-    .select("id,provider,external_session_name,status")
+    .select("id,provider,external_session_name,status,archived_at")
     .eq("id", parsed.data.channel_session_id)
     .eq("organization_id", authz.org.orgId)
     .maybeSingle();
   if (
     !channel ||
+    channel.archived_at ||
     channel.status !== "WORKING" ||
     channel.provider !== "evolution" ||
     !channel.external_session_name
@@ -67,10 +68,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   let verifiedChatId: string | null = null;
   try {
-    const result = await evolution.checkNumbers(channel.external_session_name, [contact.phone_number]);
-    const row = (
-      Array.isArray(result) ? result[0] : (result as { data?: unknown[] }).data?.[0]
-    ) as { exists?: boolean; numberExists?: boolean; jid?: string; number?: string } | undefined;
+    const result = await evolution.checkNumbers(channel.external_session_name, [
+      contact.phone_number,
+    ]);
+    const row = (Array.isArray(result) ? result[0] : (result as { data?: unknown[] }).data?.[0]) as
+      { exists?: boolean; numberExists?: boolean; jid?: string; number?: string } | undefined;
     if (!row || !(row.exists ?? row.numberExists))
       return fail("not_found", "Número não encontrado no WhatsApp.", 422, { requestId });
     verifiedChatId = row.jid ?? row.number ?? contact.phone_number;

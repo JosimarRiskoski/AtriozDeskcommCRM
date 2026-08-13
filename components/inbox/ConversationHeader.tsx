@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ConversationAgentDialog } from "@/components/inbox/ConversationAgentDialog";
 import { ContinueConversationDialog } from "@/components/inbox/ContinueConversationDialog";
+import { ChannelBadge } from "@/components/channels/ChannelBadge";
 
 interface Props {
   conversation: ConversationWithContact;
@@ -50,7 +51,7 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
   const aiControl = useConversationAiControl(conversation.id);
   const aiAutomation = useAiAutomation();
   const members = useAssignableMembers(Boolean(conversation.assigned_to_user_id));
-  const channels = useChannelSessions();
+  const channels = useChannelSessions({ includeArchived: true });
   const [reassignOpen, setReassignOpen] = useState(false);
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
   const [continueDialogOpen, setContinueDialogOpen] = useState(false);
@@ -75,10 +76,10 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
   const assignee = members.data?.find(
     (member) => member.user_id === conversation.assigned_to_user_id,
   );
-  const channel = channels.data?.find((item) => item.id === conversation.channel_session_id);
-  const channelName = channel
-    ? channel.display_name || channel.phone_number || channel.external_session_name
-    : null;
+  const channel =
+    channels.data?.find((item) => item.id === conversation.channel_session_id) ??
+    conversation.channel_sessions ??
+    null;
   const channelUnavailable = Boolean(
     channel && !["WORKING", "connected", "active", "online"].includes(channel.status),
   );
@@ -112,12 +113,10 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
               <Phone size={11} weight="regular" aria-hidden /> {phone}
             </span>
           )}
-          {channelName && (
-            <span title={channel?.phone_number ?? undefined}>
-              Recebida em: {channelName}
-              {channel?.phone_number && channel.display_name
-                ? ` · ${channel.phone_number.slice(-4)}`
-                : ""}
+          {channel && (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span>Recebida em:</span>
+              <ChannelBadge channel={channel} className="h-5 max-w-52 px-1.5 text-[10px]" />
             </span>
           )}
           {conversation.assigned_to_user_id && (

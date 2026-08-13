@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -26,6 +26,7 @@ import { useStartFollowupEnrollment } from "@/hooks/followup/useFollowupEnrollme
 import type { PipelineRow } from "@/app/api/v1/pipelines/_handler";
 import type { BoardData } from "@/lib/kanban/types";
 import { StepDialogForm } from "@/components/ui/step-dialog-form";
+import { ChannelBadge } from "@/components/channels/ChannelBadge";
 
 interface FormShape {
   name?: string;
@@ -99,6 +100,12 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
   const channels = useChannelSessions({ enabled: open });
   const startConversation = form.watch("startConversation") ?? false;
   const workingChannels = (channels.data ?? []).filter((channel) => channel.status === "WORKING");
+  const selectedChannelId = form.watch("channelSessionId") ?? "";
+  useEffect(() => {
+    if (!open || !startConversation || form.getValues("channelSessionId")) return;
+    const defaultChannel = workingChannels.find((channel) => channel.is_default);
+    form.setValue("channelSessionId", defaultChannel?.id || workingChannels[0]?.id || "");
+  }, [form, open, startConversation, workingChannels]);
   const flows = useFollowupFlows();
   const startFollowupEnrollment = useStartFollowupEnrollment();
   const startFollowup = form.watch("startFollowup") ?? false;
@@ -363,6 +370,12 @@ export function NewContactDialog({ open, onOpenChange, onConversationStarted }: 
                       </option>
                     ))}
                   </select>
+                  {workingChannels.find((channel) => channel.id === selectedChannelId) ? (
+                    <ChannelBadge
+                      channel={workingChannels.find((channel) => channel.id === selectedChannelId)!}
+                      compact
+                    />
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="firstMessage">Primeira mensagem</Label>

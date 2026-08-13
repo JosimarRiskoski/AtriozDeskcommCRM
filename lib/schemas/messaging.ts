@@ -111,6 +111,7 @@ export const listConversationsQuerySchema = z.object({
   status: conversationStatusSchema.optional(),
   assigned_to: z.union([z.string().uuid(), z.literal("me"), z.literal("unassigned")]).optional(),
   channel_session_id: z.string().uuid().optional(),
+  include_archived_connections: z.boolean().default(false),
   tag: conversationTagSchema.optional(),
   search: z.string().optional(),
   cursor: z.string().optional(),

@@ -21,9 +21,9 @@ import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/clie
 export const dynamic = "force-dynamic";
 
 export const CHANNEL_COLUMNS =
-  "id, provider, external_session_name, display_name, phone_number, purpose, is_default, archived_at, status, status_reason, last_health_check_at, last_inbound_event_at, last_outbound_event_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
+  "id, provider, external_session_name, display_name, display_color, phone_number, purpose, is_default, archived_at, status, status_reason, last_health_check_at, last_inbound_event_at, last_outbound_event_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
 
-export async function GET(): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const user = await loadAuthUser();
   if (!user) return fail("unauthenticated", "Auth required.", 401, { requestId });
@@ -31,12 +31,14 @@ export async function GET(): Promise<Response> {
   if (!activeOrg) return fail("forbidden_tenant", "Nenhuma organização ativa.", 403, { requestId });
 
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const includeArchived = new URL(req.url).searchParams.get("include_archived") === "1";
+  let sessionsQuery = supabase
     .from("channel_sessions")
     .select(CHANNEL_COLUMNS)
     .eq("organization_id", activeOrg.orgId)
-    .is("archived_at", null)
     .order("created_at", { ascending: true });
+  if (!includeArchived) sessionsQuery = sessionsQuery.is("archived_at", null);
+  const { data, error } = await sessionsQuery;
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
   const { data: conversations } = await supabase
@@ -141,6 +143,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       provider: "evolution",
       external_session_name: sessionName,
       display_name: parsed.data.display_name,
+      display_color: parsed.data.display_color ?? "#3B82F6",
       purpose: parsed.data.purpose ?? null,
       is_default: parsed.data.is_default,
       engine: "EVOLUTION",

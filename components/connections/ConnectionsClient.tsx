@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api/types";
 import { useChannelSessions, type ChannelSession } from "@/hooks/channels/useChannelSessions";
 import { usePacingKnobs } from "@/hooks/channels/usePacingKnobs";
 import { AntiBanSheet } from "./AntiBanSheet";
+import { ChannelBadge } from "@/components/channels/ChannelBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -33,6 +34,7 @@ import {
   PencilSimple,
   Archive,
 } from "@/lib/ui/icons";
+import { CHANNEL_COLOR_PALETTE, DEFAULT_CHANNEL_COLOR, channelColor } from "@/lib/channels/display";
 
 type Variant = "success" | "warning" | "error" | "neutral";
 
@@ -100,7 +102,12 @@ export function ConnectionsClient({ evolutionConfigured }: { evolutionConfigured
   }, [sessions, runHealthCheck]);
 
   const handleConnectNew = useCallback(
-    async (input: { display_name: string; purpose?: string; is_default: boolean }) => {
+    async (input: {
+      display_name: string;
+      purpose?: string;
+      is_default: boolean;
+      display_color: string;
+    }) => {
       setCreating(true);
       try {
         const res = await apiClient.post<{ data: ChannelSession }>(
@@ -258,6 +265,7 @@ export function ConnectionsClient({ evolutionConfigured }: { evolutionConfigured
                   <Badge variant={info.variant}>{info.label}</Badge>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
+                  <ChannelBadge channel={c} compact />
                   {c.is_default ? (
                     <Badge variant="secondary">Padrão para novos envios</Badge>
                   ) : null}
@@ -348,6 +356,9 @@ export function ConnectionsClient({ evolutionConfigured }: { evolutionConfigured
         onOpenChange={setNewConnectionOpen}
         pending={creating}
         hasConnections={list.length > 0}
+        suggestedColor={
+          CHANNEL_COLOR_PALETTE[list.length % CHANNEL_COLOR_PALETTE.length] ?? DEFAULT_CHANNEL_COLOR
+        }
         onCreate={handleConnectNew}
       />
 
@@ -378,20 +389,31 @@ function NewConnectionDialog({
   onOpenChange,
   pending,
   hasConnections,
+  suggestedColor,
   onCreate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pending: boolean;
   hasConnections: boolean;
-  onCreate: (input: { display_name: string; purpose?: string; is_default: boolean }) => void;
+  suggestedColor: string;
+  onCreate: (input: {
+    display_name: string;
+    purpose?: string;
+    is_default: boolean;
+    display_color: string;
+  }) => void;
 }) {
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [isDefault, setIsDefault] = useState(!hasConnections);
+  const [displayColor, setDisplayColor] = useState(suggestedColor || DEFAULT_CHANNEL_COLOR);
   useEffect(() => {
-    if (open) setIsDefault(!hasConnections);
-  }, [open, hasConnections]);
+    if (open) {
+      setIsDefault(!hasConnections);
+      setDisplayColor(suggestedColor || DEFAULT_CHANNEL_COLOR);
+    }
+  }, [open, hasConnections, suggestedColor]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -420,6 +442,7 @@ function NewConnectionDialog({
               placeholder="Ex.: Atendimento e fechamento"
             />
           </div>
+          <ChannelColorPicker value={displayColor} onChange={setDisplayColor} />
           <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
             <span>
               <span className="block font-medium">Conexão padrão</span>
@@ -440,6 +463,7 @@ function NewConnectionDialog({
                   display_name: name.trim(),
                   purpose: purpose.trim() || undefined,
                   is_default: isDefault,
+                  display_color: displayColor,
                 })
               }
             >
@@ -466,6 +490,7 @@ function ManageConnectionDialog({
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [isDefault, setIsDefault] = useState(false);
+  const [displayColor, setDisplayColor] = useState(DEFAULT_CHANNEL_COLOR);
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [dependencies, setDependencies] = useState<ConnectionDependencies | null>(null);
@@ -476,6 +501,7 @@ function ManageConnectionDialog({
     setName(connection.display_name || "");
     setPurpose(connection.purpose || "");
     setIsDefault(connection.is_default);
+    setDisplayColor(channelColor(connection.display_color));
     setReason("");
     setConfirmation("");
     setDependencies(null);
@@ -503,6 +529,7 @@ function ManageConnectionDialog({
           display_name: name.trim(),
           purpose: purpose.trim() || null,
           is_default: isDefault,
+          display_color: displayColor,
         });
         toast.success("Conexão atualizada.");
       } else if (action === "archive") {
@@ -557,6 +584,7 @@ function ManageConnectionDialog({
                 onChange={(event) => setPurpose(event.target.value)}
               />
             </div>
+            <ChannelColorPicker value={displayColor} onChange={setDisplayColor} />
             <label className="flex items-center justify-between gap-3 text-sm">
               <span>Usar como conexão padrão</span>
               <Switch checked={isDefault} onCheckedChange={setIsDefault} />
@@ -644,6 +672,47 @@ function ManageConnectionDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ChannelColorPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="channel-display-color">Cor da conexão</Label>
+      <div className="flex flex-wrap items-center gap-2">
+        {CHANNEL_COLOR_PALETTE.map((color) => (
+          <button
+            key={color}
+            type="button"
+            className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
+            style={{
+              backgroundColor: color,
+              borderColor: value === color ? "var(--foreground)" : "transparent",
+            }}
+            onClick={() => onChange(color)}
+            aria-label={`Usar cor ${color}`}
+            aria-pressed={value === color}
+          />
+        ))}
+        <Input
+          id="channel-display-color"
+          type="color"
+          value={value}
+          onChange={(event) => onChange(event.target.value.toUpperCase())}
+          className="h-8 w-12 cursor-pointer p-1"
+          aria-label="Escolher cor personalizada"
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        A cor acompanha o nome da conexão; nunca é usada sozinha para identificá-la.
+      </p>
+    </div>
   );
 }
 

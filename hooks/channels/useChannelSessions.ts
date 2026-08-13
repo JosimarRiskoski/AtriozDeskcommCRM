@@ -8,6 +8,7 @@ export interface ChannelSession {
   provider: "evolution";
   external_session_name: string;
   display_name: string | null;
+  display_color: string;
   phone_number: string | null;
   purpose: string | null;
   is_default: boolean;
@@ -31,11 +32,18 @@ export type ConnectionHealth = "connected" | "connecting" | "down" | "none";
  * Lista os canais WhatsApp (channel_sessions) da org ativa. Fonte única
  * para o seletor do inbox, o sinal de saúde da sidebar e a Central de Conexões.
  */
-export function useChannelSessions(opts?: { refetchInterval?: number; enabled?: boolean }) {
+export function useChannelSessions(opts?: {
+  refetchInterval?: number;
+  enabled?: boolean;
+  includeArchived?: boolean;
+}) {
   return useQuery({
-    queryKey: ["channel-sessions"],
+    queryKey: ["channel-sessions", { includeArchived: opts?.includeArchived ?? false }],
     queryFn: async () => {
-      const res = await apiClient.get<{ data: ChannelSession[] }>("/api/v1/channel-sessions");
+      const suffix = opts?.includeArchived ? "?include_archived=1" : "";
+      const res = await apiClient.get<{ data: ChannelSession[] }>(
+        `/api/v1/channel-sessions${suffix}`,
+      );
       return res.data;
     },
     staleTime: 15_000,

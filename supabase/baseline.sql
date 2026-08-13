@@ -1322,6 +1322,7 @@ CREATE TABLE IF NOT EXISTS "public"."channel_sessions" (
     "status_reason" "text",
     "phone_number" "text",
     "display_name" "text",
+    "display_color" "text" DEFAULT '#3B82F6'::"text" NOT NULL,
     "purpose" "text",
     "is_default" boolean DEFAULT false NOT NULL,
     "archived_at" timestamp with time zone,
@@ -1340,6 +1341,7 @@ CREATE TABLE IF NOT EXISTS "public"."channel_sessions" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "created_by" "uuid",
+    CONSTRAINT "channel_sessions_display_color_check" CHECK (("display_color" ~ '^#[0-9A-Fa-f]{6}$'::"text")),
     CONSTRAINT "channel_sessions_engine_check" CHECK (("engine" = 'EVOLUTION'::"text")),
     CONSTRAINT "channel_sessions_provider_check" CHECK (("provider" = 'evolution'::"text")),
     CONSTRAINT "channel_sessions_status_check" CHECK (("status" = ANY (ARRAY['STARTING'::"text", 'SCAN_QR_CODE'::"text", 'WORKING'::"text", 'STOPPED'::"text", 'FAILED'::"text"])))

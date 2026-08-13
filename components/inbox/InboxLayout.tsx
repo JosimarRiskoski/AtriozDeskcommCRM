@@ -67,6 +67,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const [aux, setAux] = useState<Omit<InboxFiltersValue, "tab">>({
     search: "",
     onlyUnread: false,
+    includeArchivedConnections: false,
   });
   const filterValue: InboxFiltersValue = { tab, ...aux };
   const setFilterValue = useCallback(
@@ -94,9 +95,16 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       ...tabToFilter(filterValue.tab),
       search: filterValue.search || undefined,
       channel_session_id: filterValue.channel_session_id,
+      include_archived_connections: filterValue.includeArchivedConnections,
       tag: filterValue.tag,
     }),
-    [filterValue.tab, filterValue.search, filterValue.channel_session_id, filterValue.tag],
+    [
+      filterValue.tab,
+      filterValue.search,
+      filterValue.channel_session_id,
+      filterValue.includeArchivedConnections,
+      filterValue.tag,
+    ],
   );
 
   const clientFilter = useMemo(
@@ -124,6 +132,27 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const selectionNotFound =
     needsFetch && !single.isPending && !single.data && isNotFound(single.error);
 
+  // O filtro também governa o painel aberto. Manter uma conversa de outro
+  // número visível enquanto o seletor mostra a conexão escolhida induz o
+  // atendente a acreditar que responderá pelo canal errado.
+  useEffect(() => {
+    if (!selectedConversation) return;
+    const outsideSelectedChannel =
+      !!filterValue.channel_session_id &&
+      selectedConversation.channel_session_id !== filterValue.channel_session_id;
+    const belongsToArchivedConnection = Boolean(
+      selectedConversation.channel_sessions?.archived_at && !filterValue.includeArchivedConnections,
+    );
+    if (outsideSelectedChannel || belongsToArchivedConnection) {
+      setSelectedId(null);
+      setDetailsOpen(false);
+    }
+  }, [
+    selectedConversation,
+    filterValue.channel_session_id,
+    filterValue.includeArchivedConnections,
+  ]);
+
   const claim = useClaimConversation();
   const close = useCloseConversation();
   const markRead = useMarkConversationRead();
@@ -144,7 +173,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const handleSelect = useCallback(
     (id: string) => {
       setSelectedId(id);
-      const conversation = listQ.data?.pages.flatMap((page) => page.data).find((item) => item.id === id);
+      const conversation = listQ.data?.pages
+        .flatMap((page) => page.data)
+        .find((item) => item.id === id);
       requestRead(conversation);
     },
     [listQ.data, requestRead],
@@ -170,7 +201,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       : `Envios bloqueados no CRM${selectedConversation.contacts.blocked_reason ? `: ${selectedConversation.contacts.blocked_reason}` : "."}`
     : selectedConversation?.contacts?.is_anonymized
       ? "Contato anonimizado — não é possível enviar mensagens."
-      : null;
+      : selectedConversation?.channel_sessions?.archived_at
+        ? "Esta conexão foi arquivada. O histórico continua disponível, mas novos envios por ela estão bloqueados."
+        : null;
 
   return (
     <div className="relative grid h-full min-h-0 w-full grid-cols-1 overflow-hidden md:grid-cols-[300px_minmax(0,1fr)]">
@@ -212,7 +245,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               blockedReason={blockedReason}
               disabled={selectedConversation.status === "closed"}
               // Alguns contatos recebidos pelo WhatsApp possuem apenas
-              // display_name. Para templates, ele Ã© um nome vÃ¡lido e deve
+              // display_name. Para templates, ele é um nome válido e deve
               // preencher {{nome}}/{{primeiro_nome}} da mesma forma.
               contactName={
                 selectedConversation.contacts?.name ||

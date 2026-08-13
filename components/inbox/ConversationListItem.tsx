@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { contactSourceLabel } from "@/lib/contacts/source-labels";
+import { ChannelBadge } from "@/components/channels/ChannelBadge";
 
 interface Props {
   conversation: ConversationWithContact;
@@ -75,10 +76,12 @@ export function ConversationListItem({ conversation, isSelected, onSelect, queue
         "hover:bg-accent/40 group relative flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left transition-colors",
         // A cor vem do token --primary, que acompanha a aparência escolhida
         // pela organização. O destaque não depende do status ou de não lidas.
-        isSelected && "z-10 border-primary bg-primary/10 ring-2 ring-inset ring-primary/70",
+        isSelected && "bg-primary/10 ring-primary/70 z-10 border-primary ring-2 ring-inset",
       )}
       aria-current={isSelected ? "true" : undefined}
-      aria-label={isSelected ? `Conversa selecionada: ${displayName}` : `Abrir conversa: ${displayName}`}
+      aria-label={
+        isSelected ? `Conversa selecionada: ${displayName}` : `Abrir conversa: ${displayName}`
+      }
     >
       <div className="relative shrink-0">
         <Avatar className="h-10 w-10">
@@ -127,6 +130,13 @@ export function ConversationListItem({ conversation, isSelected, onSelect, queue
         </p>
 
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          {conversation.channel_sessions ? (
+            <ChannelBadge
+              channel={conversation.channel_sessions}
+              compact
+              className="h-4 max-w-32 px-1.5 text-[10px]"
+            />
+          ) : null}
           {c?.source && (
             <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[10px]">
               {contactSourceLabel(c.source)}

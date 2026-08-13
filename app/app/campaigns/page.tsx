@@ -20,8 +20,9 @@ export default async function CampaignsPage() {
       .order("position"),
     supabase
       .from("channel_sessions")
-      .select("id,display_name,phone_number,status,daily_message_limit")
+      .select("id,display_name,display_color,phone_number,status,daily_message_limit,is_default")
       .eq("organization_id", org.orgId)
+      .is("archived_at", null)
       .order("created_at"),
   ]);
   return (

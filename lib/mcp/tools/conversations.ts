@@ -46,6 +46,7 @@ export const crmListConversations: McpToolDefinition<typeof listInputShape> = {
         requestId: ctx.requestId,
       },
       {
+        include_archived_connections: false,
         status: input.status,
         limit: input.limit,
         cursor: input.cursor,

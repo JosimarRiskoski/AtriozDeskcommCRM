@@ -84,7 +84,7 @@ export async function GET(
   const { data: session } = await supabase
     .from("channel_sessions")
     .select(
-      "id, provider, external_session_name, display_name, phone_number, status",
+      "id, provider, external_session_name, display_name, display_color, phone_number, status",
     )
     .eq("organization_id", activeOrg.orgId)
     .eq("id", id)
@@ -174,7 +174,7 @@ export async function PATCH(
   const supabase = await createClient();
   const { data: session } = await supabase
     .from("channel_sessions")
-    .select("id,display_name,is_default,archived_at,status")
+    .select("id,display_name,display_color,is_default,archived_at,status")
     .eq("organization_id", authz.org.orgId)
     .eq("id", id)
     .maybeSingle();
@@ -194,6 +194,9 @@ export async function PATCH(
     patch = {
       display_name: parsed.data.display_name,
       purpose: parsed.data.purpose || null,
+      ...(parsed.data.display_color === undefined
+        ? {}
+        : { display_color: parsed.data.display_color }),
       ...(parsed.data.is_default === undefined ? {} : { is_default: parsed.data.is_default }),
       updated_at: new Date().toISOString(),
     };
@@ -231,7 +234,7 @@ export async function PATCH(
     .update(patch)
     .eq("organization_id", authz.org.orgId)
     .eq("id", id)
-    .select("id,display_name,phone_number,purpose,is_default,archived_at,status")
+    .select("id,display_name,display_color,phone_number,purpose,is_default,archived_at,status")
     .single();
   if (error)
     return fail("internal_error", "Não foi possível atualizar a conexão.", 500, { requestId });
@@ -264,9 +267,7 @@ export async function DELETE(
   const supabase = await createClient();
   const { data: session } = await supabase
     .from("channel_sessions")
-    .select(
-      "id,provider,external_session_name,display_name,phone_number,status,is_default",
-    )
+    .select("id,provider,external_session_name,display_name,phone_number,status,is_default")
     .eq("organization_id", authz.org.orgId)
     .eq("id", id)
     .maybeSingle();

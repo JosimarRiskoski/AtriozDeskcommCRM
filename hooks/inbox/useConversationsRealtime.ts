@@ -23,6 +23,15 @@ export interface ContactSummary {
 
 export type ConversationWithContact = Conversation & {
   contacts?: ContactSummary | null;
+  channel_sessions?: {
+    id: string;
+    display_name: string | null;
+    display_color: string;
+    phone_number: string | null;
+    external_session_name: string | null;
+    archived_at: string | null;
+    status: string;
+  } | null;
 };
 
 export interface ConversationsFilters {
@@ -30,6 +39,7 @@ export interface ConversationsFilters {
   assigned_to?: "me" | "unassigned" | string;
   search?: string;
   channel_session_id?: string;
+  include_archived_connections?: boolean;
   tag?: string;
 }
 
@@ -51,6 +61,7 @@ export function useConversationsRealtime(filters: ConversationsFilters, orgId: s
       if (filters.assigned_to) qs.set("assigned_to", filters.assigned_to);
       if (filters.search) qs.set("search", filters.search);
       if (filters.channel_session_id) qs.set("channel_session_id", filters.channel_session_id);
+      if (filters.include_archived_connections) qs.set("include_archived_connections", "1");
       if (filters.tag) qs.set("tag", filters.tag);
       if (pageParam) qs.set("cursor", pageParam);
       qs.set("limit", "50");
