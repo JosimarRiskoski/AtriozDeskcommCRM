@@ -169,9 +169,30 @@ export class EvolutionClient {
 
   async connectionState(instanceName: string): Promise<EvolutionConnection> {
     try {
-      return this.connectionFrom(
+      const direct = this.connectionFrom(
         await this.request<unknown>(`/instance/connectionState/${encodeURIComponent(instanceName)}`),
       );
+      // Algumas versoes respondem `open` neste endpoint mesmo depois de um
+      // logout 401. O inventario de instancias conserva o motivo real da
+      // desconexao, portanto ele precisa confirmar todo suposto `open`.
+      if (direct.state.toLowerCase() === "open") {
+        try {
+          const instances = instanceListFrom(
+            await this.request<unknown>("/instance/fetchInstances"),
+          );
+          const compatibleNames = new Set([instanceName, `evo_${instanceName}`]);
+          const match = instances.find((item) => {
+            const name = item.name ?? item.instanceName;
+            return typeof name === "string" && compatibleNames.has(name);
+          });
+          if (match) return this.connectionFrom(match);
+        } catch {
+          // Se o inventario estiver momentaneamente indisponivel, preserve a
+          // resposta direta em vez de transformar uma falha transitoria em
+          // desconexao.
+        }
+      }
+      return direct;
     } catch (error) {
       // Algumas imagens 2.x em producao nao expoem `connectionState`, embora
       // `fetchInstances` continue sendo suportado e informe `connectionStatus`.

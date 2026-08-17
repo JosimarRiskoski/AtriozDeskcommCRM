@@ -167,4 +167,29 @@ describe("Evolution helpers", () => {
 
     expect(connection.state).toBe("close");
   });
+
+  it("cross-checks a direct open state against the instance disconnect reason", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ instance: { state: "open" } }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              name: "evo_org_123",
+              connectionStatus: "open",
+              disconnectionReasonCode: 401,
+              updatedAt: "2026-08-17T12:00:00.000Z",
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+    const client = new EvolutionClient("http://evolution:8080", "secret");
+
+    const connection = await client.connectionState("org_123");
+
+    expect(connection.state).toBe("close");
+  });
 });
