@@ -30,6 +30,7 @@ const updateSchema = z.discriminatedUnion("action", [
       message: "O término precisa ser posterior ao início.",
     }),
   z.object({ action: z.literal("complete"), confirmed: z.literal(true) }),
+  z.object({ action: z.literal("no_show"), confirmed: z.literal(true) }),
 ]);
 
 export async function PATCH(
@@ -81,14 +82,15 @@ export async function PATCH(
       return ok({ id, status: "cancelled" }, { requestId });
     }
 
-    if (parsed.data.action === "complete") {
-      await admin.from("calendar_appointments").update({ status: "completed" }).eq("id", id);
+    if (parsed.data.action === "complete" || parsed.data.action === "no_show") {
+      const status = parsed.data.action === "complete" ? "completed" : "no_show";
+      await admin.from("calendar_appointments").update({ status }).eq("id", id);
       await admin
         .from("calendar_reminders")
         .update({ status: "cancelled", claimed_until: null })
         .eq("appointment_id", id)
         .in("status", ["pending", "processing", "failed"]);
-      return ok({ id, status: "completed" }, { requestId });
+      return ok({ id, status }, { requestId });
     }
 
     if (appointment.external_event_id && appointment.external_calendar_id) {

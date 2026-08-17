@@ -12,6 +12,7 @@ import { resolveLeadOwner } from "@/lib/kanban/owner";
 import { AppointmentDialog } from "@/components/calendar/AppointmentDialog";
 import { Button } from "@/components/ui/button";
 import { CalendarBlank } from "@/lib/ui/icons";
+import { MetaConversionControl } from "./MetaConversionControl";
 
 interface Props {
   open: boolean;
@@ -118,6 +119,8 @@ export function LeadDossier({
               <CalendarBlank size={13} className="mr-1" /> Agendar
             </Button>
           ) : null}
+
+          <MetaConversionControl leadId={lead.id} />
 
           <button
             type="button"

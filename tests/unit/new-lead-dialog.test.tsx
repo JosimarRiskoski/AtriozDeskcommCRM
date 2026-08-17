@@ -80,6 +80,10 @@ describe("NewLeadDialog no Inbox", () => {
       target: { value: "Cliente pediu retorno amanhã" },
     });
     fireEvent.change(screen.getByLabelText(/Valor previsto/), { target: { value: "1.234,56" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByRole("list", { name: "Etapa 2 de 3" });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByRole("list", { name: "Etapa 3 de 3" });
     fireEvent.click(screen.getByRole("button", { name: "Criar oportunidade" }));
 
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));

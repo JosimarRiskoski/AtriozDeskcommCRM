@@ -4,13 +4,14 @@ import type { NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { metaCapiErrorLabel } from "@/lib/meta-capi/errors";
 
 export const dynamic = "force-dynamic";
 
 export type OperationalHealth = "ok" | "warning" | "critical";
 
 export interface OperationalHealthItem {
-  id: "database" | "whatsapp" | "automation" | "ai" | "email" | "webhooks";
+  id: "database" | "whatsapp" | "automation" | "ai" | "email" | "webhooks" | "meta_capi";
   label: string;
   status: OperationalHealth;
   summary: string;
@@ -56,6 +57,8 @@ export async function GET(_req: NextRequest): Promise<Response> {
     aiJobs,
     llmFailure,
     pendingDispatches,
+    metaSettings,
+    metaEvents,
   ] = await Promise.all([
     admin.from("organizations").select("id").eq("id", orgId).maybeSingle(),
     admin
@@ -110,6 +113,17 @@ export async function GET(_req: NextRequest): Promise<Response> {
       .eq("organization_id", orgId)
       .eq("event_type", "ai_agent.dispatch_requested")
       .eq("status", "pending"),
+    admin
+      .from("meta_capi_settings")
+      .select("enabled,test_event_code")
+      .eq("organization_id", orgId)
+      .maybeSingle(),
+    admin
+      .from("meta_conversion_events")
+      .select("status,last_error,requested_at,sent_at,updated_at")
+      .eq("organization_id", orgId)
+      .order("updated_at", { ascending: false })
+      .limit(50),
   ]);
 
   if (database.error) {
@@ -158,6 +172,18 @@ export async function GET(_req: NextRequest): Promise<Response> {
   const failureAgeHours = recentWebhookFailure
     ? (now - new Date(recentWebhookFailure.received_at).getTime()) / 3_600_000
     : null;
+  const recentMetaEvents = metaEvents.data ?? [];
+  const latestMetaEvent = recentMetaEvents[0] ?? null;
+  const metaFailed = latestMetaEvent?.status === "failed" ? latestMetaEvent : null;
+  const metaPending = recentMetaEvents.filter((event) =>
+    ["pending", "processing"].includes(event.status),
+  );
+  const metaQueueStalled = metaPending.some((event) => {
+    const reference = event.requested_at ?? event.updated_at;
+    return reference ? now - new Date(reference).getTime() > 5 * 60_000 : false;
+  });
+  const lastMetaSuccess = recentMetaEvents.find((event) => event.status === "sent") ?? null;
+  const metaEnabled = Boolean(metaSettings.data?.enabled);
 
   const items: OperationalHealthItem[] = [
     {
@@ -267,6 +293,29 @@ export async function GET(_req: NextRequest): Promise<Response> {
             : "Nenhuma origem externa está ativa; isso é normal se você não usa integrações.",
       action_label: "Abrir webhooks",
       action_url: "/app/webhooks",
+    },
+    {
+      id: "meta_capi",
+      label: "Conversoes da Meta",
+      status: metaFailed || metaQueueStalled ? "critical" : metaEnabled ? "ok" : "warning",
+      summary: metaFailed
+        ? "A Meta rejeitou uma conversao"
+        : metaQueueStalled
+          ? `${metaPending.length} conversao(oes) aguardando processamento`
+          : metaEnabled
+            ? metaSettings.data?.test_event_code
+              ? "Ativa em modo de teste"
+              : "Ativa em producao"
+            : "Integracao desativada",
+      detail: metaFailed?.last_error
+        ? `Ultima falha: ${metaCapiErrorLabel(metaFailed.last_error)}`
+        : lastMetaSuccess?.sent_at
+          ? `Ultimo sucesso em ${new Date(lastMetaSuccess.sent_at).toLocaleString("pt-BR")}.`
+          : metaEnabled
+            ? "Nenhuma conversao manual foi enviada ainda."
+            : "Configure Dataset, token e o marco comercial antes do primeiro envio.",
+      action_label: "Abrir Conversoes da Meta",
+      action_url: "/app/settings/meta-capi",
     },
   ];
 

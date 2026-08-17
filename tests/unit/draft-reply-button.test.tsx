@@ -30,7 +30,7 @@ describe("DraftReplyButton", () => {
     const onDraft = vi.fn();
 
     render(wrap(<DraftReplyButton conversationId="conv-1" onDraft={onDraft} />));
-    const btn = screen.getByRole("button", { name: "Sugerir resposta" });
+    const btn = screen.getByRole("button", { name: "Sugerir resposta com IA" });
     fireEvent.click(btn);
 
     await waitFor(() =>
@@ -48,7 +48,7 @@ describe("DraftReplyButton", () => {
     const onDraft = vi.fn();
 
     render(wrap(<DraftReplyButton conversationId="conv-1" onDraft={onDraft} />));
-    fireEvent.click(screen.getByRole("button", { name: "Sugerir resposta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sugerir resposta com IA" }));
 
     await waitFor(() => expect(showApiErrorMock).toHaveBeenCalled());
     expect(onDraft).not.toHaveBeenCalled();
@@ -56,6 +56,6 @@ describe("DraftReplyButton", () => {
 
   it("disabled prop desabilita o botão", () => {
     render(wrap(<DraftReplyButton conversationId="conv-1" onDraft={vi.fn()} disabled />));
-    expect(screen.getByRole("button", { name: "Sugerir resposta" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Sugerir resposta com IA" })).toBeDisabled();
   });
 });

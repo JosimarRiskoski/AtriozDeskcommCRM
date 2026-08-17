@@ -103,6 +103,10 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 
 | `20260813160000` | `0126_google_calendar_appointments` | Agenda Google por organizacao, OAuth cifrado, compromissos ligados a contato/conversa/oportunidade e fila propria de lembretes fixos de 24h/1h pelo WhatsApp. |
 
+| `20260813170000` | `0127_notification_outage_dedup` | Evita notificacoes repetidas quando uma conexao alterna entre estados de falha, resolve o alerta ao reconectar e mantem somente um alerta aberto por conexao. |
+
+| `20260817110000` | `0128_meta_capi_manual_conversion` | Remove o disparo automatico por etapa e exige confirmacao manual auditada por oportunidade; tentativas usam o mesmo evento idempotente e um sucesso bloqueia novo envio. |
+
 ## Reproducibility
 
 Migrations were applied directly via the Supabase MCP `apply_migration` tool during the autonomous bootstrap session. The SQL of each migration is also embedded in the corresponding spec under `docs/specs/0X-spec-*.md` and the database keeps them in `supabase_migrations.schema_migrations`.

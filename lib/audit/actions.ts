@@ -17,6 +17,8 @@ export type AuditAction =
   | "nuvemshop.webhook_invalid_signature"
   | "google_calendar.connected"
   | "google_calendar.oauth_failed"
+  | "meta.conversion_requested"
+  | "meta.conversion_sent"
   | "lead.created"
   | "lead.updated"
   | "lead.deleted"

@@ -14,10 +14,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StepDialogForm } from "@/components/ui/step-dialog-form";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 
 interface ContactOption {
   id: string;
@@ -37,6 +44,7 @@ interface Props {
   contactPhone?: string | null;
   contactEmail?: string | null;
   onCreated?: () => void;
+  initialStartsAt?: Date | null;
 }
 
 function initialDateTime() {
@@ -55,6 +63,7 @@ export function AppointmentDialog({
   contactPhone,
   contactEmail,
   onCreated,
+  initialStartsAt = null,
 }: Props) {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -72,6 +81,8 @@ export function AppointmentDialog({
   const [reminder24h, setReminder24h] = useState(true);
   const [reminder1h, setReminder1h] = useState(true);
   const [confirmed, setConfirmed] = useState(false);
+  const [assignedUserId, setAssignedUserId] = useState("unassigned");
+  const members = useAssignableMembers(true);
 
   useEffect(() => {
     if (!open) return;
@@ -80,7 +91,14 @@ export function AppointmentDialog({
     setContactId(fixedContactId ?? "");
     setTitle(contactName ? `Compromisso com ${contactName}` : "");
     setAttendeeEmail(contactEmail ?? "");
-  }, [open, fixedContactId, contactName, contactEmail]);
+    if (initialStartsAt) {
+      const date = new Date(initialStartsAt);
+      if (date.getHours() === 0 && date.getMinutes() === 0) date.setHours(9, 0, 0, 0);
+      setStartsAt(
+        new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16),
+      );
+    }
+  }, [open, fixedContactId, contactName, contactEmail, initialStartsAt]);
 
   useEffect(() => {
     if (!open || fixedContactId || contactSearch.trim().length < 2) return;
@@ -108,7 +126,11 @@ export function AppointmentDialog({
     [contacts, contactId],
   );
   const displayContact =
-    contactName || selectedContact?.name || selectedContact?.display_name || contactPhone || "Contato";
+    contactName ||
+    selectedContact?.name ||
+    selectedContact?.display_name ||
+    contactPhone ||
+    "Contato";
 
   async function createAppointment() {
     if (!confirmed) return;
@@ -124,6 +146,7 @@ export function AppointmentDialog({
           contact_id: contactId,
           conversation_id: conversationId,
           lead_id: leadId,
+          assigned_user_id: assignedUserId === "unassigned" ? null : assignedUserId,
           appointment_type: type,
           title,
           description: description || null,
@@ -150,7 +173,9 @@ export function AppointmentDialog({
   }
 
   const canContinueStep0 = Boolean(contactId && title.trim().length >= 2);
-  const canContinueStep1 = Boolean(startsAt && Number(duration) >= 5 && (createMeet || location.trim()));
+  const canContinueStep1 = Boolean(
+    startsAt && Number(duration) >= 5 && (createMeet || location.trim()),
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -174,7 +199,11 @@ export function AppointmentDialog({
                 Cancelar
               </Button>
               {step > 0 ? (
-                <Button type="button" variant="outline" onClick={() => setStep((value) => value - 1)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep((value) => value - 1)}
+                >
                   Voltar
                 </Button>
               ) : null}
@@ -196,7 +225,7 @@ export function AppointmentDialog({
         >
           <div className={step === 0 ? "space-y-4" : "hidden"}>
             {fixedContactId ? (
-              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <div className="bg-muted/30 rounded-md border p-3 text-sm">
                 <div className="font-medium">{displayContact}</div>
                 {contactPhone ? <div className="text-muted-foreground">{contactPhone}</div> : null}
               </div>
@@ -218,12 +247,19 @@ export function AppointmentDialog({
                         onClick={() => {
                           setContactId(contact.id);
                           setAttendeeEmail(contact.email ?? "");
-                          if (!title) setTitle(`Compromisso com ${contact.name || contact.display_name || contact.phone_number}`);
+                          if (!title)
+                            setTitle(
+                              `Compromisso com ${contact.name || contact.display_name || contact.phone_number}`,
+                            );
                         }}
                         className={`block w-full rounded px-2 py-2 text-left text-sm hover:bg-accent ${contactId === contact.id ? "bg-accent" : ""}`}
                       >
-                        <span className="font-medium">{contact.name || contact.display_name || "Sem nome"}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">{contact.phone_number}</span>
+                        <span className="font-medium">
+                          {contact.name || contact.display_name || "Sem nome"}
+                        </span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {contact.phone_number}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -232,12 +268,18 @@ export function AppointmentDialog({
             )}
             <div className="space-y-2">
               <Label htmlFor="appointment-title">Título</Label>
-              <Input id="appointment-title" value={title} onChange={(event) => setTitle(event.target.value)} />
+              <Input
+                id="appointment-title"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Tipo</Label>
               <Select value={type} onValueChange={setType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="visit">Visita</SelectItem>
                   <SelectItem value="consultation">Consulta</SelectItem>
@@ -248,7 +290,27 @@ export function AppointmentDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="appointment-description">Observações</Label>
-              <Textarea id="appointment-description" value={description} onChange={(event) => setDescription(event.target.value)} />
+              <Textarea
+                id="appointment-description"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Responsável</Label>
+              <Select value={assignedUserId} onValueChange={setAssignedUserId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Sem responsável</SelectItem>
+                  {(members.data ?? []).map((member) => (
+                    <SelectItem key={member.user_id} value={member.user_id}>
+                      {member.full_name || "Membro"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -256,12 +318,19 @@ export function AppointmentDialog({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="appointment-start">Data e hora</Label>
-                <Input id="appointment-start" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
+                <Input
+                  id="appointment-start"
+                  type="datetime-local"
+                  value={startsAt}
+                  onChange={(event) => setStartsAt(event.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Duração</Label>
                 <Select value={duration} onValueChange={setDuration}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="30">30 minutos</SelectItem>
                     <SelectItem value="60">1 hora</SelectItem>
@@ -272,18 +341,33 @@ export function AppointmentDialog({
               </div>
             </div>
             <div className="flex items-center justify-between rounded-md border p-3">
-              <div><div className="text-sm font-medium">Criar Google Meet</div><div className="text-xs text-muted-foreground">O link será incluído nos lembretes fixos.</div></div>
+              <div>
+                <div className="text-sm font-medium">Criar Google Meet</div>
+                <div className="text-xs text-muted-foreground">
+                  O link será incluído nos lembretes fixos.
+                </div>
+              </div>
               <Switch checked={createMeet} onCheckedChange={setCreateMeet} />
             </div>
             {!createMeet ? (
               <div className="space-y-2">
                 <Label htmlFor="appointment-location">Endereço ou local</Label>
-                <Input id="appointment-location" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Rua, número, cidade" />
+                <Input
+                  id="appointment-location"
+                  value={location}
+                  onChange={(event) => setLocation(event.target.value)}
+                  placeholder="Rua, número, cidade"
+                />
               </div>
             ) : null}
             <div className="space-y-2">
               <Label htmlFor="appointment-email">E-mail do convidado (opcional)</Label>
-              <Input id="appointment-email" type="email" value={attendeeEmail} onChange={(event) => setAttendeeEmail(event.target.value)} />
+              <Input
+                id="appointment-email"
+                type="email"
+                value={attendeeEmail}
+                onChange={(event) => setAttendeeEmail(event.target.value)}
+              />
             </div>
           </div>
 
@@ -297,16 +381,29 @@ export function AppointmentDialog({
             <div className="space-y-2 rounded-md border p-4">
               <div className="font-medium">Lembretes fixos pelo WhatsApp</div>
               <label className="flex items-center justify-between gap-3 text-sm">
-                <span>1 dia antes</span><Switch checked={reminder24h} onCheckedChange={setReminder24h} />
+                <span>1 dia antes</span>
+                <Switch checked={reminder24h} onCheckedChange={setReminder24h} />
               </label>
               <label className="flex items-center justify-between gap-3 text-sm">
-                <span>1 hora antes</span><Switch checked={reminder1h} onCheckedChange={setReminder1h} />
+                <span>1 hora antes</span>
+                <Switch checked={reminder1h} onCheckedChange={setReminder1h} />
               </label>
-              <p className="text-xs text-muted-foreground">O texto é definido em Configurações → Google Agenda. A IA não cria frases para esses avisos.</p>
+              <p className="text-xs text-muted-foreground">
+                O texto é definido em Configurações → Google Agenda. A IA não cria frases para esses
+                avisos.
+              </p>
             </div>
             <label className="flex items-start gap-3 rounded-md border p-4 text-sm">
-              <input type="checkbox" className="mt-1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
-              <span>Confirmo a criação deste compromisso no Google Agenda e o envio dos lembretes selecionados.</span>
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={confirmed}
+                onChange={(event) => setConfirmed(event.target.checked)}
+              />
+              <span>
+                Confirmo a criação deste compromisso no Google Agenda e o envio dos lembretes
+                selecionados.
+              </span>
             </label>
           </div>
         </StepDialogForm>

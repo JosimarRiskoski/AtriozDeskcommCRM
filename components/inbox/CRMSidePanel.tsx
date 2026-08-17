@@ -34,6 +34,7 @@ import { ChannelBadge } from "@/components/channels/ChannelBadge";
 import type { BoardData } from "@/lib/kanban/types";
 import type { PipelineRow } from "@/app/api/v1/pipelines/_handler";
 import { AppointmentDialog } from "@/components/calendar/AppointmentDialog";
+import { MetaConversionControl } from "@/components/kanban/MetaConversionControl";
 
 interface Props {
   conversation: ConversationWithContact | null;
@@ -352,6 +353,7 @@ export function CRMSidePanel({ conversation }: Props) {
                 Agendar
               </Button>
             )}
+            {openLeads.length === 1 ? <MetaConversionControl leadId={openLeads[0]!.id} /> : null}
             {contactId && (
               <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
                 <Link href={`/app/contacts/${contactId}`}>

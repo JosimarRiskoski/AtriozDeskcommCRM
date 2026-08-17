@@ -8400,5 +8400,113 @@ grant select, insert, update, delete on public.calendar_appointments to authenti
 grant select on public.calendar_reminders to authenticated;
 grant all on public.calendar_integrations, public.calendar_appointments, public.calendar_reminders to service_role;
 
+-- 0127_notification_outage_dedup
+create or replace function public.fn_notify_channel_disconnected()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare
+  v_old_is_down boolean := lower(coalesce(old.status, '')) in ('failed','stopped','disconnected','error');
+  v_new_is_down boolean := lower(coalesce(new.status, '')) in ('failed','stopped','disconnected','error');
+begin
+  if v_new_is_down and not v_old_is_down then
+    if not exists (
+      select 1 from public.notification_events e
+       where e.organization_id = new.organization_id
+         and e.category = 'whatsapp_disconnected'
+         and e.resource_type = 'channel_session'
+         and e.resource_id = new.id
+         and e.resolved_at is null
+    ) then
+      perform public.fn_emit_notification(
+        new.organization_id, 'whatsapp_disconnected', 'critical', 'WhatsApp desconectado',
+        coalesce(new.status_reason, 'A conexao precisa ser verificada.'), '/app/connections',
+        'channel_session', new.id,
+        'channel-down-' || new.id || '-' || extract(epoch from coalesce(new.last_status_change_at, now()))::bigint
+      );
+    end if;
+  elsif not v_new_is_down and v_old_is_down then
+    update public.notification_events
+       set resolved_at = coalesce(resolved_at, now())
+     where organization_id = new.organization_id
+       and category = 'whatsapp_disconnected'
+       and resource_type = 'channel_session'
+       and resource_id = new.id
+       and resolved_at is null;
+  end if;
+  return new;
+end $$;
+
+with ranked as (
+  select id, row_number() over (
+    partition by organization_id, resource_id order by created_at desc, id desc
+  ) as position
+  from public.notification_events
+  where category = 'whatsapp_disconnected'
+    and resource_type = 'channel_session'
+    and resolved_at is null
+)
+update public.notification_events e
+set resolved_at = now()
+from ranked r
+where e.id = r.id and r.position > 1;
+
 comment on table public.calendar_reminders is
   'Lembretes determinísticos de compromissos. message_body é um snapshot fixo e nunca é escrito pela IA.';
+
+-- 0128_meta_capi_manual_conversion
+-- A conversao para a Meta passa a exigir confirmacao humana explicita.
+
+drop trigger if exists trg_enqueue_meta_conversion_on_won on public.crm_leads;
+drop function if exists public.fn_enqueue_meta_conversion_on_won();
+
+alter table public.meta_capi_settings
+  add column if not exists conversion_label text not null default 'Venda fechada';
+
+alter table public.meta_conversion_events
+  add column if not exists requested_by_user_id uuid references auth.users(id) on delete set null,
+  add column if not exists requested_at timestamptz,
+  add column if not exists conversion_label text,
+  add column if not exists request_summary jsonb not null default '{}'::jsonb;
+
+update public.meta_conversion_events
+set status = 'skipped',
+    lease_until = null,
+    last_error = 'automatic_trigger_disabled_before_manual_confirmation',
+    updated_at = now()
+where status in ('pending', 'processing')
+  and requested_by_user_id is null;
+
+with ranked_sent as (
+  select id,
+         row_number() over (
+           partition by organization_id, lead_id
+           order by sent_at desc nulls last, created_at desc, id desc
+         ) as position
+  from public.meta_conversion_events
+  where status = 'sent'
+)
+update public.meta_conversion_events event
+set status = 'skipped',
+    last_error = 'historical_duplicate_superseded',
+    updated_at = now()
+from ranked_sent ranked
+where event.id = ranked.id
+  and ranked.position > 1;
+
+create unique index if not exists uniq_meta_conversion_one_success_per_lead
+  on public.meta_conversion_events(organization_id, lead_id)
+  where status = 'sent';
+
+create index if not exists idx_meta_conversion_lead
+  on public.meta_conversion_events(organization_id, lead_id, created_at desc);
+
+comment on table public.meta_conversion_events is
+  'Conversoes CRM enviadas manualmente para a Meta. Mudancas de etapa nunca enfileiram eventos.';
+comment on column public.meta_conversion_events.requested_by_user_id is
+  'Usuario que confirmou explicitamente o envio manual.';
+comment on column public.meta_conversion_events.request_summary is
+  'Resumo auditavel sem token e sem PII em texto puro.';
+comment on column public.meta_capi_settings.conversion_label is
+  'Nome amigavel do marco comercial exibido antes da confirmacao manual.';
+
+comment on column public.contacts.source_metadata is
+  'Metadados estruturados de origem. Para Meta, preservar fbc, fbp e meta_lead_id quando recebidos; nunca fabricar valores.';
