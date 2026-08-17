@@ -107,6 +107,8 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 
 | `20260817110000` | `0128_meta_capi_manual_conversion` | Remove o disparo automatico por etapa e exige confirmacao manual auditada por oportunidade; tentativas usam o mesmo evento idempotente e um sucesso bloqueia novo envio. |
 
+| `20260817120000` | `0129_bound_lid_recovery_and_audit_growth` | Impede reprocessamento infinito de mensagens LID, aplica backoff e limite de tentativas, retoma ao descobrir o telefone e remove somente auditorias duplicadas geradas pelo defeito. |
+
 ## Reproducibility
 
 Migrations were applied directly via the Supabase MCP `apply_migration` tool during the autonomous bootstrap session. The SQL of each migration is also embedded in the corresponding spec under `docs/specs/0X-spec-*.md` and the database keeps them in `supabase_migrations.schema_migrations`.

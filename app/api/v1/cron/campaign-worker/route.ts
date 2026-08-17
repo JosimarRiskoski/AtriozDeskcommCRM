@@ -17,7 +17,11 @@ async function handle(req: NextRequest): Promise<Response> {
   if (!provided || !accepted.includes(provided)) return fail("forbidden", "Cron secret missing or invalid.", 403, { requestId });
   try {
     const summary = await runCampaignTick(createAdminClient() as unknown as import("@supabase/supabase-js").SupabaseClient);
-    void audit({ action: "campaign.worker_run", organizationId: null, bypassedRls: true, requestId, metadata: summary });
+    // Não persiste heartbeat vazio a cada minuto; somente trabalho reclamado
+    // gera evidência operacional. Erros seguem retornando 500 ao scheduler.
+    if (summary.claimed > 0) {
+      void audit({ action: "campaign.worker_run", organizationId: null, bypassedRls: true, requestId, metadata: summary });
+    }
     return ok(summary, { requestId });
   } catch (error) {
     return fail("internal_error", error instanceof Error ? error.message : "campaign_worker_failed", 500, { requestId });

@@ -17,6 +17,10 @@ export { parseChatId } from "@/lib/whatsapp/chat-identity";
 import { bareWhatsAppMessageId, chatIdFromWhatsAppMessageId } from "@/lib/whatsapp/message-id";
 import { isExplicitStopRequest } from "@/lib/whatsapp/stop-detection";
 import { advanceEvolutionReceipt, type ReceiptRpc } from "@/lib/evolution/receipts";
+import {
+  PENDING_IDENTITY_MAX_ATTEMPTS,
+  pendingIdentityRetryAt,
+} from "@/lib/evolution/pending-recovery-policy";
 import { handleManagerGroupCommand } from "@/lib/human-support/group-commands";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -113,23 +117,31 @@ async function preservePendingIdentity(
   requestId: string,
 ): Promise<void> {
   if (!payload.id) return;
-  const { error } = await admin.from("whatsapp_inbound_pending").upsert(
-    {
-      organization_id: session.organization_id,
-      channel_session_id: session.id,
-      external_id: payload.id,
-      chat_id: chatId,
-      lid,
-      payload,
-      status: "pending",
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "organization_id,channel_session_id,external_id", ignoreDuplicates: true },
-  );
+  const { data: inserted, error } = await admin
+    .from("whatsapp_inbound_pending")
+    .upsert(
+      {
+        organization_id: session.organization_id,
+        channel_session_id: session.id,
+        external_id: payload.id,
+        chat_id: chatId,
+        lid,
+        payload,
+        status: "pending",
+        next_attempt_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "organization_id,channel_session_id,external_id", ignoreDuplicates: true },
+    )
+    .select("id")
+    .maybeSingle();
   if (error) {
     console.error("[evolution.ingest] nao foi possivel preservar mensagem @lid", error.message);
     return;
   }
+  // ON CONFLICT DO NOTHING nao retorna linha. O evento representa a primeira
+  // preservacao da mensagem, nao cada tentativa do recuperador.
+  if (!inserted) return;
   await audit({
     action: "message.identity_pending",
     organizationId: session.organization_id,
@@ -152,7 +164,7 @@ async function reconcilePendingIdentity(
     .eq("organization_id", session.organization_id)
     .eq("channel_session_id", session.id)
     .eq("lid", lid)
-    .in("status", ["pending", "failed"])
+    .in("status", ["pending", "failed", "exhausted"])
     .order("created_at", { ascending: true })
     .limit(50);
   if (error || !pending?.length) return;
@@ -166,7 +178,7 @@ async function reconcilePendingIdentity(
         updated_at: new Date().toISOString(),
       })
       .eq("id", item.id)
-      .in("status", ["pending", "failed"]);
+      .in("status", ["pending", "failed", "exhausted"]);
 
     try {
       const pendingPayload = item.payload as unknown as CommercialMessagePayload;
@@ -227,6 +239,42 @@ async function reconcilePendingIdentity(
   }
 }
 
+async function resolvedPhoneForPendingLid(
+  admin: Admin,
+  organizationId: string,
+  lid: string,
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from("contacts")
+    .select("id,phone_number")
+    .eq("organization_id", organizationId)
+    .is("is_merged_into", null)
+    .contains("source_metadata", { whatsapp_lid: lid })
+    .not("phone_number", "is", null)
+    .limit(2);
+  if (error || !data || data.length !== 1) return null;
+  const phone = data[0]?.phone_number?.replace(/\D/g, "") ?? "";
+  return phone || null;
+}
+
+function pendingReplayPayload(
+  payload: CommercialMessagePayload,
+  lid: string,
+  phone: string,
+): CommercialMessagePayload {
+  const jid = `${phone.replace(/\D/g, "")}@s.whatsapp.net`;
+  return {
+    ...payload,
+    provider: "evolution",
+    from: jid,
+    _data: {
+      ...payload._data,
+      original_remote_jid: `${lid}@lid`,
+      remote_jid_alt: jid,
+    },
+  };
+}
+
 /**
  * Reprocessa mensagens que chegaram com identidade @lid antes de o WhatsApp
  * disponibilizar o telefone correspondente. A entrada normal continua sendo
@@ -237,10 +285,27 @@ export async function reconcilePendingEvolutionInbound(
   admin: Admin,
   limit = 50,
 ): Promise<{ scanned: number; reconciled: number; still_pending: number; failed: number }> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  // Recupera leases abandonados caso um processo tenha morrido durante a tentativa.
+  await admin
+    .from("whatsapp_inbound_pending")
+    .update({
+      status: "failed",
+      last_error: "tentativa interrompida; reagendada automaticamente",
+      next_attempt_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("status", "reconciling")
+    .lt("updated_at", new Date(now.getTime() - 15 * 60 * 1000).toISOString());
+
   const { data, error } = await admin
     .from("whatsapp_inbound_pending")
     .select("id,organization_id,channel_session_id,external_id,payload,lid,attempts")
     .in("status", ["pending", "failed"])
+    .lt("attempts", PENDING_IDENTITY_MAX_ATTEMPTS)
+    .lte("next_attempt_at", nowIso)
     .order("created_at", { ascending: true })
     .limit(limit);
   if (error) throw new Error(`pending_inbound_query_failed: ${error.message}`);
@@ -251,12 +316,16 @@ export async function reconcilePendingEvolutionInbound(
   let failed = 0;
 
   for (const row of rows) {
+    const nextAttempts = Number(row.attempts ?? 0) + 1;
+    const nextAttemptAt = pendingIdentityRetryAt(nextAttempts, now);
     const { data: claimed } = await admin
       .from("whatsapp_inbound_pending")
       .update({
         status: "reconciling",
-        attempts: Number(row.attempts ?? 0) + 1,
-        updated_at: new Date().toISOString(),
+        attempts: nextAttempts,
+        last_attempt_at: nowIso,
+        next_attempt_at: nextAttemptAt,
+        updated_at: nowIso,
       })
       .eq("id", row.id)
       .in("status", ["pending", "failed"])
@@ -275,16 +344,41 @@ export async function reconcilePendingEvolutionInbound(
       await admin
         .from("whatsapp_inbound_pending")
         .update({
-          status: "failed",
+          status: "exhausted",
           last_error: "conexão WhatsApp não encontrada",
-          updated_at: new Date().toISOString(),
+          exhausted_at: nowIso,
+          updated_at: nowIso,
         })
         .eq("id", row.id);
       continue;
     }
 
     try {
-      await handleInbound(admin, session, row.payload, `pending-${row.id}`, true);
+      const resolvedPhone = await resolvedPhoneForPendingLid(admin, row.organization_id, row.lid);
+      if (!resolvedPhone) {
+        stillPending++;
+        const exhausted = nextAttempts >= PENDING_IDENTITY_MAX_ATTEMPTS;
+        await admin
+          .from("whatsapp_inbound_pending")
+          .update({
+            status: exhausted ? "exhausted" : "pending",
+            last_error: exhausted
+              ? "limite de tentativas atingido; será retomada quando o WhatsApp revelar o telefone"
+              : "aguardando identificação LID -> telefone",
+            exhausted_at: exhausted ? nowIso : null,
+            updated_at: nowIso,
+          })
+          .eq("id", row.id);
+        continue;
+      }
+
+      await handleInbound(
+        admin,
+        session,
+        pendingReplayPayload(row.payload, row.lid, resolvedPhone),
+        `pending-${row.id}`,
+        true,
+      );
       const { data: message } = await admin
         .from("messages")
         .select("contact_id,conversation_id")
@@ -314,17 +408,21 @@ export async function reconcilePendingEvolutionInbound(
           reconciled_conversation_id: message.conversation_id,
           reconciled_at: new Date().toISOString(),
           last_error: null,
+          next_attempt_at: null,
+          exhausted_at: null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id);
     } catch (error) {
       failed++;
+      const exhausted = nextAttempts >= PENDING_IDENTITY_MAX_ATTEMPTS;
       await admin
         .from("whatsapp_inbound_pending")
         .update({
-          status: "failed",
+          status: exhausted ? "exhausted" : "failed",
           last_error: error instanceof Error ? error.message.slice(0, 500) : "erro desconhecido",
-          updated_at: new Date().toISOString(),
+          exhausted_at: exhausted ? nowIso : null,
+          updated_at: nowIso,
         })
         .eq("id", row.id);
     }
@@ -940,7 +1038,11 @@ async function handleOutboundFromUserPhone(
   }
 }
 
-async function handleAck(admin: Admin, session: Session, p: CommercialMessagePayload): Promise<void> {
+async function handleAck(
+  admin: Admin,
+  session: Session,
+  p: CommercialMessagePayload,
+): Promise<void> {
   if (!p.id) return;
   const ack = p.ack ?? 0;
   // Alguns conectores serializam o ack como `{fromMe}_{chatId}_{bareId}`.

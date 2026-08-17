@@ -30,13 +30,16 @@ async function handle(req: NextRequest): Promise<Response> {
 
   try {
     const summary = await reconcilePendingEvolutionInbound(createAdminClient());
-    void audit({
-      action: "whatsapp.inbound_recovery_run",
-      organizationId: null,
-      bypassedRls: true,
-      requestId,
-      metadata: summary,
-    });
+    // Execucoes vazias acontecem a cada minuto e nao sao evento de negocio.
+    if (summary.scanned > 0) {
+      void audit({
+        action: "whatsapp.inbound_recovery_run",
+        organizationId: null,
+        bypassedRls: true,
+        requestId,
+        metadata: summary,
+      });
+    }
     return ok(summary, { requestId });
   } catch (error) {
     return fail(

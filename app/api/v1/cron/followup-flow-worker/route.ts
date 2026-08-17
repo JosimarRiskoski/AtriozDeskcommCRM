@@ -73,13 +73,18 @@ async function handle(req: NextRequest): Promise<Response> {
     return fail("internal_error", detail, 500, { requestId });
   }
 
-  void audit({
-    action: "followup.worker_run",
-    organizationId: null,
-    bypassedRls: true,
-    metadata: { ...summary },
-    requestId,
-  });
+  // Tick vazio é o estado normal deste cron. Auditar cada minuto sem nenhum
+  // enrollment consumido transformava o heartbeat em dezenas de milhares de
+  // linhas técnicas. Atividade real e falhas continuam auditadas.
+  if (summary.claimed > 0) {
+    void audit({
+      action: "followup.worker_run",
+      organizationId: null,
+      bypassedRls: true,
+      metadata: { ...summary },
+      requestId,
+    });
+  }
 
   try {
     const sweepSummary = await runSilenceSweep({
@@ -87,13 +92,15 @@ async function handle(req: NextRequest): Promise<Response> {
       gateDb: createSupabaseFollowupGateDb(admin),
       clock: () => new Date(),
     });
-    void audit({
-      action: "followup.silence_sweep_run",
-      organizationId: null,
-      bypassedRls: true,
-      metadata: { ...sweepSummary },
-      requestId,
-    });
+    if (sweepSummary.enrolled > 0) {
+      void audit({
+        action: "followup.silence_sweep_run",
+        organizationId: null,
+        bypassedRls: true,
+        metadata: { ...sweepSummary },
+        requestId,
+      });
+    }
   } catch (err) {
     // Sweep falhando NUNCA aborta o tick — a resposta abaixo já reflete o
     // resultado de runFollowupTick, que rodou (e foi auditado) antes disto.

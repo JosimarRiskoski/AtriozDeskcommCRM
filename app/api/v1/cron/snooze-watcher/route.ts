@@ -105,13 +105,15 @@ async function handle(req: NextRequest): Promise<Response> {
     }
   }
 
-  void audit({
-    action: "conversation.snooze_watcher_run",
-    organizationId: null,
-    bypassedRls: true,
-    metadata: { scanned: conversations.length, reopened },
-    requestId,
-  });
+  if (conversations.length > 0) {
+    void audit({
+      action: "conversation.snooze_watcher_run",
+      organizationId: null,
+      bypassedRls: true,
+      metadata: { scanned: conversations.length, reopened },
+      requestId,
+    });
+  }
 
   return ok({ scanned: conversations.length, reopened }, { requestId });
 }
