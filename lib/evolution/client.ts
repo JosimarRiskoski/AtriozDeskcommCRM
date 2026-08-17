@@ -33,6 +33,9 @@ export type EvolutionConnection = {
   raw: Json;
 };
 
+const CLOSED_SESSION_PATTERN =
+  /connection closed|precondition required|unauthorized|logged out|evolution_(401|428)/i;
+
 export type EvolutionCreateInstanceInput = {
   instanceName: string;
   webhookUrl: string;
@@ -87,6 +90,19 @@ function qrCodeFrom(value: unknown): string | undefined {
     if (typeof candidate === "string" && candidate.trim()) return candidate;
   }
   return undefined;
+}
+
+function evolutionPayloadError(value: unknown): string | null {
+  const root = asObject(value);
+  if (root.error !== true) return null;
+  const message = root.message ?? root.response ?? root.errorMessage;
+  return typeof message === "string" && message.trim()
+    ? message.trim()
+    : "Evolution retornou uma falha sem detalhes.";
+}
+
+export function isEvolutionClosedSessionError(message: string): boolean {
+  return CLOSED_SESSION_PATTERN.test(message);
 }
 
 export class EvolutionClient {
@@ -165,11 +181,15 @@ export class EvolutionClient {
   }
 
   async restart(instanceName: string): Promise<EvolutionConnection> {
-    return this.connectionFrom(
-      await this.request<unknown>(`/instance/restart/${encodeURIComponent(instanceName)}`, {
-        method: "POST",
-      }),
+    const result = await this.request<unknown>(
+      `/instance/restart/${encodeURIComponent(instanceName)}`,
+      { method: "POST" },
     );
+    // A Evolution 2.3.x pode responder HTTP 200 mesmo quando o restart falha.
+    // Sem esta checagem o CRM exibe "conectado" para uma sessão encerrada.
+    const payloadError = evolutionPayloadError(result);
+    if (payloadError) throw new Error(`evolution_restart_failed: ${payloadError}`);
+    return this.connectionFrom(result);
   }
 
   async logout(instanceName: string): Promise<void> {
@@ -281,7 +301,17 @@ export class EvolutionClient {
 
   private connectionFrom(value: unknown): EvolutionConnection {
     const raw = firstObject(value);
-    const stateValue = raw.state ?? raw.connectionStatus ?? raw.status ?? "STARTING";
+    let stateValue = raw.state ?? raw.connectionStatus ?? raw.status ?? "STARTING";
+    const reasonCode = raw.disconnectionReasonCode;
+    const disconnectedAt = Date.parse(String(raw.disconnectionAt ?? ""));
+    const updatedAt = Date.parse(String(raw.updatedAt ?? ""));
+    const staleDisconnectedSnapshot =
+      String(stateValue).toLowerCase() === "open" &&
+      reasonCode !== null &&
+      reasonCode !== undefined &&
+      Number.isFinite(disconnectedAt) &&
+      (!Number.isFinite(updatedAt) || updatedAt <= disconnectedAt + 1_000);
+    if (staleDisconnectedSnapshot) stateValue = "close";
     return {
       state: typeof stateValue === "string" ? stateValue : "STARTING",
       instanceName: typeof raw.instanceName === "string" ? raw.instanceName : undefined,

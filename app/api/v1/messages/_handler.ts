@@ -17,6 +17,7 @@ import type { Message } from "@/lib/types/messaging";
 import {
   evolutionRecipient,
   getEvolutionClient,
+  isEvolutionClosedSessionError,
   parseEvolutionMessageId,
 } from "@/lib/evolution/client";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/outbound";
@@ -341,7 +342,17 @@ export async function sendMessageHandler(
       const msg = err instanceof Error ? err.message : "evolution_unknown";
       const code = msg.startsWith("storage_sign_failed")
         ? "storage_sign_failed"
-        : "evolution_error";
+        : isEvolutionClosedSessionError(msg)
+          ? "evolution_connection_closed"
+          : "evolution_error";
+      console.error("[messages.send] Evolution dispatch failed", {
+        request_id: ctx.requestId,
+        message_id: message.id,
+        conversation_id: c.id,
+        channel_session_id: c.channel_session_id,
+        error_code: code,
+        provider_error: msg.slice(0, 500),
+      });
       const { data: updated } = await supabase
         .from("messages")
         .update({
@@ -353,6 +364,22 @@ export async function sendMessageHandler(
         .select(MSG_COLS)
         .maybeSingle();
       if (updated) message = updated as unknown as Message;
+
+      if (code === "evolution_connection_closed") {
+        const failedAt = new Date().toISOString();
+        await supabase
+          .from("channel_sessions")
+          .update({
+            status: "FAILED",
+            status_reason:
+              "Sessão do WhatsApp encerrada na Evolution. Reconecte por QR Code.",
+            last_status_change_at: failedAt,
+            last_health_check_at: failedAt,
+            consecutive_health_fails: 1,
+          })
+          .eq("organization_id", c.organization_id)
+          .eq("id", c.channel_session_id);
+      }
     }
   }
 

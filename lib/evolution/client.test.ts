@@ -130,4 +130,39 @@ describe("Evolution helpers", () => {
       expect.anything(),
     );
   });
+
+  it("rejects a restart that Evolution reports as an HTTP 200 error", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: true, message: "Error: Connection Closed" }), {
+        status: 200,
+      }),
+    );
+    const client = new EvolutionClient("http://evolution:8080", "secret");
+
+    await expect(client.restart("crm-1")).rejects.toThrow("Connection Closed");
+  });
+
+  it("does not trust a stale open snapshot that still contains a disconnect reason", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("not found", { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              name: "evo_org_123",
+              connectionStatus: "open",
+              disconnectionReasonCode: 401,
+              disconnectionAt: "2026-08-13T17:41:00.000Z",
+              updatedAt: "2026-08-13T17:41:00.000Z",
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+    const client = new EvolutionClient("http://evolution:8080", "secret");
+
+    const connection = await client.connectionState("org_123");
+
+    expect(connection.state).toBe("close");
+  });
 });

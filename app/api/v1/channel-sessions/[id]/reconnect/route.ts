@@ -14,7 +14,11 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
-import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/client";
+import {
+  evolutionFriendlyError,
+  getEvolutionClient,
+  isEvolutionClosedSessionError,
+} from "@/lib/evolution/client";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +58,6 @@ export async function POST(
     }
     try {
       const instanceName = session.external_session_name;
-      await evolution.restart(instanceName).catch(() => null);
       const webhookBase = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
       const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
       if (!webhookBase || !webhookSecret || !session.webhook_path_token) {
@@ -65,16 +68,44 @@ export async function POST(
           { requestId },
         );
       }
-      await evolution.setWebhook(instanceName, {
+      const webhook = {
         webhookUrl: `${webhookBase}/api/v1/webhooks/evolution/${session.webhook_path_token}`,
         webhookHeaders: { "x-atrios-evolution-secret": webhookSecret },
-      });
+      };
+
+      let rebuilt = false;
+      try {
+        await evolution.restart(instanceName);
+        await evolution.setWebhook(instanceName, webhook);
+      } catch (restartError) {
+        const restartMessage =
+          restartError instanceof Error ? restartError.message : String(restartError);
+        if (!isEvolutionClosedSessionError(restartMessage)) throw restartError;
+
+        // Uma sessão Baileys encerrada não volta com restart. Removemos apenas
+        // a instância técnica na Evolution; contatos, conversas e mensagens
+        // continuam preservados no CRM e o mesmo canal recebe um novo QR.
+        try {
+          await evolution.deleteInstance(instanceName);
+        } catch (deleteError) {
+          const deleteMessage =
+            deleteError instanceof Error ? deleteError.message : String(deleteError);
+          if (!/evolution_404/i.test(deleteMessage)) throw deleteError;
+        }
+        await evolution.createInstance({ instanceName, ...webhook });
+        rebuilt = true;
+      }
+
       const remote = await evolution.connect(instanceName);
       await supabase
         .from("channel_sessions")
         .update({
           status: "STARTING",
+          status_reason: rebuilt
+            ? "Sessão anterior encerrada. Escaneie o novo QR Code para reconectar."
+            : null,
           last_status_change_at: new Date().toISOString(),
+          last_health_check_at: new Date().toISOString(),
           consecutive_health_fails: 0,
         })
         .eq("organization_id", activeOrg.orgId)
@@ -86,13 +117,33 @@ export async function POST(
         resourceType: "channel_session",
         resourceId: id,
         requestId,
-        metadata: { provider: "evolution", external_session_name: instanceName },
+        metadata: {
+          provider: "evolution",
+          external_session_name: instanceName,
+          rebuilt,
+        },
       });
-      return ok({ id, status: remote.state }, { requestId });
+      return ok({ id, status: remote.state, qrcode: remote.qrcode, rebuilt }, { requestId });
     } catch (err) {
+      const providerMessage = err instanceof Error ? err.message : "unknown";
+      console.error("[channel.reconnect] Evolution recovery failed", {
+        request_id: requestId,
+        channel_session_id: id,
+        provider_error: providerMessage.slice(0, 500),
+      });
+      await supabase
+        .from("channel_sessions")
+        .update({
+          status: "FAILED",
+          status_reason: "A sessão do WhatsApp não pôde ser recuperada. Tente reconectar novamente.",
+          last_status_change_at: new Date().toISOString(),
+          last_health_check_at: new Date().toISOString(),
+        })
+        .eq("organization_id", activeOrg.orgId)
+        .eq("id", id);
       return fail(
         "evolution_error",
-        evolutionFriendlyError(err instanceof Error ? err.message : "unknown"),
+        evolutionFriendlyError(providerMessage),
         502,
         { requestId },
       );
