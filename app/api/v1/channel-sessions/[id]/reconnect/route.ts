@@ -95,9 +95,12 @@ export async function POST(
           });
         }
       }
-      await evolution.createInstance({ instanceName, ...webhook });
-
-      const remote = await evolution.connect(instanceName);
+      // `instance/create` com `qrcode: true` ja inicia o pareamento e devolve
+      // o QR. Chamar `instance/connect` imediatamente outra vez faz a
+      // Evolution 2.3.x rejeitar a requisicao com HTTP 400 porque a mesma
+      // instancia ja esta em `connecting`.
+      const created = await evolution.createInstance({ instanceName, ...webhook });
+      const remote = created.qrcode ? created : await evolution.connect(instanceName);
       await supabase
         .from("channel_sessions")
         .update({

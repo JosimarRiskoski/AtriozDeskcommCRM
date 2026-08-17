@@ -85,8 +85,18 @@ function instanceListFrom(value: unknown): Json[] {
 function qrCodeFrom(value: unknown): string | undefined {
   const root = asObject(value);
   const payload = asObject(root.instance ?? root.data ?? root);
+  const rootQr = asObject(root.qrcode);
   const nestedQr = asObject(payload.qrcode);
-  for (const candidate of [payload.qrcode, payload.base64, nestedQr.base64, nestedQr.code]) {
+  for (const candidate of [
+    root.qrcode,
+    root.base64,
+    rootQr.base64,
+    rootQr.code,
+    payload.qrcode,
+    payload.base64,
+    nestedQr.base64,
+    nestedQr.code,
+  ]) {
     if (typeof candidate === "string" && candidate.trim()) return candidate;
   }
   return undefined;
