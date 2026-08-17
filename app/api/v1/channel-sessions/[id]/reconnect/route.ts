@@ -53,7 +53,8 @@ export async function POST(
       );
     }
     try {
-      const instanceName = session.external_session_name;
+      const previousInstanceName = session.external_session_name;
+      let instanceName = previousInstanceName;
       const webhookBase = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
       const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
       if (!webhookBase || !webhookSecret || !session.webhook_path_token) {
@@ -78,7 +79,21 @@ export async function POST(
       } catch (deleteError) {
         const deleteMessage =
           deleteError instanceof Error ? deleteError.message : String(deleteError);
-        if (!/evolution_404/i.test(deleteMessage)) throw deleteError;
+        if (!/evolution_404/i.test(deleteMessage)) {
+          // Algumas sessoes Baileys corrompidas ficam presas no banco da
+          // Evolution e o proprio endpoint de exclusao responde 400. Nesse
+          // caso, abandonar apenas o identificador tecnico antigo e criar uma
+          // instancia nova e mais seguro do que manter o CRM falsamente
+          // conectado. O historico permanece no banco do CRM.
+          instanceName = `${previousInstanceName}_r_${randomUUID().slice(0, 8)}`;
+          console.warn("[channel.reconnect] Replacing corrupted Evolution instance", {
+            request_id: requestId,
+            channel_session_id: id,
+            previous_instance_name: previousInstanceName,
+            replacement_instance_name: instanceName,
+            provider_error: deleteMessage.slice(0, 500),
+          });
+        }
       }
       await evolution.createInstance({ instanceName, ...webhook });
 
@@ -86,6 +101,7 @@ export async function POST(
       await supabase
         .from("channel_sessions")
         .update({
+          external_session_name: instanceName,
           status: "STARTING",
           status_reason: "Escaneie o novo QR Code para reconectar esta sessão.",
           last_status_change_at: new Date().toISOString(),
@@ -104,6 +120,7 @@ export async function POST(
         metadata: {
           provider: "evolution",
           external_session_name: instanceName,
+          previous_external_session_name: previousInstanceName,
           rebuilt: true,
         },
       });
