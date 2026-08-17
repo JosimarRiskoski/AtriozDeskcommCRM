@@ -153,7 +153,9 @@ describe("Evolution helpers", () => {
               connectionStatus: "open",
               disconnectionReasonCode: 401,
               disconnectionAt: "2026-08-13T17:41:00.000Z",
-              updatedAt: "2026-08-13T17:41:00.000Z",
+              // A Evolution atualiza este registro depois da queda, mas nao
+              // limpa o reason code nem corrige o falso `open`.
+              updatedAt: "2026-08-17T12:00:00.000Z",
             },
           ]),
           { status: 200 },

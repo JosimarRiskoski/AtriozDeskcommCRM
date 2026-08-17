@@ -313,15 +313,15 @@ export class EvolutionClient {
     const raw = firstObject(value);
     let stateValue = raw.state ?? raw.connectionStatus ?? raw.status ?? "STARTING";
     const reasonCode = raw.disconnectionReasonCode;
-    const disconnectedAt = Date.parse(String(raw.disconnectionAt ?? ""));
-    const updatedAt = Date.parse(String(raw.updatedAt ?? ""));
-    const staleDisconnectedSnapshot =
+    const disconnectedSnapshot =
       String(stateValue).toLowerCase() === "open" &&
       reasonCode !== null &&
-      reasonCode !== undefined &&
-      Number.isFinite(disconnectedAt) &&
-      (!Number.isFinite(updatedAt) || updatedAt <= disconnectedAt + 1_000);
-    if (staleDisconnectedSnapshot) stateValue = "close";
+      reasonCode !== undefined;
+    // A Evolution pode manter `connectionStatus: open` mesmo depois de o
+    // WhatsApp encerrar a sessao (por exemplo, reason 401). O motivo de
+    // desconexao e a evidencia mais especifica; confiar no `open` nesse caso
+    // faz o CRM exibir um falso conectado indefinidamente.
+    if (disconnectedSnapshot) stateValue = "close";
     return {
       state: typeof stateValue === "string" ? stateValue : "STARTING",
       instanceName: typeof raw.instanceName === "string" ? raw.instanceName : undefined,
