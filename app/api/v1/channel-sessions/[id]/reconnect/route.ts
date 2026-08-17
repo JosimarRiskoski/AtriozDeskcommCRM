@@ -14,11 +14,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
-import {
-  evolutionFriendlyError,
-  getEvolutionClient,
-  isEvolutionClosedSessionError,
-} from "@/lib/evolution/client";
+import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/client";
 
 export const dynamic = "force-dynamic";
 
@@ -73,37 +69,25 @@ export async function POST(
         webhookHeaders: { "x-atrios-evolution-secret": webhookSecret },
       };
 
-      let rebuilt = false;
+      // "Reconectar" é uma ação explícita do administrador. A Evolution 2.3.x
+      // pode manter uma instância como `open` mesmo com o socket Baileys morto;
+      // restart/connectionState então devolvem falso sucesso. Recriar somente a
+      // instância técnica garante um QR novo sem apagar o histórico do CRM.
       try {
-        await evolution.restart(instanceName);
-        await evolution.setWebhook(instanceName, webhook);
-      } catch (restartError) {
-        const restartMessage =
-          restartError instanceof Error ? restartError.message : String(restartError);
-        if (!isEvolutionClosedSessionError(restartMessage)) throw restartError;
-
-        // Uma sessão Baileys encerrada não volta com restart. Removemos apenas
-        // a instância técnica na Evolution; contatos, conversas e mensagens
-        // continuam preservados no CRM e o mesmo canal recebe um novo QR.
-        try {
-          await evolution.deleteInstance(instanceName);
-        } catch (deleteError) {
-          const deleteMessage =
-            deleteError instanceof Error ? deleteError.message : String(deleteError);
-          if (!/evolution_404/i.test(deleteMessage)) throw deleteError;
-        }
-        await evolution.createInstance({ instanceName, ...webhook });
-        rebuilt = true;
+        await evolution.deleteInstance(instanceName);
+      } catch (deleteError) {
+        const deleteMessage =
+          deleteError instanceof Error ? deleteError.message : String(deleteError);
+        if (!/evolution_404/i.test(deleteMessage)) throw deleteError;
       }
+      await evolution.createInstance({ instanceName, ...webhook });
 
       const remote = await evolution.connect(instanceName);
       await supabase
         .from("channel_sessions")
         .update({
           status: "STARTING",
-          status_reason: rebuilt
-            ? "Sessão anterior encerrada. Escaneie o novo QR Code para reconectar."
-            : null,
+          status_reason: "Escaneie o novo QR Code para reconectar esta sessão.",
           last_status_change_at: new Date().toISOString(),
           last_health_check_at: new Date().toISOString(),
           consecutive_health_fails: 0,
@@ -120,10 +104,10 @@ export async function POST(
         metadata: {
           provider: "evolution",
           external_session_name: instanceName,
-          rebuilt,
+          rebuilt: true,
         },
       });
-      return ok({ id, status: remote.state, qrcode: remote.qrcode, rebuilt }, { requestId });
+      return ok({ id, status: remote.state, qrcode: remote.qrcode, rebuilt: true }, { requestId });
     } catch (err) {
       const providerMessage = err instanceof Error ? err.message : "unknown";
       console.error("[channel.reconnect] Evolution recovery failed", {
