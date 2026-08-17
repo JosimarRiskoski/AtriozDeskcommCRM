@@ -54,7 +54,12 @@ export async function POST(
     }
     try {
       const previousInstanceName = session.external_session_name;
-      let instanceName = previousInstanceName;
+      // Nunca reutilize imediatamente o mesmo identificador: a Evolution pode
+      // confirmar o DELETE antes de terminar a limpeza interna e recusar o
+      // CREATE seguinte com HTTP 400. O sufixo anterior e removido para o nome
+      // tecnico nao crescer a cada reconexao.
+      const instanceRoot = previousInstanceName.replace(/_r_[0-9a-f]{8}$/i, "");
+      const instanceName = `${instanceRoot}_r_${randomUUID().slice(0, 8)}`;
       const webhookBase = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
       const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.INTERNAL_SECRET;
       if (!webhookBase || !webhookSecret || !session.webhook_path_token) {
@@ -75,7 +80,7 @@ export async function POST(
       // restart/connectionState então devolvem falso sucesso. Recriar somente a
       // instância técnica garante um QR novo sem apagar o histórico do CRM.
       try {
-        await evolution.deleteInstance(instanceName);
+        await evolution.deleteInstance(previousInstanceName);
       } catch (deleteError) {
         const deleteMessage =
           deleteError instanceof Error ? deleteError.message : String(deleteError);
@@ -85,7 +90,6 @@ export async function POST(
           // caso, abandonar apenas o identificador tecnico antigo e criar uma
           // instancia nova e mais seguro do que manter o CRM falsamente
           // conectado. O historico permanece no banco do CRM.
-          instanceName = `${previousInstanceName}_r_${randomUUID().slice(0, 8)}`;
           console.warn("[channel.reconnect] Replacing corrupted Evolution instance", {
             request_id: requestId,
             channel_session_id: id,
