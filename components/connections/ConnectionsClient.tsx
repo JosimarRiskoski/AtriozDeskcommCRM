@@ -166,6 +166,7 @@ export function ConnectionsClient({ evolutionConfigured }: { evolutionConfigured
   }, [invalidate]);
 
   const list = sessions ?? [];
+  const connectedCount = list.filter((session) => session.status === "WORKING").length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -193,7 +194,7 @@ export function ConnectionsClient({ evolutionConfigured }: { evolutionConfigured
         <p className="text-sm text-muted-foreground">
           {list.length === 0
             ? "Nenhum número conectado ainda."
-            : `${list.length} ${list.length === 1 ? "número conectado" : "números conectados"}.`}
+            : `${connectedCount} de ${list.length} ${list.length === 1 ? "número conectado" : "números conectados"}.`}
         </p>
         <div className="flex gap-2">
           {list.length > 0 && (
