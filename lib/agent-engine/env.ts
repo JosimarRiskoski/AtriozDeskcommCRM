@@ -27,7 +27,9 @@ const envSchema = z.object({
   QUEUE_VISIBILITY_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
   // Porta do /healthz (bind 0.0.0.0 no container; 0 = porta efêmera em teste).
   HEALTH_PORT: z.coerce.number().int().min(0).max(65_535).default(8787),
-  QUEUE_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(250),
+  QUEUE_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(1_000),
+  // Teto do backoff ocioso. Quando entra trabalho o intervalo volta ao base.
+  QUEUE_POLL_MAX_INTERVAL_MS: z.coerce.number().int().positive().default(10_000),
   QUEUE_REAPER_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   SHUTDOWN_GRACE_MS: z.coerce.number().int().positive().default(30_000),
   // Watchdog de sessão: reconcilia o espelho com a Evolution.

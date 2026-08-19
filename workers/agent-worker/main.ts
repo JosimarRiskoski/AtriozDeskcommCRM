@@ -29,7 +29,7 @@ import { runCronLoop } from '@/lib/agent-engine/cron/scheduler';
 import { createPool } from '@/lib/agent-engine/db/pool';
 import { runDrainLoop } from '@/lib/agent-engine/edge/crm/drain';
 import { crmEdgeConfigFromEnv } from '@/lib/agent-engine/edge/crm/mcp-client';
-import { enforceHolds, sessionHealthMetrics } from '@/lib/agent-engine/edge/crm/session-watchdog';
+import { enforceHolds } from '@/lib/agent-engine/edge/crm/session-watchdog';
 import { runEvolutionSessionWatchdogLoop } from '@/lib/evolution/session-reconciler';
 import { runHealthLoop } from '@/lib/agent-engine/health/circuit';
 import { runFlywheelLoop } from '@/lib/agent-engine/flywheel/live';
@@ -50,6 +50,7 @@ import {
   type JobKind,
   type JobRow,
 } from '@/lib/agent-engine/queue/queue';
+import { nextQueuePollDelayMs } from '@/lib/agent-engine/queue/poll-backoff';
 
 export interface JobHandlerContext {
   workerId: string;
@@ -81,15 +82,15 @@ async function assertHarnessSchema(pool: pg.Pool): Promise<void> {
   }
 }
 
-/** /healthz + /metrics do worker (bind 0.0.0.0 — o container expõe a porta). */
+/** /healthz barato + /readyz de banco + /metrics detalhado. */
 export function createHealthzServer(pool: pg.Pool, log: Logger, metricsWindowMs: number): http.Server {
   const respond = (res: http.ServerResponse, code: number, body: unknown): void => {
     res.writeHead(code, { 'content-type': 'application/json' });
     res.end(JSON.stringify(body));
   };
   const handle = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
-    const route = (req.url ?? '').split('?', 1)[0];
-    if (req.method !== 'GET' || (route !== '/healthz' && route !== '/metrics')) {
+    const route = (req.url ?? '').split('?', 1)[0] ?? '';
+    if (req.method !== 'GET' || !['/healthz', '/readyz', '/metrics'].includes(route)) {
       respond(res, 404, { error: 'not_found' });
       return;
     }
@@ -103,19 +104,19 @@ export function createHealthzServer(pool: pg.Pool, log: Logger, metricsWindowMs:
       return;
     }
     const uptime_s = Math.round(process.uptime());
+    // O healthcheck do Docker roda a cada 30s. Ele só verifica que o processo
+    // está vivo e nunca consulta o Supabase. Prontidão e métricas são rotas
+    // separadas para não transformar monitoração em carga de produção.
+    if (route === '/healthz') {
+      respond(res, 200, { status: 'ok', uptime_s });
+      return;
+    }
     try {
-      const { rows } = await pool.query<{ status: string; n: number }>(
-        'select status, count(*)::int as n from job_queue group by status',
-      );
-      const queue = { pending: 0, running: 0, dead: 0 };
-      for (const row of rows) {
-        if (row.status in queue) queue[row.status as keyof typeof queue] = row.n;
-      }
-      const sessions = await sessionHealthMetrics(pool);
-      respond(res, 200, { status: 'ok', db: 'ok', queue, sessions, uptime_s });
+      await pool.query('select 1');
+      respond(res, 200, { status: 'ready', db: 'ok', uptime_s });
     } catch (err) {
-      log.error('healthz: banco indisponível', { error: errMsg(err) });
-      respond(res, 503, { status: 'degraded', db: 'error', queue: null, sessions: null, uptime_s });
+      log.error('readyz: banco indisponível', { error: errMsg(err) });
+      respond(res, 503, { status: 'degraded', db: 'error', uptime_s });
     }
   };
   return http.createServer((req, res) => void handle(req, res));
@@ -284,6 +285,7 @@ export async function startWorker(
   };
 
   const workerLoop = (async () => {
+    let idlePollMs = env.QUEUE_POLL_INTERVAL_MS;
     while (!shuttingDown) {
       let claimed: JobRow[] = [];
       try {
@@ -297,8 +299,14 @@ export async function startWorker(
         void running.finally(() => inFlight.delete(running));
       }
       if (claimed.length === 0 || shuttingDown) {
-        await sleep(env.QUEUE_POLL_INTERVAL_MS);
+        await sleep(idlePollMs);
       }
+      idlePollMs = nextQueuePollDelayMs(
+        idlePollMs,
+        env.QUEUE_POLL_INTERVAL_MS,
+        env.QUEUE_POLL_MAX_INTERVAL_MS,
+        claimed.length > 0,
+      );
     }
   })();
 
