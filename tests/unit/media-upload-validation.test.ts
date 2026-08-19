@@ -7,7 +7,10 @@ describe("validateOutboundMedia", () => {
     expect(validateOutboundMedia("image/jpeg", 1000)).toEqual({ ok: true, kind: "image" });
     expect(validateOutboundMedia("image/webp", 1000)).toEqual({ ok: true, kind: "image" });
     expect(validateOutboundMedia("video/mp4", 1000)).toEqual({ ok: true, kind: "video" });
-    expect(validateOutboundMedia("audio/ogg; codecs=opus", 1000)).toEqual({ ok: true, kind: "audio" });
+    expect(validateOutboundMedia("audio/ogg; codecs=opus", 1000)).toEqual({
+      ok: true,
+      kind: "audio",
+    });
     expect(validateOutboundMedia("audio/webm", 1000)).toEqual({ ok: true, kind: "audio" });
     expect(validateOutboundMedia("application/pdf", 1000)).toEqual({ ok: true, kind: "document" });
     expect(validateOutboundMedia("text/csv", 1000)).toEqual({ ok: true, kind: "document" });

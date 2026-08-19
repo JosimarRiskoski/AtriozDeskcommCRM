@@ -18,7 +18,11 @@ const DOCUMENT_MIMES = new Set([
 ]);
 
 type Ok = { ok: true; kind: MessageKind };
-type Fail = { ok: false; code: "unsupported_media_type" | "payload_too_large" | "validation_failed"; message: string };
+type Fail = {
+  ok: false;
+  code: "unsupported_media_type" | "payload_too_large" | "validation_failed";
+  message: string;
+};
 
 export function validateOutboundMedia(mime: string, sizeBytes: number): Ok | Fail {
   if (!sizeBytes || sizeBytes <= 0) {
