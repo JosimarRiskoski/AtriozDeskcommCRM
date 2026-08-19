@@ -36,16 +36,18 @@ describe("memo do token do Realtime", () => {
 
     // 1ª: a sessão ainda está se estabelecendo.
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401 }));
-    await authenticateRealtime(supabase);
+    await expect(authenticateRealtime(supabase)).resolves.toBe(false);
     expect(setAuth).not.toHaveBeenCalled();
 
     // 2ª: já estabelecida. É AQUI que a versão antiga falhava — a memo guardava
     // a falha e esta chamada devolvia a promessa velha sem refazer nada.
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { access_token: "t-1" } }) }),
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, json: async () => ({ data: { access_token: "t-1" } }) }),
     );
-    await authenticateRealtime(supabase);
+    await expect(authenticateRealtime(supabase)).resolves.toBe(true);
     expect(setAuth).toHaveBeenCalledWith("t-1");
   });
 
@@ -56,15 +58,20 @@ describe("memo do token do Realtime", () => {
     const setAuth = (supabase as unknown as { realtime: { setAuth: ReturnType<typeof vi.fn> } })
       .realtime.setAuth;
 
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {} }) }));
-    await authenticateRealtime(supabase);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {} }) }),
+    );
+    await expect(authenticateRealtime(supabase)).resolves.toBe(false);
     expect(setAuth).not.toHaveBeenCalled();
 
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { access_token: "t-2" } }) }),
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, json: async () => ({ data: { access_token: "t-2" } }) }),
     );
-    await authenticateRealtime(supabase);
+    await expect(authenticateRealtime(supabase)).resolves.toBe(true);
     expect(setAuth).toHaveBeenCalledWith("t-2");
   });
 

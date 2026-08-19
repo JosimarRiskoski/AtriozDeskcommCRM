@@ -2,6 +2,7 @@
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
+import { realtimeFallbackIntervalMs } from "@/hooks/realtime/fallback-policy";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Conversation } from "@/lib/types/messaging";
@@ -52,6 +53,24 @@ export function useConversationsRealtime(filters: ConversationsFilters, orgId: s
   const qc = useQueryClient();
   const queryKey = ["conversations", filters] as const;
 
+  const onChange = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["conversations"] });
+  }, [qc]);
+
+  const realtime = useRealtimeChannel({
+    name: orgId ? `inbox-${orgId}` : "inbox-disabled",
+    postgresChanges: orgId
+      ? {
+          event: "*",
+          schema: "public",
+          table: "conversations",
+          filter: `organization_id=eq.${orgId}`,
+        }
+      : undefined,
+    onChange,
+    enabled: !!orgId,
+  });
+
   const query = useInfiniteQuery({
     queryKey,
     initialPageParam: undefined as string | undefined,
@@ -74,17 +93,14 @@ export function useConversationsRealtime(filters: ConversationsFilters, orgId: s
     },
     getNextPageParam: (last) =>
       last.meta?.has_more && last.meta.cursor ? last.meta.cursor : undefined,
-    // O Realtime continua sendo o caminho principal. Este refetch curto é a
-    // rede de segurança para sessões em que o socket aparece conectado, mas a
-    // mudança é filtrada silenciosamente pela autenticação/RLS. Sem ele, a
-    // mensagem já gravada no banco só surgia após F5 ou outra ação na tela.
-    refetchInterval: 2_000,
+    // O Realtime é o caminho principal. A conferência periódica é apenas uma
+    // rede de segurança: 60s quando saudável e 10s durante degradação. O valor
+    // anterior (2s) fazia 43.200 leituras/dia por aba apenas nesta consulta.
+    refetchInterval: () => realtimeFallbackIntervalMs(realtime.status),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
-
-  const onChange = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ["conversations"] });
-  }, [qc]);
 
   // G4-01 (visibility_mode): a subscription postgres_changes HERDA a RLS de
   // SELECT de `conversations` — o Supabase Realtime avalia as policies do usuário
@@ -96,19 +112,5 @@ export function useConversationsRealtime(filters: ConversationsFilters, orgId: s
   // com o filtro amplo `organization_id=eq.<org>` abaixo. Prova do filtro em
   // tests/invariants/gov-5-visibility-scope.test.ts (SELECT sob role agent = 0 rows
   // para conversa de outro atendente — o mesmo SELECT que o Realtime executa).
-  useRealtimeChannel({
-    name: orgId ? `inbox-${orgId}` : "inbox-disabled",
-    postgresChanges: orgId
-      ? {
-          event: "*",
-          schema: "public",
-          table: "conversations",
-          filter: `organization_id=eq.${orgId}`,
-        }
-      : undefined,
-    onChange,
-    enabled: !!orgId,
-  });
-
   return query;
 }

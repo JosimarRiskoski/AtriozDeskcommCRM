@@ -3,12 +3,7 @@ import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
-export type RealtimeStatus =
-  | "connecting"
-  | "subscribed"
-  | "channel_error"
-  | "timed_out"
-  | "closed";
+export type RealtimeStatus = "connecting" | "subscribed" | "channel_error" | "timed_out" | "closed";
 
 export interface UseRealtimeChannelOpts {
   name: string;
@@ -57,14 +52,14 @@ export interface UseRealtimeChannelOpts {
  */
 const AUTH_TIMEOUT_MS = 1_500;
 
-let realtimeAuth: Promise<void> | null = null;
+let realtimeAuth: Promise<boolean> | null = null;
 
 /** Só para teste: zera a memo entre casos (ela é módulo-global de propósito). */
 export function __resetRealtimeAuth(): void {
   realtimeAuth = null;
 }
 
-export function authenticateRealtime(supabase: ReturnType<typeof createClient>): Promise<void> {
+export function authenticateRealtime(supabase: ReturnType<typeof createClient>): Promise<boolean> {
   realtimeAuth ??= (async () => {
     // `autenticou` é o ÚNICO critério de guardar a memo. Não "não deu exceção",
     // não "a resposta chegou": chamou `setAuth` ou não chamou.
@@ -101,6 +96,7 @@ export function authenticateRealtime(supabase: ReturnType<typeof createClient>):
       // pelo resto do carregamento.
       realtimeAuth = null;
     }
+    return autenticou;
   })();
   return realtimeAuth;
 }
@@ -111,10 +107,10 @@ export function authenticateRealtime(supabase: ReturnType<typeof createClient>):
  * tela sem realtime para sempre. Prazo estourado = canal anônimo, que é o
  * comportamento de antes desta correção, não uma regressão nova.
  */
-function esperarAuth(supabase: ReturnType<typeof createClient>): Promise<void> {
+function esperarAuth(supabase: ReturnType<typeof createClient>): Promise<boolean> {
   return Promise.race([
     authenticateRealtime(supabase),
-    new Promise<void>((resolve) => setTimeout(resolve, AUTH_TIMEOUT_MS)),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), AUTH_TIMEOUT_MS)),
   ]);
 }
 
@@ -213,7 +209,7 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
     // O token tem de chegar ANTES do subscribe: assinar primeiro e autenticar
     // depois deixa o canal anônimo para sempre — ele responde "Subscribed to
     // PostgreSQL" e nunca entrega evento, porque a RLS filtra do outro lado.
-    void esperarAuth(supabase).then(() => {
+    void esperarAuth(supabase).then((authenticated) => {
       if (cancelado || !active) return;
       active.subscribe((s) => {
         // s is one of "SUBSCRIBED" | "CHANNEL_ERROR" | "TIMED_OUT" | "CLOSED"
@@ -223,7 +219,10 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
           TIMED_OUT: "timed_out",
           CLOSED: "closed",
         };
-        setStatus(map[s] ?? "connecting");
+        // Um socket anônimo pode responder SUBSCRIBED e ainda assim receber
+        // zero linhas por causa da RLS. Não o promovemos a saudável: assim o
+        // fallback continua em 10s até uma nova montagem autenticar de fato.
+        setStatus(s === "SUBSCRIBED" && !authenticated ? "timed_out" : (map[s] ?? "connecting"));
       });
     });
 
@@ -236,7 +235,16 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
     };
     // intentionally omit onChange (ref); only re-subscribe when channel topology changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, enabled, instanceId, postgresChanges?.event, postgresChanges?.table, postgresChanges?.filter, postgresChanges?.schema, broadcast?.event]);
+  }, [
+    name,
+    enabled,
+    instanceId,
+    postgresChanges?.event,
+    postgresChanges?.table,
+    postgresChanges?.filter,
+    postgresChanges?.schema,
+    broadcast?.event,
+  ]);
 
   return { status, ultimaEntrega };
 }
