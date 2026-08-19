@@ -4,7 +4,25 @@ process.env.NEXT_PUBLIC_SUPABASE_URL ??= "https://example.supabase.co";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "test-anon-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const { normalizeEvolutionMessage } = await import("./ingest");
+const { isProcessableEvolutionEvent, normalizeEvolutionMessage } = await import("./ingest");
+
+describe("isProcessableEvolutionEvent", () => {
+  it.each([
+    "MESSAGES_UPSERT",
+    "messages.update",
+    "send-message-update",
+    "CONNECTION_UPDATE",
+  ])("aceita evento operacional %s", (event) => {
+    expect(isProcessableEvolutionEvent(event)).toBe(true);
+  });
+
+  it.each(["MESSAGES_SET", "CONTACTS_UPSERT", "CHATS_UPSERT", "GROUPS_UPSERT", undefined])(
+    "ignora evento sem uso operacional %s",
+    (event) => {
+      expect(isProcessableEvolutionEvent(event)).toBe(false);
+    },
+  );
+});
 
 describe("normalizeEvolutionMessage", () => {
   it("preserva o pushName real em mensagens recebidas", () => {

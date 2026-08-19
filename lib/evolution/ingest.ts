@@ -33,6 +33,24 @@ export type EvolutionSession = {
   provider?: "evolution";
 };
 
+const PROCESSABLE_EVOLUTION_EVENTS = new Set([
+  "MESSAGES_UPSERT",
+  "MESSAGES_UPDATE",
+  "SEND_MESSAGE_UPDATE",
+  "CONNECTION_UPDATE",
+]);
+
+export function normalizeEvolutionEventName(value: unknown): string {
+  return String(value ?? "")
+    .toUpperCase()
+    .replace(/[.-]/g, "_");
+}
+
+/** Evita consultar/gravar o Supabase para eventos que o CRM não consome. */
+export function isProcessableEvolutionEvent(value: unknown): boolean {
+  return PROCESSABLE_EVOLUTION_EVENTS.has(normalizeEvolutionEventName(value));
+}
+
 function object(value: unknown): Json {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : {};
 }
@@ -179,18 +197,13 @@ export async function dispatchEvolutionEvent(
   envelope: EvolutionWebhookEnvelope,
   requestId: string,
 ): Promise<{ inbound: boolean; outbound: boolean }> {
-  const event = String(envelope.event ?? "")
-    .toUpperCase()
-    .replace(/[.-]/g, "_");
+  const event = normalizeEvolutionEventName(envelope.event);
   const values = Array.isArray(envelope.data) ? envelope.data : [object(envelope.data)];
   let inbound = false;
   let outbound = false;
 
   for (const data of values) {
-    // `MESSAGES_SET` é usado pela Evolution ao sincronizar mensagens já
-    // existentes após a conexão; precisa passar pelo mesmo caminho idempotente
-    // para não deixar o Inbox desatualizado.
-    if (event === "MESSAGES_UPSERT" || event === "MESSAGES_SET") {
+    if (event === "MESSAGES_UPSERT") {
       const payload = normalizeEvolutionMessage(data);
       if (!payload) continue;
       inbound ||= !payload.fromMe;

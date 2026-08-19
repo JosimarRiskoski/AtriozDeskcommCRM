@@ -6,6 +6,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   dispatchEvolutionEvent,
+  isProcessableEvolutionEvent,
   type EvolutionSession,
   type EvolutionWebhookEnvelope,
 } from "@/lib/evolution/ingest";
@@ -34,6 +35,13 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     envelope = JSON.parse(rawBody) as EvolutionWebhookEnvelope;
   } catch {
     return fail("invalid_request", "invalid_json", 400, { requestId });
+  }
+
+  // A Evolution pode continuar enviando eventos antigos configurados na
+  // instância. Eles não devem sequer consultar o banco: além de não alimentarem
+  // o Inbox, eram responsáveis por milhões de leituras/escritas desnecessárias.
+  if (!isProcessableEvolutionEvent(envelope.event)) {
+    return ok({ accepted: true, ignored: true }, { requestId });
   }
 
   const admin = createAdminClient();

@@ -29,7 +29,7 @@ describe("EvolutionClient webhook configuration", () => {
       instanceName: "crm-1",
       integration: "WHATSAPP-BAILEYS",
       qrcode: true,
-      syncFullHistory: true,
+      syncFullHistory: false,
       webhook: {
         enabled: true,
         byEvents: false,

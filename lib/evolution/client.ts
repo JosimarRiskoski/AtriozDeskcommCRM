@@ -11,14 +11,8 @@
 export const EVOLUTION_WEBHOOK_EVENTS = [
   "MESSAGES_UPSERT",
   "MESSAGES_UPDATE",
-  "MESSAGES_SET",
-  "SEND_MESSAGE",
   "SEND_MESSAGE_UPDATE",
   "CONNECTION_UPDATE",
-  "QRCODE_UPDATED",
-  "CONTACTS_UPSERT",
-  "CHATS_UPSERT",
-  "GROUPS_UPSERT",
 ] as const;
 
 type Json = Record<string, unknown>;
@@ -145,7 +139,10 @@ export class EvolutionClient {
         instanceName: input.instanceName,
         integration: "WHATSAPP-BAILEYS",
         qrcode: true,
-        syncFullHistory: true,
+        // O histórico completo pode gerar centenas de milhares de eventos e
+        // saturar o banco. O CRM recebe as mensagens novas em tempo real; uma
+        // importação histórica, quando necessária, deve ser uma ação explícita.
+        syncFullHistory: false,
         webhook: {
           enabled: true,
           url: input.webhookUrl,
