@@ -88,7 +88,10 @@ describe("persistMessageMedia com Evolution", () => {
     const result = await persistMessageMedia(eventRow());
     expect(result.status).toBe("ok");
     expect(fetchEvolutionMessageMediaMock).toHaveBeenCalledWith(
-      expect.objectContaining({ instanceName: "crm-principal", message: messageRow.metadata.evolution_message }),
+      expect.objectContaining({
+        instanceName: "crm-principal",
+        message: messageRow.metadata.evolution_message,
+      }),
     );
     expect(uploadMock).toHaveBeenCalledWith(
       "org1/conv1/msg1.ogg",
@@ -99,9 +102,12 @@ describe("persistMessageMedia com Evolution", () => {
       expect.objectContaining({
         media_storage_path: "org1/conv1/msg1.ogg",
         media_size_bytes: 3,
+        media_url: null,
         metadata: expect.objectContaining({ media_status: "stored" }),
       }),
     );
+    const storedPatch = updateEqMock.mock.calls[0]?.[0] as { metadata?: Record<string, unknown> };
+    expect(storedPatch.metadata).not.toHaveProperty("evolution_message");
   });
 
   it("usa a mensagem Evolution mesmo sem URL direta", async () => {

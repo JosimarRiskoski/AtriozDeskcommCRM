@@ -14,43 +14,47 @@
  * Rodar: `pnpm worker` (tsx) — dev com --env-file=.env.local; container via
  * Dockerfile.worker (serviço `worker` do docker-compose).
  */
-import http from 'node:http';
-import { hostname } from 'node:os';
-import { setTimeout as sleep } from 'node:timers/promises';
+import http from "node:http";
+import { hostname } from "node:os";
+import { setTimeout as sleep } from "node:timers/promises";
 
-import type pg from 'pg';
+import type pg from "pg";
 
-import { createInboundTurnHandler } from '@/lib/agent-engine/agent/inbound-turn';
-import { createFollowupTurnHandler, type FollowupTurnDeps } from '@/lib/agent-engine/agent/followup-turn';
-import { createCaseReplyTurnHandler } from '@/lib/agent-engine/agent/case-reply-turn';
-import { completeTurnForEnrollment, createPgAdminClient } from '@/lib/followup/turn-bridge';
-import { seedPlatformPlaybook } from '@/lib/agent-engine/agent/playbook-seed';
-import { runCronLoop } from '@/lib/agent-engine/cron/scheduler';
-import { createPool } from '@/lib/agent-engine/db/pool';
-import { runDrainLoop } from '@/lib/agent-engine/edge/crm/drain';
-import { crmEdgeConfigFromEnv } from '@/lib/agent-engine/edge/crm/mcp-client';
-import { enforceHolds } from '@/lib/agent-engine/edge/crm/session-watchdog';
-import { runEvolutionSessionWatchdogLoop } from '@/lib/evolution/session-reconciler';
-import { runHealthLoop } from '@/lib/agent-engine/health/circuit';
-import { runFlywheelLoop } from '@/lib/agent-engine/flywheel/live';
-import { llmEdgeConfigFromEnv } from '@/lib/agent-engine/edge/llm/run-model-call';
-import { loadEnv, type Env } from '@/lib/agent-engine/env';
-import { createLogger, type Logger } from '@/lib/agent-engine/obs/logger';
+import { createInboundTurnHandler } from "@/lib/agent-engine/agent/inbound-turn";
+import {
+  createFollowupTurnHandler,
+  type FollowupTurnDeps,
+} from "@/lib/agent-engine/agent/followup-turn";
+import { createCaseReplyTurnHandler } from "@/lib/agent-engine/agent/case-reply-turn";
+import { completeTurnForEnrollment, createPgAdminClient } from "@/lib/followup/turn-bridge";
+import { seedPlatformPlaybook } from "@/lib/agent-engine/agent/playbook-seed";
+import { runCronLoop } from "@/lib/agent-engine/cron/scheduler";
+import { createPool } from "@/lib/agent-engine/db/pool";
+import { runDrainLoop } from "@/lib/agent-engine/edge/crm/drain";
+import { crmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/crm/mcp-client";
+import { enforceHolds } from "@/lib/agent-engine/edge/crm/session-watchdog";
+import { runEvolutionSessionWatchdogLoop } from "@/lib/evolution/session-reconciler";
+import { runHealthLoop } from "@/lib/agent-engine/health/circuit";
+import { runFlywheelLoop } from "@/lib/agent-engine/flywheel/live";
+import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/run-model-call";
+import { loadEnv, type Env } from "@/lib/agent-engine/env";
+import { createLogger, type Logger } from "@/lib/agent-engine/obs/logger";
 import {
   evaluateCacheHitAlert,
   metricsSnapshot,
   recordRunMetrics,
   type CacheAlertKnobs,
-} from '@/lib/agent-engine/obs/metrics';
+} from "@/lib/agent-engine/obs/metrics";
 import {
   claimJobs,
   completeJob,
   failJob,
+  millisecondsUntilNextJob,
   reapExpiredJobs,
   type JobKind,
   type JobRow,
-} from '@/lib/agent-engine/queue/queue';
-import { nextQueuePollDelayMs } from '@/lib/agent-engine/queue/poll-backoff';
+} from "@/lib/agent-engine/queue/queue";
+import { runQueueLoop } from "@/lib/agent-engine/queue/loop";
 
 export interface JobHandlerContext {
   workerId: string;
@@ -60,7 +64,7 @@ export type JobHandler = (job: JobRow, pool: pg.Pool, ctx: JobHandlerContext) =>
 /** 1ª linha, truncada — PII fora de log. */
 function errMsg(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
-  return (message.split('\n', 1)[0] ?? '').slice(0, 300);
+  return (message.split("\n", 1)[0] ?? "").slice(0, 300);
 }
 
 /**
@@ -68,7 +72,7 @@ function errMsg(err: unknown): string {
  * só confere que o schema do harness existe e recusa subir sem ele.
  */
 async function assertHarnessSchema(pool: pg.Pool): Promise<void> {
-  const sentinels = ['job_queue', 'lead_checkpoints', 'agent_inbox_items', 'send_ledger'];
+  const sentinels = ["job_queue", "lead_checkpoints", "agent_inbox_items", "send_ledger"];
   const { rows } = await pool.query<{ missing: string }>(
     `select t.name as missing
      from unnest($1::text[]) as t(name)
@@ -77,29 +81,33 @@ async function assertHarnessSchema(pool: pg.Pool): Promise<void> {
   );
   if (rows.length > 0) {
     throw new Error(
-      `schema do harness ausente no banco (tabelas: ${rows.map((r) => r.missing).join(', ')}) — aplique a migration 0050_agent_harness antes de subir o worker`,
+      `schema do harness ausente no banco (tabelas: ${rows.map((r) => r.missing).join(", ")}) — aplique a migration 0050_agent_harness antes de subir o worker`,
     );
   }
 }
 
 /** /healthz barato + /readyz de banco + /metrics detalhado. */
-export function createHealthzServer(pool: pg.Pool, log: Logger, metricsWindowMs: number): http.Server {
+export function createHealthzServer(
+  pool: pg.Pool,
+  log: Logger,
+  metricsWindowMs: number,
+): http.Server {
   const respond = (res: http.ServerResponse, code: number, body: unknown): void => {
-    res.writeHead(code, { 'content-type': 'application/json' });
+    res.writeHead(code, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
   };
   const handle = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
-    const route = (req.url ?? '').split('?', 1)[0] ?? '';
-    if (req.method !== 'GET' || !['/healthz', '/readyz', '/metrics'].includes(route)) {
-      respond(res, 404, { error: 'not_found' });
+    const route = (req.url ?? "").split("?", 1)[0] ?? "";
+    if (req.method !== "GET" || !["/healthz", "/readyz", "/metrics"].includes(route)) {
+      respond(res, 404, { error: "not_found" });
       return;
     }
-    if (route === '/metrics') {
+    if (route === "/metrics") {
       try {
         respond(res, 200, await metricsSnapshot(pool, metricsWindowMs));
       } catch (err) {
-        log.error('metrics: snapshot indisponível', { error: errMsg(err) });
-        respond(res, 503, { status: 'degraded', db: 'error' });
+        log.error("metrics: snapshot indisponível", { error: errMsg(err) });
+        respond(res, 503, { status: "degraded", db: "error" });
       }
       return;
     }
@@ -107,16 +115,16 @@ export function createHealthzServer(pool: pg.Pool, log: Logger, metricsWindowMs:
     // O healthcheck do Docker roda a cada 30s. Ele só verifica que o processo
     // está vivo e nunca consulta o Supabase. Prontidão e métricas são rotas
     // separadas para não transformar monitoração em carga de produção.
-    if (route === '/healthz') {
-      respond(res, 200, { status: 'ok', uptime_s });
+    if (route === "/healthz") {
+      respond(res, 200, { status: "ok", uptime_s });
       return;
     }
     try {
-      await pool.query('select 1');
-      respond(res, 200, { status: 'ready', db: 'ok', uptime_s });
+      await pool.query("select 1");
+      respond(res, 200, { status: "ready", db: "ok", uptime_s });
     } catch (err) {
-      log.error('readyz: banco indisponível', { error: errMsg(err) });
-      respond(res, 503, { status: 'degraded', db: 'error', uptime_s });
+      log.error("readyz: banco indisponível", { error: errMsg(err) });
+      respond(res, 503, { status: "degraded", db: "error", uptime_s });
     }
   };
   return http.createServer((req, res) => void handle(req, res));
@@ -128,7 +136,7 @@ export async function startWorker(
   log: Logger = createLogger(),
 ): Promise<void> {
   const pool = createPool(env.SUPABASE_DB_URL, (err) =>
-    log.error('pool: conexão caiu — recria no próximo uso', { error: errMsg(err) }),
+    log.error("pool: conexão caiu — recria no próximo uso", { error: errMsg(err) }),
   );
   const workerId = `agent-engine-${hostname()}-${process.pid}`;
 
@@ -138,24 +146,24 @@ export async function startWorker(
   // age quando não existe ponteiro nenhum (regra dura nº 10 — nunca move
   // ponteiro existente) e é concorrência-safe (advisory lock).
   const playbookSeed = await seedPlatformPlaybook(pool);
-  if (playbookSeed === 'seeded') {
-    log.info('playbook platform seedado no boot (primeiro boot do self-host)');
+  if (playbookSeed === "seeded") {
+    log.info("playbook platform seedado no boot (primeiro boot do self-host)");
   }
 
   const bootReap = await reapExpiredJobs(pool, {
     visibilityTimeoutMs: env.QUEUE_VISIBILITY_TIMEOUT_MS,
   });
   if (bootReap.revived + bootReap.dead > 0) {
-    log.warn('órfãos soltos no boot', bootReap);
+    log.warn("órfãos soltos no boot", bootReap);
   }
 
   const server = createHealthzServer(pool, log, env.METRICS_WINDOW_MS);
   await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(env.HEALTH_PORT, '0.0.0.0', resolve);
+    server.once("error", reject);
+    server.listen(env.HEALTH_PORT, "0.0.0.0", resolve);
   });
   const address = server.address();
-  const port = typeof address === 'object' && address !== null ? address.port : env.HEALTH_PORT;
+  const port = typeof address === "object" && address !== null ? address.port : env.HEALTH_PORT;
 
   let shuttingDown = false;
   const inFlight = new Set<Promise<void>>();
@@ -163,9 +171,9 @@ export async function startWorker(
   const reaperTimer = setInterval(() => {
     reapExpiredJobs(pool, { visibilityTimeoutMs: env.QUEUE_VISIBILITY_TIMEOUT_MS })
       .then((reaped) => {
-        if (reaped.revived + reaped.dead > 0) log.warn('reaper devolveu jobs órfãos', reaped);
+        if (reaped.revived + reaped.dead > 0) log.warn("reaper devolveu jobs órfãos", reaped);
       })
-      .catch((err: unknown) => log.error('reaper falhou', { error: errMsg(err) }));
+      .catch((err: unknown) => log.error("reaper falhou", { error: errMsg(err) }));
   }, env.QUEUE_REAPER_INTERVAL_MS);
 
   // Holds de sessão/saúde: retém jobs de envio de número fora do ar (WORKING é a
@@ -173,9 +181,9 @@ export async function startWorker(
   const holdsTimer = setInterval(() => {
     enforceHolds(pool)
       .then(({ held, released }) => {
-        if (held + released > 0) log.info('holds de sessão aplicados', { held, released });
+        if (held + released > 0) log.info("holds de sessão aplicados", { held, released });
       })
-      .catch((err: unknown) => log.error('enforceHolds falhou', { error: errMsg(err) }));
+      .catch((err: unknown) => log.error("enforceHolds falhou", { error: errMsg(err) }));
   }, env.QUEUE_REAPER_INTERVAL_MS);
 
   const loopsAbort = new AbortController();
@@ -183,8 +191,11 @@ export async function startWorker(
   // Drain do event_log (mesmo banco pós-fusão) — transforma dispatch_requested em
   // jobs. Fase 0 (convergência, spec 2026-07-23): o drain liga SEMPRE — o
   // dispatcher nativo EPIC-13 foi aposentado, o engine é o único consumidor.
-  if (env.AGENT_DISPATCH_CONSUMER === 'native') {
-    log.warn('AGENT_DISPATCH_CONSUMER=native é OBSOLETO (Fase 0) — o drain do engine é o único consumidor; valor ignorado', {});
+  if (env.AGENT_DISPATCH_CONSUMER === "native") {
+    log.warn(
+      "AGENT_DISPATCH_CONSUMER=native é OBSOLETO (Fase 0) — o drain do engine é o único consumidor; valor ignorado",
+      {},
+    );
   }
   const drainLoop = runDrainLoop(
     pool,
@@ -208,11 +219,13 @@ export async function startWorker(
             baseUrl: env.EVOLUTION_API_BASE_URL,
             apiKey: env.EVOLUTION_API_KEY,
             intervalMs: env.WATCHDOG_INTERVAL_MS,
+            appUrl: env.NEXT_PUBLIC_APP_URL,
+            webhookSecret: env.EVOLUTION_WEBHOOK_SECRET ?? env.INTERNAL_SECRET,
           },
           log,
           loopsAbort.signal,
         )
-      : (log.warn('watchdog de sessão OFF — EVOLUTION_API_BASE_URL/EVOLUTION_API_KEY ausentes', {}),
+      : (log.warn("watchdog de sessão OFF — EVOLUTION_API_BASE_URL/EVOLUTION_API_KEY ausentes", {}),
         Promise.resolve());
 
   // Circuito de saúde do número (block/response rate → hold).
@@ -262,21 +275,21 @@ export async function startWorker(
       }
       await handler(job, pool, { workerId });
       await completeJob(pool, job.id, workerId);
-      log.info('job concluído', { job_id: job.id, kind: job.kind });
+      log.info("job concluído", { job_id: job.id, kind: job.kind });
       try {
         const wrote = await recordRunMetrics(pool, job);
         if (wrote > 0) {
           await evaluateCacheHitAlert(pool, job.organization_id, cacheAlertKnobs);
         }
       } catch (metricsErr) {
-        log.error('métricas do run não registradas', { job_id: job.id, error: errMsg(metricsErr) });
+        log.error("métricas do run não registradas", { job_id: job.id, error: errMsg(metricsErr) });
       }
     } catch (err) {
-      log.error('job falhou', { job_id: job.id, kind: job.kind, error: errMsg(err) });
+      log.error("job falhou", { job_id: job.id, kind: job.kind, error: errMsg(err) });
       try {
         await failJob(pool, job.id, workerId, err);
       } catch (failErr) {
-        log.error('failJob indisponível — lease expira via reaper', {
+        log.error("failJob indisponível — lease expira via reaper", {
           job_id: job.id,
           error: errMsg(failErr),
         });
@@ -284,31 +297,24 @@ export async function startWorker(
     }
   };
 
-  const workerLoop = (async () => {
-    let idlePollMs = env.QUEUE_POLL_INTERVAL_MS;
-    while (!shuttingDown) {
-      let claimed: JobRow[] = [];
-      try {
-        claimed = await claimJobs(pool, { workerId, maxConcurrency: env.QUEUE_MAX_CONCURRENCY });
-      } catch (err) {
-        log.error('claim falhou', { error: errMsg(err) });
-      }
-      for (const job of claimed) {
+  const workerLoop = runQueueLoop<JobRow>({
+    clock: () => millisecondsUntilNextJob(pool),
+    claim: () => claimJobs(pool, { workerId, maxConcurrency: env.QUEUE_MAX_CONCURRENCY }),
+    onClaim: (jobs) => {
+      for (const job of jobs) {
         const running = runJob(job);
         inFlight.add(running);
         void running.finally(() => inFlight.delete(running));
       }
-      if (claimed.length === 0 || shuttingDown) {
-        await sleep(idlePollMs);
-      }
-      idlePollMs = nextQueuePollDelayMs(
-        idlePollMs,
-        env.QUEUE_POLL_INTERVAL_MS,
-        env.QUEUE_POLL_MAX_INTERVAL_MS,
-        claimed.length > 0,
-      );
-    }
-  })();
+    },
+    sleep: (ms) => sleep(ms, undefined, { signal: loopsAbort.signal }),
+    shouldStop: () => shuttingDown,
+    intervals: {
+      idleMs: env.QUEUE_POLL_INTERVAL_MS,
+      retryMs: env.QUEUE_CLAIM_RETRY_INTERVAL_MS,
+    },
+    log,
+  });
 
   let resolveStopped!: () => void;
   const stopped = new Promise<void>((resolve) => {
@@ -318,7 +324,7 @@ export async function startWorker(
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
-    log.info('sinal recebido — parando de claimar e drenando jobs em curso', {
+    log.info("sinal recebido — parando de claimar e drenando jobs em curso", {
       signal,
       in_flight: inFlight.size,
     });
@@ -330,33 +336,35 @@ export async function startWorker(
     await Promise.all([drainLoop, healthLoop, cronLoop, sessionWatchdogLoop, flywheelLoop]);
     await workerLoop;
     let graceTimer: NodeJS.Timeout | undefined;
-    const grace = new Promise<'grace'>((resolve) => {
-      graceTimer = setTimeout(() => resolve('grace'), env.SHUTDOWN_GRACE_MS);
+    const grace = new Promise<"grace">((resolve) => {
+      graceTimer = setTimeout(() => resolve("grace"), env.SHUTDOWN_GRACE_MS);
     });
     const outcome = await Promise.race([
-      Promise.all([...inFlight]).then(() => 'drained' as const),
+      Promise.all([...inFlight]).then(() => "drained" as const),
       grace,
     ]);
     clearTimeout(graceTimer);
-    if (outcome === 'grace') {
-      log.error('shutdown: jobs em curso não drenaram no prazo — saindo sem esperar', {
+    if (outcome === "grace") {
+      log.error("shutdown: jobs em curso não drenaram no prazo — saindo sem esperar", {
         grace_ms: env.SHUTDOWN_GRACE_MS,
         in_flight: inFlight.size,
       });
       process.exit(1);
     }
     await pool.end();
-    log.info('worker encerrado limpo', {});
+    log.info("worker encerrado limpo", {});
     resolveStopped();
   };
-  process.once('SIGTERM', (signal) => void shutdown(signal));
-  process.once('SIGINT', (signal) => void shutdown(signal));
+  process.once("SIGTERM", (signal) => void shutdown(signal));
+  process.once("SIGINT", (signal) => void shutdown(signal));
 
   // A linha que a Fase 0 exige ver: worker conectado ao Supabase, schema ok, pronto.
-  log.info('agent-engine pronto', {
+  log.info("agent-engine pronto", {
     worker_id: workerId,
     healthz_port: port,
     max_concurrency: env.QUEUE_MAX_CONCURRENCY,
+    queue_idle_poll_ms: env.QUEUE_POLL_INTERVAL_MS,
+    queue_claim_retry_ms: env.QUEUE_CLAIM_RETRY_INTERVAL_MS,
   });
   await stopped;
 }
@@ -404,7 +412,9 @@ export async function main(): Promise<void> {
         ...(env.STAGE_CLASSIFIER_MODEL !== undefined ? { model: env.STAGE_CLASSIFIER_MODEL } : {}),
       },
       jailbreak: {
-        ...(env.JAILBREAK_CLASSIFIER_MODEL !== undefined ? { model: env.JAILBREAK_CLASSIFIER_MODEL } : {}),
+        ...(env.JAILBREAK_CLASSIFIER_MODEL !== undefined
+          ? { model: env.JAILBREAK_CLASSIFIER_MODEL }
+          : {}),
       },
       disclosureMode: env.DISCLOSURE_MODE,
       promiseSemantic: {
@@ -421,11 +431,17 @@ export async function main(): Promise<void> {
     // lib/followup/turn-bridge.ts (equivalente ao createSupabaseAdminClient das
     // rotas Next.js, mas pra este processo).
     completeFollowupTurn: (pool, { organizationId, enrollmentId, nodeId, result }) =>
-      completeTurnForEnrollment(createPgAdminClient(pool), organizationId, enrollmentId, nodeId, result),
+      completeTurnForEnrollment(
+        createPgAdminClient(pool),
+        organizationId,
+        enrollmentId,
+        nodeId,
+        result,
+      ),
   };
-  handlers.set('inbound_turn', createInboundTurnHandler(turnDeps));
-  handlers.set('followup_turn', createFollowupTurnHandler(turnDeps));
-  handlers.set('case_reply_turn', createCaseReplyTurnHandler(turnDeps));
+  handlers.set("inbound_turn", createInboundTurnHandler(turnDeps));
+  handlers.set("followup_turn", createFollowupTurnHandler(turnDeps));
+  handlers.set("case_reply_turn", createCaseReplyTurnHandler(turnDeps));
   await startWorker(env, handlers, log);
 }
 

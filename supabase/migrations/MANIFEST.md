@@ -109,6 +109,8 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 
 | `20260817120000` | `0129_bound_lid_recovery_and_audit_growth` | Impede reprocessamento infinito de mensagens LID, aplica backoff e limite de tentativas, retoma ao descobrir o telefone e remove somente auditorias duplicadas geradas pelo defeito. |
 
+| `20260819180000` | `0130_compact_persisted_message_media` | Remove a copia base64 e o payload cru da Evolution somente depois que a mídia já foi persistida no bucket privado, reduzindo banco, API e egress do Realtime sem perder o arquivo. |
+
 ## Reproducibility
 
 Migrations were applied directly via the Supabase MCP `apply_migration` tool during the autonomous bootstrap session. The SQL of each migration is also embedded in the corresponding spec under `docs/specs/0X-spec-*.md` and the database keeps them in `supabase_migrations.schema_migrations`.

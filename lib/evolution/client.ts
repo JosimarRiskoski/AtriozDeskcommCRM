@@ -67,7 +67,8 @@ function firstObject(value: unknown): Json {
 }
 
 function instanceListFrom(value: unknown): Json[] {
-  if (Array.isArray(value)) return value.map(asObject).filter((item) => Object.keys(item).length > 0);
+  if (Array.isArray(value))
+    return value.map(asObject).filter((item) => Object.keys(item).length > 0);
   const root = asObject(value);
   for (const candidate of [root.instances, root.data, root.instance]) {
     if (Array.isArray(candidate))
@@ -147,9 +148,10 @@ export class EvolutionClient {
           enabled: true,
           url: input.webhookUrl,
           byEvents: false,
-          // O CRM persiste mídia a partir do payload do webhook. Sem base64,
-          // fotos, áudios e documentos recebidos não chegam ao worker.
-          base64: true,
+          // Webhook transporta apenas metadados. O worker baixa o binário sob
+          // demanda pela Evolution; embutir base64 aqui multiplica egress,
+          // tamanho dos logs e carga do Postgres a cada mídia recebida.
+          base64: false,
           events: EVOLUTION_WEBHOOK_EVENTS,
           headers: input.webhookHeaders ?? {},
         },
@@ -167,7 +169,9 @@ export class EvolutionClient {
   async connectionState(instanceName: string): Promise<EvolutionConnection> {
     try {
       const direct = this.connectionFrom(
-        await this.request<unknown>(`/instance/connectionState/${encodeURIComponent(instanceName)}`),
+        await this.request<unknown>(
+          `/instance/connectionState/${encodeURIComponent(instanceName)}`,
+        ),
       );
       // Algumas versoes respondem `open` neste endpoint mesmo depois de um
       // logout 401. O inventario de instancias conserva o motivo real da
@@ -246,7 +250,7 @@ export class EvolutionClient {
           enabled: true,
           url: input.webhookUrl,
           byEvents: false,
-          base64: true,
+          base64: false,
           events: EVOLUTION_WEBHOOK_EVENTS,
           headers: input.webhookHeaders ?? {},
         },

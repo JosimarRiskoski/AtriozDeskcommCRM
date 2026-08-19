@@ -29,6 +29,9 @@ export function useMessagesRealtime(conversationId: string | null) {
           schema: "public",
           table: "messages",
           filter: `conversation_id=eq.${conversationId}`,
+          // O callback apenas invalida a query. Nao envie media_url/base64 nem
+          // metadata pelo WebSocket para cada alteracao de status da mensagem.
+          select: ["id", "conversation_id"],
         }
       : undefined,
     onChange,

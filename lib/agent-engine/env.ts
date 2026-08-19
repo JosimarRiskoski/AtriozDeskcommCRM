@@ -4,7 +4,7 @@
  * SUPABASE_DB_URL (Postgres direto, padrão do kit self-host) para o motor, e
  * URL + service role para os handlers do app (envio).
  */
-import { z } from 'zod';
+import { z } from "zod";
 
 const envSchema = z.object({
   // Postgres do Supabase (connection string — Settings → Database). O motor usa
@@ -19,22 +19,25 @@ const envSchema = z.object({
   // falha com erro instrutivo — nunca silêncio.
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   // Modelo default do agente quando a org não define o dela (knob, nunca constante).
-  AGENT_DEFAULT_MODEL: z.string().min(1).default('claude-sonnet-4-5'),
+  AGENT_DEFAULT_MODEL: z.string().min(1).default("claude-sonnet-4-5"),
   // Teto de conexões por pool do pg. Sem valor = pg decide (default 10).
   DB_POOL_MAX: z.coerce.number().int().positive().optional(),
-  // Knobs da fila — defaults conservadores, documentados no .env.example.
+  // Knobs da fila. O loop ocioso consulta um relogio barato antes do claim.
   QUEUE_MAX_CONCURRENCY: z.coerce.number().int().positive().default(8),
   QUEUE_VISIBILITY_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
   // Porta do /healthz (bind 0.0.0.0 no container; 0 = porta efêmera em teste).
   HEALTH_PORT: z.coerce.number().int().min(0).max(65_535).default(8787),
-  QUEUE_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(1_000),
-  // Teto do backoff ocioso. Quando entra trabalho o intervalo volta ao base.
-  QUEUE_POLL_MAX_INTERVAL_MS: z.coerce.number().int().positive().default(10_000),
+  QUEUE_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2_000),
+  // Ritmo curto somente quando ha job vencido, mas nenhuma vaga/lane livre.
+  QUEUE_CLAIM_RETRY_INTERVAL_MS: z.coerce.number().int().positive().default(250),
   QUEUE_REAPER_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   SHUTDOWN_GRACE_MS: z.coerce.number().int().positive().default(30_000),
   // Watchdog de sessão: reconcilia o espelho com a Evolution.
   EVOLUTION_API_BASE_URL: z.string().url().optional(),
   EVOLUTION_API_KEY: z.string().min(1).optional(),
+  NEXT_PUBLIC_APP_URL: z.string().url().optional(),
+  EVOLUTION_WEBHOOK_SECRET: z.string().min(1).optional(),
+  INTERNAL_SECRET: z.string().min(1).optional(),
   WATCHDOG_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   WATCHDOG_REDRIVE_MIN_AGE_MS: z.coerce.number().int().positive().default(30_000),
   WATCHDOG_REDRIVE_BATCH_SIZE: z.coerce.number().int().positive().default(10),
@@ -42,9 +45,9 @@ const envSchema = z.object({
   // Dono ÚNICO dos eventos ai_agent.dispatch_requested (mesma chave do app):
   // 'engine' (default) = o drain deste worker consome; 'native' = o dispatcher
   // EPIC-13 consome e o drain daqui NÃO liga. Nunca os dois.
-  AGENT_DISPATCH_CONSUMER: z.enum(['engine', 'native']).default('engine'),
+  AGENT_DISPATCH_CONSUMER: z.enum(["engine", "native"]).default("engine"),
   // Modo do gate de disclosure: 'inject' (default conservador) ou 'veto'.
-  DISCLOSURE_MODE: z.enum(['inject', 'veto']).default('inject'),
+  DISCLOSURE_MODE: z.enum(["inject", "veto"]).default("inject"),
   // Resposta 'queued' (sessão ≠ WORKING): job reagendado com este atraso, SEM
   // consumir attempts.
   SEND_QUEUED_RETRY_MS: z.coerce.number().int().positive().default(300_000),
@@ -68,7 +71,7 @@ const envSchema = z.object({
   FOLLOWUP_MIN_AHEAD_MS: z.coerce.number().int().positive().default(300_000),
   FOLLOWUP_MAX_AHEAD_MS: z.coerce.number().int().positive().default(15_552_000_000),
   // TTL do prefixo estável de prompt cache (doutrina: 1h).
-  LLM_CACHE_TTL: z.enum(['5m', '1h']).default('1h'),
+  LLM_CACHE_TTL: z.enum(["5m", "1h"]).default("1h"),
   // Payload curado da tool get_lead_context.
   LEAD_CONTEXT_HISTORY_LIMIT: z.coerce.number().int().positive().default(20),
   LEAD_CONTEXT_MAX_TOKENS: z.coerce.number().int().positive().default(1_000),
@@ -89,15 +92,15 @@ const envSchema = z.object({
   PRUNE_TOOL_RESULTS_MIN_RESULT_TOKENS: z.coerce.number().int().positive().default(200),
   // Skills situacionais — near-misses viram candidatos ao golden set (curadoria
   // humana; escrita por fs em runtime, gitignored).
-  GOLDEN_CANDIDATES_DIR: z.string().min(1).default('lib/agent-engine/golden-candidates'),
+  GOLDEN_CANDIDATES_DIR: z.string().min(1).default("lib/agent-engine/golden-candidates"),
   // Classificadores auxiliares (modelo BARATO; sem valor = default da org).
   STAGE_CLASSIFIER_MODEL: z.string().min(1).optional(),
   JAILBREAK_CLASSIFIER_MODEL: z.string().min(1).optional(),
   // Camada SEMÂNTICA de promessa na cadeia before_send (1 chamada por envio quando on).
   PROMISE_SEMANTIC_ENABLED: z
-    .enum(['true', 'false'])
-    .default('true')
-    .transform((v) => v === 'true'),
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
   PROMISE_SEMANTIC_MODEL: z.string().min(1).optional(),
   // Onda 5 (Task 5.1) — modelo auxiliar dos turnos classify/decide_timing do
   // sistema de fluxos de follow-up (sem valor = default da org).
@@ -119,7 +122,7 @@ const envSchema = z.object({
   RAG_TOP_K: z.coerce.number().int().positive().default(5),
   RAG_SIMILARITY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.72),
   RAG_MAX_TOKENS: z.coerce.number().int().positive().default(2_000),
-  RAG_EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-small'),
+  RAG_EMBEDDING_MODEL: z.string().min(1).default("text-embedding-3-small"),
   RAG_EMBEDDING_API_KEY: z.string().min(1).optional(),
   RAG_EMBEDDING_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   // Flywheel agendado (4B): rodada judge→distiller sobre turnos reais a cada
@@ -142,12 +145,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   // README promete "deixe vazio e cadastre depois na tela" (BYOK) — sem isto,
   // ANTHROPIC_API_KEY= derrubava o worker no boot (bug pego pela prova limpa).
   const cleaned = Object.fromEntries(
-    Object.entries(source).filter(([, v]) => v !== ''),
+    Object.entries(source).filter(([, v]) => v !== ""),
   ) as NodeJS.ProcessEnv;
   const parsed = envSchema.safeParse(cleaned);
   if (!parsed.success) {
-    const names = [...new Set(parsed.error.issues.map((issue) => issue.path.join('.')))];
-    throw new Error(`env inválido — verifique no .env: ${names.join(', ')}`);
+    const names = [...new Set(parsed.error.issues.map((issue) => issue.path.join(".")))];
+    throw new Error(`env inválido — verifique no .env: ${names.join(", ")}`);
   }
   return parsed.data;
 }

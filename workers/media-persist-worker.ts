@@ -59,9 +59,16 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
     media_status: "stored" | "failed",
     patch: Record<string, unknown> = {},
   ) => {
+    const nextMetadata: Record<string, unknown> = { ...(msg.metadata ?? {}), media_status };
+    if (media_status === "stored") {
+      // Depois do upload, o objeto privado e a fonte da verdade. Manter a
+      // mensagem crua da Evolution (e o base64 em media_url) faria cada UPDATE
+      // e cada leitura do Inbox retransmitir megabytes sem necessidade.
+      delete nextMetadata.evolution_message;
+    }
     const { error: updErr } = await admin
       .from("messages")
-      .update({ metadata: { ...(msg.metadata ?? {}), media_status }, ...patch })
+      .update({ metadata: nextMetadata, ...patch })
       .eq("id", msg.id)
       .eq("organization_id", msg.organization_id);
     if (updErr) throw new Error(`message update failed: ${updErr.message}`);
@@ -126,6 +133,7 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
   }
 
   await markStatus("stored", {
+    media_url: null,
     media_storage_path: path,
     media_size_bytes: media.buffer.byteLength,
     media_mime: media.mime,

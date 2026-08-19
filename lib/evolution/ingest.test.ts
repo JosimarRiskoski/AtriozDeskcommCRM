@@ -7,14 +7,12 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const { isProcessableEvolutionEvent, normalizeEvolutionMessage } = await import("./ingest");
 
 describe("isProcessableEvolutionEvent", () => {
-  it.each([
-    "MESSAGES_UPSERT",
-    "messages.update",
-    "send-message-update",
-    "CONNECTION_UPDATE",
-  ])("aceita evento operacional %s", (event) => {
-    expect(isProcessableEvolutionEvent(event)).toBe(true);
-  });
+  it.each(["MESSAGES_UPSERT", "messages.update", "send-message-update", "CONNECTION_UPDATE"])(
+    "aceita evento operacional %s",
+    (event) => {
+      expect(isProcessableEvolutionEvent(event)).toBe(true);
+    },
+  );
 
   it.each(["MESSAGES_SET", "CONTACTS_UPSERT", "CHATS_UPSERT", "GROUPS_UPSERT", undefined])(
     "ignora evento sem uso operacional %s",
@@ -25,6 +23,17 @@ describe("isProcessableEvolutionEvent", () => {
 });
 
 describe("normalizeEvolutionMessage", () => {
+  it("detecta mídia sem base64 para o worker baixá-la pela Evolution", () => {
+    const result = normalizeEvolutionMessage({
+      key: { id: "media-1", fromMe: false, remoteJid: "5547999999999@s.whatsapp.net" },
+      message: { imageMessage: { mimetype: "image/jpeg", caption: "foto" } },
+    });
+
+    expect(result?.hasMedia).toBe(true);
+    expect(result?.mediaUrl).toBeUndefined();
+    expect(result?._data?.evolution_message).toBeTruthy();
+  });
+
   it("preserva o pushName real em mensagens recebidas", () => {
     const result = normalizeEvolutionMessage({
       key: { id: "in-1", fromMe: false, remoteJid: "5547999999999@s.whatsapp.net" },

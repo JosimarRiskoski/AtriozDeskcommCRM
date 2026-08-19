@@ -12,6 +12,8 @@ export interface UseRealtimeChannelOpts {
     schema?: string;
     table: string;
     filter?: string;
+    /** Limita as colunas entregues pelo Realtime e evita trafegar payloads grandes. */
+    select?: string[];
   };
   broadcast?: { event: string };
   onChange: (payload: unknown) => void;
@@ -134,6 +136,7 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
   ultimaEntrega: RefObject<number | null>;
 } {
   const { name, postgresChanges, broadcast, onChange, enabled = true } = opts;
+  const postgresSelectKey = postgresChanges?.select?.join(",") ?? "";
 
   // ref makes onChange identity-stable so changing handler doesn't re-subscribe
   const onChangeRef = useRef(onChange);
@@ -173,10 +176,6 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
     const supabase = createClient();
     const channelName = `${name}::${instanceId}`;
 
-    // `chain` nunca é null durante o setup; `active` (anulável) existe só pro
-    // cleanup — separado para o narrowing do TS não depender de reatribuição.
-    let chain: RealtimeChannel = supabase.channel(channelName);
-
     const handler = (payload: unknown) => {
       // Carimba ANTES de entregar: se o consumidor lançar, a entrega ainda
       // aconteceu — e o refetch de segurança precisa saber disso para não
@@ -185,49 +184,82 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
       onChangeRef.current(payload);
     };
 
-    if (postgresChanges) {
-      chain = chain.on(
-        "postgres_changes",
-        {
-          event: postgresChanges.event,
-          schema: postgresChanges.schema ?? "public",
-          table: postgresChanges.table,
-          ...(postgresChanges.filter ? { filter: postgresChanges.filter } : {}),
-        },
-        handler,
-      );
-    }
-
-    if (broadcast) {
-      chain = chain.on("broadcast", { event: broadcast.event }, handler);
-    }
-
-    let active: RealtimeChannel | null = chain;
+    let active: RealtimeChannel | null = null;
     let cancelado = false;
+    let tentativas = 0;
+    let retomada: ReturnType<typeof setTimeout> | null = null;
     setStatus("connecting");
 
-    // O token tem de chegar ANTES do subscribe: assinar primeiro e autenticar
-    // depois deixa o canal anônimo para sempre — ele responde "Subscribed to
-    // PostgreSQL" e nunca entrega evento, porque a RLS filtra do outro lado.
-    void esperarAuth(supabase).then((authenticated) => {
-      if (cancelado || !active) return;
-      active.subscribe((s) => {
-        // s is one of "SUBSCRIBED" | "CHANNEL_ERROR" | "TIMED_OUT" | "CLOSED"
-        const map: Record<string, RealtimeStatus> = {
-          SUBSCRIBED: "subscribed",
-          CHANNEL_ERROR: "channel_error",
-          TIMED_OUT: "timed_out",
-          CLOSED: "closed",
-        };
-        // Um socket anônimo pode responder SUBSCRIBED e ainda assim receber
-        // zero linhas por causa da RLS. Não o promovemos a saudável: assim o
-        // fallback continua em 10s até uma nova montagem autenticar de fato.
-        setStatus(s === "SUBSCRIBED" && !authenticated ? "timed_out" : (map[s] ?? "connecting"));
+    const montar = () => {
+      if (cancelado) return;
+
+      let novo: RealtimeChannel = supabase.channel(`${channelName}#${tentativas}`);
+      if (postgresChanges) {
+        novo = novo.on(
+          "postgres_changes",
+          {
+            event: postgresChanges.event,
+            schema: postgresChanges.schema ?? "public",
+            table: postgresChanges.table,
+            ...(postgresChanges.filter ? { filter: postgresChanges.filter } : {}),
+            ...(postgresChanges.select ? { select: postgresChanges.select } : {}),
+          },
+          handler,
+        );
+      }
+      if (broadcast) novo = novo.on("broadcast", { event: broadcast.event }, handler);
+      active = novo;
+
+      // O token tem de chegar ANTES do subscribe. Canais que caíram são
+      // recriados: reassinar o mesmo objeto pode aparentar sucesso sem voltar
+      // a entregar eventos.
+      void esperarAuth(supabase).then((authenticated) => {
+        if (cancelado || active !== novo) return;
+        novo.subscribe((s) => {
+          if (cancelado || active !== novo) return;
+          const map: Record<string, RealtimeStatus> = {
+            SUBSCRIBED: "subscribed",
+            CHANNEL_ERROR: "channel_error",
+            TIMED_OUT: "timed_out",
+            CLOSED: "closed",
+          };
+          setStatus(s === "SUBSCRIBED" && !authenticated ? "timed_out" : (map[s] ?? "connecting"));
+
+          if (s === "SUBSCRIBED" && authenticated) {
+            // O Realtime não repassa eventos ocorridos durante a queda. Uma
+            // invalidação sintética força os consumidores a buscar o estado
+            // atual e fecha a lacuna sem esperar uma nova mensagem.
+            if (tentativas > 0) {
+              tentativas = 0;
+              handler({ tipo: "reassinado" });
+            }
+            return;
+          }
+
+          if (
+            s === "CHANNEL_ERROR" ||
+            s === "TIMED_OUT" ||
+            s === "CLOSED" ||
+            (s === "SUBSCRIBED" && !authenticated)
+          ) {
+            const espera = Math.min(30_000, 1_000 * 2 ** tentativas);
+            tentativas++;
+            if (retomada) clearTimeout(retomada);
+            retomada = setTimeout(() => {
+              if (cancelado) return;
+              if (active) supabase.removeChannel(active);
+              montar();
+            }, espera);
+          }
+        });
       });
-    });
+    };
+
+    montar();
 
     return () => {
       cancelado = true;
+      if (retomada) clearTimeout(retomada);
       if (active) {
         supabase.removeChannel(active);
         active = null;
@@ -243,6 +275,7 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
     postgresChanges?.table,
     postgresChanges?.filter,
     postgresChanges?.schema,
+    postgresSelectKey,
     broadcast?.event,
   ]);
 

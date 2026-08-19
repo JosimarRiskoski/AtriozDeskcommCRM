@@ -56,21 +56,69 @@ export async function reconcileEvolutionSessions(
   return reconciled;
 }
 
+async function refreshEvolutionWebhooks(
+  pool: pg.Pool,
+  config: { baseUrl: string; apiKey: string; appUrl?: string; webhookSecret?: string },
+  log: Logger,
+): Promise<void> {
+  if (!config.appUrl || !config.webhookSecret) {
+    log.warn("watchdog Evolution: webhook não reaplicado por falta de URL/segredo", {});
+    return;
+  }
+  const { rows } = await pool.query<{
+    id: string;
+    external_session_name: string;
+    webhook_path_token: string | null;
+  }>(
+    `select id, external_session_name, webhook_path_token
+     from channel_sessions
+     where provider = 'evolution' and archived_at is null`,
+  );
+  const client = new EvolutionClient(config.baseUrl, config.apiKey);
+  for (const session of rows) {
+    if (!session.webhook_path_token) continue;
+    try {
+      await client.setWebhook(session.external_session_name, {
+        webhookUrl: `${config.appUrl.replace(/\/$/, "")}/api/v1/webhooks/evolution/${session.webhook_path_token}`,
+        webhookHeaders: { "x-atrios-evolution-secret": config.webhookSecret },
+      });
+    } catch (error) {
+      log.warn("watchdog Evolution: falha ao reaplicar webhook leve", {
+        channel_session_id: session.id,
+        error: (error instanceof Error ? error.message : String(error)).slice(0, 160),
+      });
+    }
+  }
+}
+
 export async function runEvolutionSessionWatchdogLoop(
   pool: pg.Pool,
-  config: { baseUrl: string; apiKey: string; intervalMs: number },
+  config: {
+    baseUrl: string;
+    apiKey: string;
+    intervalMs: number;
+    appUrl?: string;
+    webhookSecret?: string;
+  },
   log: Logger,
   signal: AbortSignal,
 ): Promise<void> {
+  // Reaplica uma vez no boot para converter também as conexões existentes ao
+  // webhook sem base64. Não repete a cada tick para não pressionar a Evolution.
+  await refreshEvolutionWebhooks(pool, config, log);
   while (!signal.aborted) {
     const reconciled = await reconcileEvolutionSessions(pool, config, log);
     if (reconciled > 0) log.info("watchdog Evolution: tick com ação", { reconciled });
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, config.intervalMs);
-      signal.addEventListener("abort", () => {
-        clearTimeout(timer);
-        resolve();
-      }, { once: true });
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
     });
   }
 }

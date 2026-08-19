@@ -89,6 +89,7 @@ function mediaFromMessage(message: Json): {
   mediaUrl?: string;
   mime?: string;
   pollVote?: boolean;
+  hasMedia?: boolean;
 } {
   const text = string(message.conversation) ?? string(object(message.extendedTextMessage).text);
   if (text) return { type: "chat", body: text };
@@ -130,6 +131,7 @@ function mediaFromMessage(message: Json): {
       body: string(item.caption) ?? string(item.fileName),
       mediaUrl,
       mime,
+      hasMedia: true,
     };
   }
   return { type: "chat" };
@@ -159,7 +161,7 @@ export function normalizeEvolutionMessage(data: Json): CommercialMessagePayload 
     to: fromMe ? remoteJid : undefined,
     body: parsed.body,
     type: parsed.type,
-    hasMedia: Boolean(parsed.mediaUrl),
+    hasMedia: Boolean(parsed.hasMedia),
     timestamp: timestampSeconds(data.messageTimestamp),
     mediaUrl: parsed.mediaUrl,
     mimetype: parsed.mime,
@@ -213,7 +215,12 @@ export async function dispatchEvolutionEvent(
         session: session.external_session_name,
         payload,
       };
-      await dispatchCommercialEvent(admin, { ...session, provider: "evolution" }, mapped, requestId);
+      await dispatchCommercialEvent(
+        admin,
+        { ...session, provider: "evolution" },
+        mapped,
+        requestId,
+      );
       continue;
     }
 

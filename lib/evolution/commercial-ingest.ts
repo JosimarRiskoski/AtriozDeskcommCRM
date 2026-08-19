@@ -907,7 +907,7 @@ async function handleInbound(
       } as never,
     );
 
-    if (mediaUrlOf(p)) {
+    if (p.hasMedia) {
       admin
         .rpc(
           "emit_event" as never,
@@ -1018,7 +1018,7 @@ async function handleOutboundFromUserPhone(
     },
   });
 
-  if (insertedOutbound?.id && mediaUrlOf(p)) {
+  if (insertedOutbound?.id && p.hasMedia) {
     admin
       .rpc(
         "emit_event" as never,

@@ -14,10 +14,11 @@
  * Sem imports de RUNTIME de propósito: o worker de teste do SIGKILL roda este
  * módulo direto no Node 22 (type stripping), que não resolve especificador .js→.ts.
  */
-import type { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 
-export type JobKind = 'inbound_turn' | 'followup_turn' | 'watchdog' | 'flywheel' | 'case_reply_turn';
-export type JobStatus = 'pending' | 'running' | 'done' | 'failed' | 'dead';
+export type JobKind =
+  "inbound_turn" | "followup_turn" | "watchdog" | "flywheel" | "case_reply_turn";
+export type JobStatus = "pending" | "running" | "done" | "failed" | "dead";
 
 export interface JobRow {
   id: string;
@@ -92,16 +93,16 @@ export async function enqueueJob(
         input.maxAttempts ?? null,
       ],
     );
-    return { job: mustRow(rows, 'job_queue insert'), deduped: false };
+    return { job: mustRow(rows, "job_queue insert"), deduped: false };
   } catch (err) {
     if (!isUniqueViolation(err) || input.sourceEventId == null) {
       throw err;
     }
     const { rows } = await db.query<JobRow>(
-      'select * from job_queue where organization_id = $1 and source_event_id = $2',
+      "select * from job_queue where organization_id = $1 and source_event_id = $2",
       [tenantId, input.sourceEventId],
     );
-    return { job: mustRow(rows, 'job_queue dedup'), deduped: true };
+    return { job: mustRow(rows, "job_queue dedup"), deduped: true };
   }
 }
 
@@ -111,6 +112,26 @@ export interface ClaimOptions {
   maxConcurrency: number;
   /** Máximo de jobs por rodada de claim (default: o próprio maxConcurrency). */
   batchSize?: number;
+}
+
+/**
+ * Milissegundos ate o proximo job pending ficar claimavel, ou null quando a
+ * fila esta vazia. Esta leitura usa o indice parcial de pending e evita abrir
+ * a transacao completa de claim a cada rodada ociosa.
+ */
+export async function millisecondsUntilNextJob(pool: Pool): Promise<number | null> {
+  const { rows } = await pool.query<{ milliseconds_until_next_job: number | null }>(
+    `select case
+              when min(run_after) is null then null
+              else least(
+                     greatest(extract(epoch from (min(run_after) - now())) * 1000, 0),
+                     86400000
+                   )::int
+            end as milliseconds_until_next_job
+       from job_queue
+      where status = 'pending'`,
+  );
+  return rows[0]?.milliseconds_until_next_job ?? null;
 }
 
 const CLAIM_SQL = `
@@ -149,8 +170,8 @@ const CLAIM_SQL = `
 export async function claimJobs(pool: Pool, opts: ClaimOptions): Promise<JobRow[]> {
   const client = await pool.connect();
   try {
-    await client.query('begin');
-    await client.query('select pg_advisory_xact_lock($1)', [CLAIM_LOCK_KEY]);
+    await client.query("begin");
+    await client.query("select pg_advisory_xact_lock($1)", [CLAIM_LOCK_KEY]);
     const running = await client.query<{ n: number }>(
       `select count(*)::int as n from job_queue where status = 'running'`,
     );
@@ -159,11 +180,11 @@ export async function claimJobs(pool: Pool, opts: ClaimOptions): Promise<JobRow[
       opts.maxConcurrency - (running.rows[0]?.n ?? 0),
     );
     if (free <= 0) {
-      await client.query('rollback');
+      await client.query("rollback");
       return [];
     }
     const { rows } = await client.query<JobRow>(CLAIM_SQL, [free, opts.workerId]);
-    await client.query('commit');
+    await client.query("commit");
     return rows;
   } catch (err) {
     await rollback(client, err);
@@ -190,7 +211,7 @@ export async function completeJob<T = void>(
 ): Promise<T> {
   const client = await pool.connect();
   try {
-    await client.query('begin');
+    await client.query("begin");
     const result = (inSameCommit ? await inSameCommit(client) : undefined) as T;
     const done = await client.query(
       `update job_queue set status = 'done', locked_by = null, locked_at = null
@@ -202,7 +223,7 @@ export async function completeJob<T = void>(
         `lease do job ${jobId} perdido no complete (re-claim pós visibility timeout?) — efeitos descartados`,
       );
     }
-    await client.query('commit');
+    await client.query("commit");
     return result;
   } catch (err) {
     await rollback(client, err);
@@ -323,8 +344,8 @@ export async function reapExpiredJobs(
     [opts.visibilityTimeoutMs],
   );
   return {
-    revived: rows.filter((r) => r.status === 'pending').length,
-    dead: rows.filter((r) => r.status === 'dead').length,
+    revived: rows.filter((r) => r.status === "pending").length,
+    dead: rows.filter((r) => r.status === "dead").length,
   };
 }
 
@@ -334,7 +355,7 @@ export async function reapExpiredJobs(
  */
 function normalizeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  return (message.split('\n', 1)[0] ?? '').slice(0, 300);
+  return (message.split("\n", 1)[0] ?? "").slice(0, 300);
 }
 
 function mustRow<T>(rows: T[], what: string): T {
@@ -347,9 +368,12 @@ function mustRow<T>(rows: T[], what: string): T {
 
 async function rollback(client: PoolClient, cause: unknown): Promise<void> {
   try {
-    await client.query('rollback');
+    await client.query("rollback");
   } catch (rollbackErr) {
-    throw new AggregateError([cause, rollbackErr], 'rollback falhou após erro na transação da fila');
+    throw new AggregateError(
+      [cause, rollbackErr],
+      "rollback falhou após erro na transação da fila",
+    );
   }
 }
 
@@ -357,9 +381,9 @@ async function rollback(client: PoolClient, cause: unknown): Promise<void> {
 // rodar direto no Node 22 — ver cabeçalho.
 function isUniqueViolation(err: unknown): boolean {
   return (
-    typeof err === 'object' &&
+    typeof err === "object" &&
     err !== null &&
-    'code' in err &&
-    (err as { code?: unknown }).code === '23505'
+    "code" in err &&
+    (err as { code?: unknown }).code === "23505"
   );
 }

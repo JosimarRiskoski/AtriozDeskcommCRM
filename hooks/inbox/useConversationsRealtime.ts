@@ -65,6 +65,8 @@ export function useConversationsRealtime(filters: ConversationsFilters, orgId: s
           schema: "public",
           table: "conversations",
           filter: `organization_id=eq.${orgId}`,
+          // O callback apenas invalida a lista; os detalhes chegam pela API.
+          select: ["id", "organization_id"],
         }
       : undefined,
     onChange,

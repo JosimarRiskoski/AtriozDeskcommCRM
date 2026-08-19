@@ -6,10 +6,12 @@ describe("EvolutionClient webhook configuration", () => {
   beforeEach(() => vi.restoreAllMocks());
   afterEach(() => vi.restoreAllMocks());
 
-  it("creates an instance with the secure unified webhook and media payload enabled", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ instance: { state: "close" } }), { status: 200 }),
-    );
+  it("creates an instance with a lightweight secure unified webhook", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ instance: { state: "close" } }), { status: 200 }),
+      );
     const client = new EvolutionClient("http://evolution:8080", "secret");
     await client.createInstance({
       instanceName: "crm-1",
@@ -33,16 +35,16 @@ describe("EvolutionClient webhook configuration", () => {
       webhook: {
         enabled: true,
         byEvents: false,
-        base64: true,
+        base64: false,
         headers: { "x-atrios-evolution-secret": "webhook-secret" },
       },
     });
   });
 
   it("preserves the Evolution v2 webhook field names when updating an instance", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({}), { status: 200 }),
-    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
     const client = new EvolutionClient("http://evolution:8080", "secret");
     await client.setWebhook("crm-1", {
       webhookUrl: "https://crm.example.com/api/v1/webhooks/evolution/token",
@@ -58,7 +60,7 @@ describe("EvolutionClient webhook configuration", () => {
     );
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body).toMatchObject({
-      webhook: { base64: true, enabled: true, byEvents: false },
+      webhook: { base64: false, enabled: true, byEvents: false },
     });
   });
 });
@@ -78,9 +80,11 @@ describe("Evolution helpers", () => {
   });
 
   it("reads the QR returned by Evolution v2 in its base64 field", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ base64: "data:image/png;base64,QR" }), { status: 200 }),
-    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ base64: "data:image/png;base64,QR" }), { status: 200 }),
+      );
     const client = new EvolutionClient("http://evolution:8080", "secret");
 
     const connection = await client.connect("crm-1");
@@ -114,10 +118,9 @@ describe("Evolution helpers", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response("not found", { status: 404 }))
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify([{ name: "evo_org_123", connectionStatus: "open" }]),
-          { status: 200 },
-        ),
+        new Response(JSON.stringify([{ name: "evo_org_123", connectionStatus: "open" }]), {
+          status: 200,
+        }),
       );
     const client = new EvolutionClient("http://evolution:8080", "secret");
 
