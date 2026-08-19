@@ -37,7 +37,11 @@ export async function reconcileEvolutionSessions(
       if (status === session.status) continue;
       await pool.query(
         `update channel_sessions
-         set status = $2, last_health_check_at = now(), last_status_change_at = now(), updated_at = now()
+         set status = $2,
+             status_reason = case when $2 = 'WORKING' then null else status_reason end,
+             last_health_check_at = now(),
+             last_status_change_at = now(),
+             updated_at = now()
          where id = $1`,
         [session.id, status],
       );

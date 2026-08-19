@@ -1076,7 +1076,11 @@ async function handleSessionStatus(
   if (!allowed.has(status)) return;
   const now = new Date().toISOString();
 
-  const update: Record<string, unknown> = { status, last_status_change_at: now };
+  const update: Record<string, unknown> = {
+    status,
+    last_status_change_at: now,
+  };
+  if (status === "WORKING") update.status_reason = null;
   if (status === "WORKING" && session.warmup_started_at && !session.is_warmup_complete) {
     update.is_warmup_complete = true;
     update.warmup_completed_at = now;
