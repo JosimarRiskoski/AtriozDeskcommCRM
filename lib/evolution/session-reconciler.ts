@@ -22,8 +22,13 @@ export async function reconcileEvolutionSessions(
   config: { baseUrl: string; apiKey: string },
   log: Logger,
 ): Promise<number> {
-  const { rows } = await pool.query<{ id: string; external_session_name: string; status: string }>(
-    `select id, external_session_name, status
+  const { rows } = await pool.query<{
+    id: string;
+    external_session_name: string;
+    status: string;
+    status_reason: string | null;
+  }>(
+    `select id, external_session_name, status, status_reason
      from channel_sessions
      where provider = 'evolution' and archived_at is null`,
   );
@@ -34,7 +39,8 @@ export async function reconcileEvolutionSessions(
     try {
       const remote = await client.connectionState(session.external_session_name);
       const status = crmStatus(remote.state);
-      if (status === session.status) continue;
+      const needsReasonCleanup = status === "WORKING" && session.status_reason !== null;
+      if (status === session.status && !needsReasonCleanup) continue;
       await pool.query(
         `update channel_sessions
          set status = $2,
