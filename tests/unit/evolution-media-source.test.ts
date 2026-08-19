@@ -22,6 +22,11 @@ describe("fetchEvolutionMedia", () => {
     expect(result.mime).toBe("audio/ogg");
   });
 
+  it("aceita a variante ZIP usada por clientes Windows", async () => {
+    const result = await fetchEvolutionMedia(dataUrl("application/x-zip-compressed"));
+    expect(result.mime).toBe("application/x-zip-compressed");
+  });
+
   it("recusa formato sem suporte", async () => {
     await expect(fetchEvolutionMedia(dataUrl("application/x-executable"))).rejects.toThrow(
       "evolution_media_unsupported_media_type",

@@ -11,6 +11,10 @@ describe("validateOutboundMedia", () => {
     expect(validateOutboundMedia("audio/webm", 1000)).toEqual({ ok: true, kind: "audio" });
     expect(validateOutboundMedia("application/pdf", 1000)).toEqual({ ok: true, kind: "document" });
     expect(validateOutboundMedia("text/csv", 1000)).toEqual({ ok: true, kind: "document" });
+    expect(validateOutboundMedia("application/x-zip-compressed", 1000)).toEqual({
+      ok: true,
+      kind: "document",
+    });
   });
   it("rejeita mime não suportado", () => {
     const r = validateOutboundMedia("application/x-msdownload", 1000);

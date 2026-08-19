@@ -41,6 +41,7 @@ const MIME_EXT: Record<string, string> = {
   "text/plain": "txt",
   "text/csv": "csv",
   "application/zip": "zip",
+  "application/x-zip-compressed": "zip",
 };
 
 export function extFromMime(mime: string): string {
