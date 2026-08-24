@@ -192,15 +192,14 @@ export function KanbanBoard({
         after?.position_in_stage ?? null,
       );
 
-      if (Number.isNaN(newPosition)) {
-        // Collision — Wave 8 will handle global rebalance. For now, abort silently.
-        return;
-      }
-
       moveCard.mutate({
         leadId: lead.id,
         stageId: destStageId,
-        positionInStage: newPosition,
+        // O servidor recebe também o índice e normaliza atomicamente toda a
+        // etapa. O valor continua no contrato para compatibilidade durante o
+        // deploy, mas deixa de ser a fonte da verdade quando houver colisão.
+        positionInStage: Number.isNaN(newPosition) ? (destination.index + 1) * 1000 : newPosition,
+        targetIndex: destination.index,
         expectedUpdatedAt: lead.updated_at,
       });
     },

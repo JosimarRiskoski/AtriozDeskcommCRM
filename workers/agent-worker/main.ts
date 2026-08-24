@@ -55,6 +55,7 @@ import {
   type JobRow,
 } from "@/lib/agent-engine/queue/queue";
 import { runQueueLoop } from "@/lib/agent-engine/queue/loop";
+import { cleanupProcessedWebhookLogs } from "@/lib/maintenance/webhook-log-retention";
 
 export interface JobHandlerContext {
   workerId: string;
@@ -185,6 +186,21 @@ export async function startWorker(
       })
       .catch((err: unknown) => log.error("enforceHolds falhou", { error: errMsg(err) }));
   }, env.QUEUE_REAPER_INTERVAL_MS);
+
+  // Retencao diaria, em lotes pequenos. Somente webhook_events_log com status
+  // processed entra aqui; erros e dados comerciais ficam preservados.
+  const runWebhookLogRetention = () => {
+    cleanupProcessedWebhookLogs(pool)
+      .then(({ deleted, batches }) => {
+        if (deleted > 0) log.info("retencao de logs de webhook concluida", { deleted, batches });
+      })
+      .catch((err: unknown) =>
+        log.error("retencao de logs de webhook falhou", { error: errMsg(err) }),
+      );
+  };
+  const webhookRetentionTimer = setInterval(runWebhookLogRetention, 24 * 60 * 60 * 1000);
+  webhookRetentionTimer.unref();
+  runWebhookLogRetention();
 
   const loopsAbort = new AbortController();
 
@@ -330,6 +346,7 @@ export async function startWorker(
     });
     clearInterval(reaperTimer);
     clearInterval(holdsTimer);
+    clearInterval(webhookRetentionTimer);
     server.close();
     server.closeIdleConnections();
     loopsAbort.abort();

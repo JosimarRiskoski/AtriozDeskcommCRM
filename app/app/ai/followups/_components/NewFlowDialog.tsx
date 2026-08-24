@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCreateFollowupFlow } from "@/hooks/followup/useFollowupFlows";
+import { useCreateFollowupFlow, useFollowupFlows } from "@/hooks/followup/useFollowupFlows";
 import { FOLLOWUP_PRESETS, type FollowupPresetId } from "@/lib/followup/presets";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +29,11 @@ export function NewFlowDialog({ open, onOpenChange }: Props) {
   const [name, setName] = useState(defaultPreset.suggestedName);
   const [presetId, setPresetId] = useState<FollowupPresetId>(defaultPreset.id);
   const create = useCreateFollowupFlow();
+  const flows = useFollowupFlows();
+  const existing = flows.data?.find(
+    (flow) =>
+      flow.name.trim().toLocaleLowerCase("pt-BR") === name.trim().toLocaleLowerCase("pt-BR"),
+  );
 
   const reset = () => {
     setName(defaultPreset.suggestedName);
@@ -37,6 +42,7 @@ export function NewFlowDialog({ open, onOpenChange }: Props) {
 
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (existing) return;
     create.mutate(
       { name: name.trim(), presetId },
       {
@@ -103,6 +109,32 @@ export function NewFlowDialog({ open, onOpenChange }: Props) {
               maxLength={80}
               required
             />
+            {existing ? (
+              <div className="space-y-2 rounded-md border border-warning bg-warning-bg p-3 text-sm text-warning-fg">
+                <p>Já existe um fluxo com esse nome.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      onOpenChange(false);
+                      router.push(`/app/ai/followups/${existing.id}`);
+                    }}
+                  >
+                    Abrir existente
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setName(`${name.trim()} — cópia`)}
+                  >
+                    Criar uma cópia
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <DialogFooter>
@@ -114,7 +146,10 @@ export function NewFlowDialog({ open, onOpenChange }: Props) {
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={create.isPending || name.trim().length === 0}>
+            <Button
+              type="submit"
+              disabled={create.isPending || name.trim().length === 0 || Boolean(existing)}
+            >
               {create.isPending ? "Criando…" : "Criar e personalizar"}
             </Button>
           </DialogFooter>

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sparkle } from "@/lib/ui/icons";
 import { useDraftReply } from "@/hooks/inbox/useDraftReply";
+import { toast } from "sonner";
 
 interface Props {
   conversationId: string;
@@ -28,7 +29,10 @@ export function DraftReplyButton({ conversationId, onDraft, disabled }: Props) {
             disabled={disabled || mutation.isPending}
             onClick={() => {
               mutation.mutate(conversationId, {
-                onSuccess: (res) => onDraft(res.data.draft),
+                onSuccess: (res) => {
+                  onDraft(res.data.draft);
+                  toast.success("Sugestão inserida no campo de mensagem. Revise antes de enviar.");
+                },
               });
             }}
           >

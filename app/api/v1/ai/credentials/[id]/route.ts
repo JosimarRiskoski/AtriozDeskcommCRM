@@ -46,7 +46,7 @@ export async function DELETE(
   const { data: linked, error: linkErr } = await admin
     .from("ai_agent_versions")
     .select(
-      "id, agent_id, ai_agents!ai_agent_versions_agent_id_fkey!inner(id, archived_at, published_version_id)",
+      "id, agent_id, status, ai_agents!ai_agent_versions_agent_id_fkey!inner(id, archived_at, published_version_id)",
     )
     .eq("credential_id", id)
     .eq("organization_id", activeOrg.orgId);
@@ -58,25 +58,47 @@ export async function DELETE(
   type LinkedVersion = {
     id: string;
     agent_id: string;
+    status: string;
     ai_agents:
       | { id: string; archived_at: string | null; published_version_id: string | null }
       | { id: string; archived_at: string | null; published_version_id: string | null }[]
       | null;
   };
 
-  const inUse = (linked ?? []).some((row: LinkedVersion) => {
+  const linkedRows = (linked ?? []) as LinkedVersion[];
+  const publishedReferences = linkedRows.filter((row) => {
     const agent = Array.isArray(row.ai_agents) ? row.ai_agents[0] : row.ai_agents;
-    if (!agent || agent.archived_at) return false;
+    if (!agent) return false;
     return agent.published_version_id === row.id;
   });
 
-  if (inUse) {
+  if (publishedReferences.length > 0) {
     return fail(
       "credential_in_use",
-      "Credential é usada por uma versão publicada de agent. Despublique antes de deletar.",
+      `Credencial usada por ${publishedReferences.length} versão(ões) publicada(s). Troque a credencial do agente e publique a nova versão antes de remover.`,
       409,
       { requestId },
     );
+  }
+
+  // Rascunhos antigos podem continuar apontando para uma chave que não é mais
+  // usada por nenhum agente publicado. Desvinculá-los torna o número “Em uso por 0”
+  // verdadeiro também no banco e evita expor ao usuário um erro cru de FK.
+  const draftIds = linkedRows.filter((row) => row.status === "draft").map((row) => row.id);
+  if (draftIds.length > 0) {
+    const { error: unlinkErr } = await admin
+      .from("ai_agent_versions")
+      .update({ credential_id: null })
+      .eq("organization_id", activeOrg.orgId)
+      .in("id", draftIds);
+    if (unlinkErr) {
+      return fail(
+        "credential_in_use",
+        "A credencial ainda está ligada a rascunhos que não puderam ser atualizados.",
+        409,
+        { requestId },
+      );
+    }
   }
 
   const { error: delErr } = await admin

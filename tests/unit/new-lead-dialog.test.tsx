@@ -84,7 +84,7 @@ describe("NewLeadDialog no Inbox", () => {
     await screen.findByRole("list", { name: "Etapa 2 de 3" });
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByRole("list", { name: "Etapa 3 de 3" });
-    fireEvent.click(screen.getByRole("button", { name: "Criar oportunidade" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar e criar" }));
 
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
     expect(createMock).toHaveBeenCalledWith(
@@ -100,5 +100,36 @@ describe("NewLeadDialog no Inbox", () => {
       }),
     );
     expect(successMock).toHaveBeenCalled();
+  });
+
+  it("não cria ao pressionar Enter antes da confirmação final", async () => {
+    render(
+      <NewLeadDialog
+        open
+        onOpenChange={vi.fn()}
+        pipelineId={PIPELINE_ID}
+        stages={[
+          {
+            id: STAGE_ID,
+            organization_id: "org-1",
+            pipeline_id: PIPELINE_ID,
+            name: "Interesse",
+            slug: "interesse",
+            position: 1,
+            color: null,
+            is_won: false,
+            is_lost: false,
+            is_archived: false,
+            expected_duration_hours: null,
+          },
+        ]}
+        contactId={CONTACT_ID}
+        initialTitle="Emerson Hegen"
+      />,
+    );
+
+    fireEvent.submit(screen.getByRole("list", { name: "Etapa 1 de 3" }).closest("form")!);
+    await screen.findByRole("list", { name: "Etapa 2 de 3" });
+    expect(createMock).not.toHaveBeenCalled();
   });
 });

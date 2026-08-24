@@ -5779,6 +5779,16 @@ export type Database = {
         Args: { p_from: string; p_org: string; p_owner?: string; p_to: string };
         Returns: Json;
       };
+      fn_ai_usage_summary: {
+        Args: {
+          p_agent_id?: string | null;
+          p_from: string;
+          p_invocation_kind?: string | null;
+          p_organization_id: string;
+          p_to: string;
+        };
+        Returns: Json;
+      };
       fn_can_view_conversation: {
         Args: { p_assigned_to_user_id: string; p_org: string };
         Returns: boolean;
@@ -5844,6 +5854,15 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      fn_move_crm_lead_ordered: {
+        Args: {
+          p_expected_updated_at: string;
+          p_lead_id: string;
+          p_stage_id: string;
+          p_target_index: number;
+        };
+        Returns: string;
       };
       fn_conversation_assign: {
         Args: {

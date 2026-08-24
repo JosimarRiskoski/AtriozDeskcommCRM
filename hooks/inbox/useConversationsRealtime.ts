@@ -1,10 +1,9 @@
 "use client";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { realtimeFallbackIntervalMs } from "@/hooks/realtime/fallback-policy";
 import { apiClient } from "@/lib/api/client";
-import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Conversation } from "@/lib/types/messaging";
 
 export interface ContactSummary {
@@ -51,11 +50,25 @@ interface ListResponse {
 
 export function useConversationsRealtime(filters: ConversationsFilters, orgId: string | null) {
   const qc = useQueryClient();
-  const queryKey = ["conversations", filters] as const;
+  const queryKey = useMemo(() => ["conversations", filters] as const, [filters]);
+  const invalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onChange = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ["conversations"] });
-  }, [qc]);
+    // A Evolution pode entregar vários eventos para a mesma mensagem (upsert,
+    // status, recibo). Coalescer evita uma nova leitura completa para cada um.
+    if (invalidateTimer.current) return;
+    invalidateTimer.current = setTimeout(() => {
+      invalidateTimer.current = null;
+      void qc.invalidateQueries({ queryKey, exact: true, refetchType: "active" });
+    }, 600);
+  }, [qc, queryKey]);
+
+  useEffect(
+    () => () => {
+      if (invalidateTimer.current) clearTimeout(invalidateTimer.current);
+    },
+    [],
+  );
 
   const realtime = useRealtimeChannel({
     name: orgId ? `inbox-${orgId}` : "inbox-disabled",
@@ -86,17 +99,15 @@ export function useConversationsRealtime(filters: ConversationsFilters, orgId: s
       if (filters.tag) qs.set("tag", filters.tag);
       if (pageParam) qs.set("cursor", pageParam);
       qs.set("limit", "50");
-      try {
-        return await apiClient.get<ListResponse>(`/api/v1/conversations?${qs.toString()}`);
-      } catch (err) {
-        showApiError(err);
-        throw err;
-      }
+      return apiClient.get<ListResponse>(`/api/v1/conversations?${qs.toString()}`, {
+        timeoutMs: 20_000,
+      });
     },
     getNextPageParam: (last) =>
       last.meta?.has_more && last.meta.cursor ? last.meta.cursor : undefined,
+    placeholderData: keepPreviousData,
     // O Realtime é o caminho principal. A conferência periódica é apenas uma
-    // rede de segurança: 60s quando saudável e 10s durante degradação. O valor
+    // rede de segurança: 60s quando saudável e 30s durante degradação. O valor
     // anterior (2s) fazia 43.200 leituras/dia por aba apenas nesta consulta.
     refetchInterval: () => realtimeFallbackIntervalMs(realtime.status),
     refetchIntervalInBackground: false,

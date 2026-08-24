@@ -17,7 +17,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { aggregateUsage, type InvocationRow } from "@/lib/ai/usage/aggregate";
+import type { UsagePayload } from "@/lib/ai/usage/aggregate";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +46,9 @@ function parseDayUtc(s: string): Date {
 function resolveRange(qs: { from?: string; to?: string }): { from: Date; to: Date } {
   const now = new Date();
   const to = qs.to ? parseDayUtc(qs.to) : startOfUtcDay(now);
-  let from = qs.from ? parseDayUtc(qs.from) : startOfUtcDay(new Date(now.getTime() - 29 * 86_400_000));
+  let from = qs.from
+    ? parseDayUtc(qs.from)
+    : startOfUtcDay(new Date(now.getTime() - 29 * 86_400_000));
 
   // Hard-cap range to MAX_RANGE_DAYS.
   const diffDays = Math.round((to.getTime() - from.getTime()) / 86_400_000);
@@ -66,9 +68,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const { org: activeOrg } = authz;
 
-  const parsed = querySchema.safeParse(
-    Object.fromEntries(req.nextUrl.searchParams.entries()),
-  );
+  const parsed = querySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams.entries()));
   if (!parsed.success) {
     return fail("validation_failed", "Filtros inválidos.", 422, {
       requestId,
@@ -82,71 +82,19 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const supabase = await createClient();
 
-  // ---- 1. ai_invocations rows for the range/filters ------------------------
-  let invQ = supabase
-    .from("ai_invocations")
-    .select(
-      "created_at, invocation_kind, cost_cents, prompt_tokens, completion_tokens, total_tokens, latency_ms",
-    )
-    .eq("organization_id", activeOrg.orgId)
-    .gte("created_at", fromIso)
-    .lte("created_at", toIso)
-    .order("created_at", { ascending: true })
-    .limit(50_000);
-
-  if (parsed.data.agent_id) invQ = invQ.eq("agent_id", parsed.data.agent_id);
-  if (parsed.data.invocation_kind) invQ = invQ.eq("invocation_kind", parsed.data.invocation_kind);
-
-  const { data: invRows, error: invErr } = await invQ;
-  if (invErr) {
-    console.warn("[ai-usage] ai_invocations query failed", { error: invErr.message });
-    return fail("internal_error", "Erro ao agregar invocations.", 500, { requestId });
+  const { data, error } = await supabase.rpc("fn_ai_usage_summary", {
+    p_organization_id: activeOrg.orgId,
+    p_from: fromIso,
+    p_to: toIso,
+    p_agent_id: parsed.data.agent_id ?? null,
+    p_invocation_kind: parsed.data.invocation_kind ?? null,
+  });
+  if (error || !data) {
+    console.warn("[ai-usage] server aggregation failed", { error: error?.message });
+    return fail("internal_error", "Não foi possível calcular o uso da IA.", 500, { requestId });
   }
 
-  // ---- 2. inbound messages per day ----------------------------------------
-  const dailyInbounds = new Map<string, number>();
-  const { data: inboundRows, error: inboundErr } = await supabase
-    .from("messages")
-    .select("created_at")
-    .eq("organization_id", activeOrg.orgId)
-    .eq("direction", "inbound")
-    .gte("created_at", fromIso)
-    .lte("created_at", toIso)
-    .limit(100_000);
-  if (inboundErr) {
-    console.warn("[ai-usage] inbound messages query failed", { error: inboundErr.message });
-  } else {
-    for (const r of inboundRows ?? []) {
-      const day = (r as { created_at: string }).created_at.slice(0, 10);
-      dailyInbounds.set(day, (dailyInbounds.get(day) ?? 0) + 1);
-    }
-  }
-
-  // ---- 3. handoffs per day (event_log: ai.handoff_triggered) --------------
-  const dailyHandoffs = new Map<string, number>();
-  const { data: handoffRows, error: handoffErr } = await supabase
-    .from("event_log")
-    .select("created_at")
-    .eq("organization_id", activeOrg.orgId)
-    .eq("event_type", "ai.handoff_triggered")
-    .gte("created_at", fromIso)
-    .lte("created_at", toIso)
-    .limit(100_000);
-  if (handoffErr) {
-    console.warn("[ai-usage] handoff events query failed", { error: handoffErr.message });
-  } else {
-    for (const r of handoffRows ?? []) {
-      const day = (r as { created_at: string }).created_at.slice(0, 10);
-      dailyHandoffs.set(day, (dailyHandoffs.get(day) ?? 0) + 1);
-    }
-  }
-
-  const payload = aggregateUsage(
-    (invRows ?? []) as InvocationRow[],
-    dailyInbounds,
-    dailyHandoffs,
-    range,
-  );
+  const payload = data as unknown as UsagePayload;
 
   return ok(payload, { requestId });
 }

@@ -372,8 +372,17 @@ export function CampaignsClient({
           </select>
         </label>
         {source === "csv" ? (
-          <label className="grid gap-1 text-sm">
-            CSV autorizado
+          <div className="grid gap-1 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span>CSV autorizado</span>
+              <a
+                href="/modelos/modelo-campanha.csv"
+                download="modelo-campanha-atrioz.csv"
+                className="text-xs font-medium text-primary underline underline-offset-2"
+              >
+                Baixar modelo CSV
+              </a>
+            </div>
             <input
               type="file"
               accept=".csv,text/csv"
@@ -383,7 +392,10 @@ export function CampaignsClient({
               }}
               className={field}
             />
-          </label>
+            <span className="text-xs text-muted-foreground">
+              Colunas: nome, telefone e consentimento. O telefone deve incluir DDI e DDD.
+            </span>
+          </div>
         ) : (
           <div className="grid gap-3 rounded-md border p-3 text-sm">
             <label className="grid gap-1">

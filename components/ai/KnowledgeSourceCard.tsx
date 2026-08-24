@@ -39,7 +39,7 @@ const TYPE_META: Record<
   catalog: {
     label: "Catálogo",
     Icon: Package,
-    description: "Produtos sincronizados do e-commerce.",
+    description: "Itens e serviços sincronizados da operação.",
   },
 };
 
@@ -58,7 +58,14 @@ function formatRelative(iso: string | null): string {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
-export function KnowledgeSourceCard({ source, type, onReindex, onConfigure, onEdit, isReindexing }: Props) {
+export function KnowledgeSourceCard({
+  source,
+  type,
+  onReindex,
+  onConfigure,
+  onEdit,
+  isReindexing,
+}: Props) {
   const meta = TYPE_META[type];
   const Icon = meta.Icon;
 
@@ -77,12 +84,7 @@ export function KnowledgeSourceCard({ source, type, onReindex, onConfigure, onEd
           <p className="text-sm text-text-muted">Nenhuma fonte configurada.</p>
         </CardContent>
         <CardFooter>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!onConfigure}
-            onClick={onConfigure}
-          >
+          <Button variant="secondary" size="sm" disabled={!onConfigure} onClick={onConfigure}>
             Configurar {meta.label}
           </Button>
         </CardFooter>
@@ -93,16 +95,12 @@ export function KnowledgeSourceCard({ source, type, onReindex, onConfigure, onEd
   const derived = deriveBadgeStatus(source);
   const reindexBlocked = derived === "archived" || isReindexing;
   const showError = derived === "failed" && source.last_index_error;
+  const showPartialDiagnostic = derived === "partial" || source.chunks_count === 0;
 
   const extraButton = (() => {
     if (type === "faq") {
       return (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onEdit}
-          disabled={!onEdit}
-        >
+        <Button variant="ghost" size="sm" onClick={onEdit} disabled={!onEdit}>
           Editar conteúdo
         </Button>
       );
@@ -143,20 +141,28 @@ export function KnowledgeSourceCard({ source, type, onReindex, onConfigure, onEd
           <span>{source.chunks_count}</span>
         </div>
         {showError ? (
-          <details className="rounded-md border border-error-bg bg-error-bg/30 p-2 text-xs text-error-fg">
+          <details className="bg-error-bg/30 rounded-md border border-error-bg p-2 text-xs text-error-fg">
             <summary className="cursor-pointer font-medium">Detalhes do erro</summary>
             <p className="mt-1 whitespace-pre-wrap break-words">{source.last_index_error}</p>
           </details>
         ) : null}
+        {showPartialDiagnostic ? (
+          <div className="border-warning-border bg-warning-bg/20 rounded-md border p-2 text-xs text-warning-fg">
+            {source.chunks_count === 0
+              ? "Nenhum trecho foi aceito. Revise o conteúdo ou abra os detalhes da última indexação antes de usar esta fonte."
+              : "A indexação terminou parcialmente. Parte do conteúdo não pôde ser preparada."}
+            {source.last_index_error ? (
+              <p className="mt-1 whitespace-pre-wrap break-words">{source.last_index_error}</p>
+            ) : null}
+          </div>
+        ) : null}
       </CardContent>
       <CardFooter className="flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={reindexBlocked}
-          onClick={onReindex}
-        >
-          <RefreshCw className={`mr-2 h-3.5 w-3.5 ${isReindexing ? "animate-spin" : ""}`} aria-hidden />
+        <Button variant="secondary" size="sm" disabled={reindexBlocked} onClick={onReindex}>
+          <RefreshCw
+            className={`mr-2 h-3.5 w-3.5 ${isReindexing ? "animate-spin" : ""}`}
+            aria-hidden
+          />
           {isReindexing ? "Reindexando..." : "Re-indexar"}
         </Button>
         {extraButton}

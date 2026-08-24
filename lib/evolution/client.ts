@@ -57,6 +57,8 @@ export type EvolutionMediaResult = {
   fileName?: string;
 };
 
+export type EvolutionGroup = { chatId: string; name: string };
+
 function asObject(value: unknown): Json {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : {};
 }
@@ -302,6 +304,32 @@ export class EvolutionClient {
       method: "POST",
       body: JSON.stringify({ numbers }),
     });
+  }
+
+  async fetchAllGroups(instanceName: string): Promise<EvolutionGroup[]> {
+    const result = await this.request<unknown>(
+      `/group/fetchAllGroups/${encodeURIComponent(instanceName)}?getParticipants=false`,
+    );
+    const root = asObject(result);
+    const rows = Array.isArray(result)
+      ? result
+      : Array.isArray(root.data)
+        ? root.data
+        : Array.isArray(root.groups)
+          ? root.groups
+          : [];
+    const unique = new Map<string, EvolutionGroup>();
+    for (const rawRow of rows) {
+      const row = asObject(rawRow);
+      const id = row.id ?? row.remoteJid ?? row.jid;
+      if (typeof id !== "string" || !id.endsWith("@g.us")) continue;
+      const subject = row.subject ?? row.name;
+      unique.set(id, {
+        chatId: id,
+        name: typeof subject === "string" && subject.trim() ? subject.trim() : id,
+      });
+    }
+    return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }
 
   async markMessagesAsRead(instanceName: string, keys: EvolutionMessageKey[]): Promise<void> {

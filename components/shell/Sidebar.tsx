@@ -2,7 +2,27 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTransition } from "react";
-import { Kanban, Users, UsersThree, Gear, CaretDoubleLeft, CaretDoubleRight, Inbox, ScalesSimple, Robot, Brain, PlugsConnected, ChartBar, WebhooksLogo, FlowArrow, FileText, ClockCountdown, PaperPlaneTilt, ChatsCircle, CalendarBlank } from "@/lib/ui/icons";
+import {
+  Kanban,
+  Users,
+  UsersThree,
+  Gear,
+  CaretDoubleLeft,
+  CaretDoubleRight,
+  Inbox,
+  ScalesSimple,
+  Robot,
+  Brain,
+  PlugsConnected,
+  ChartBar,
+  WebhooksLogo,
+  FlowArrow,
+  FileText,
+  ClockCountdown,
+  PaperPlaneTilt,
+  ChatsCircle,
+  CalendarBlank,
+} from "@/lib/ui/icons";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { toggleSidebar } from "@/app/actions/shell/toggleSidebar";
@@ -31,10 +51,21 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/app/metrics", label: "Desempenho", icon: ChartBar },
   { href: "/app/templates", label: "Templates", icon: FileText },
   { href: "/app/campaigns", label: "Campanhas", icon: PaperPlaneTilt },
-  { href: "/app/lgpd/requests", label: "LGPD", icon: ScalesSimple, permission: "lgpd.execute_redact" },
+  {
+    href: "/app/lgpd/requests",
+    label: "LGPD",
+    icon: ScalesSimple,
+    permission: "lgpd.execute_redact",
+  },
   { href: "/app/ai/agents", label: "Agentes IA", icon: Robot, permission: "ai.agents.view" },
   { href: "/app/ai/followups", label: "Follow-ups", icon: FlowArrow, permission: "ai.agents.view" },
-  { href: "/app/ai/cases", label: "Casos humanos", icon: ChatsCircle, permission: "ai.agents.view", humanCasesBadge: true },
+  {
+    href: "/app/ai/cases",
+    label: "Casos humanos",
+    icon: ChatsCircle,
+    permission: "ai.agents.view",
+    humanCasesBadge: true,
+  },
   { href: "/app/ai/memory", label: "Memória da IA", icon: Brain, permission: "ai.memory.view" },
   { href: "/app/webhooks", label: "Webhooks", icon: WebhooksLogo, permission: "webhooks.manage" },
   { href: "/app/settings", label: "Configurações", icon: Gear },
@@ -57,7 +88,12 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         collapsed ? "w-16" : "w-60",
       )}
     >
-      <div className={cn("flex items-center border-b px-4 h-14", collapsed ? "justify-center" : "justify-start")}>
+      <div
+        className={cn(
+          "flex h-14 items-center border-b px-4",
+          collapsed ? "justify-center" : "justify-start",
+        )}
+      >
         {brand.logoUrl && !collapsed ? (
           // <img> em vez de next/image de propósito: a URL vem do .env de quem hospeda,
           // e next/image exige allowlist de domínios fechada em build — a imagem
@@ -89,7 +125,18 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           if (item.permission === "webhooks.manage") return canWebhooks;
           return true;
         }).map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+          const settingsAliases = ["/app/system-health", "/app/deployment-checklist", "/app/audit"];
+          const isAiSettingsRoute =
+            pathname.startsWith("/app/ai/") &&
+            !pathname.startsWith("/app/ai/followups") &&
+            !pathname.startsWith("/app/ai/cases") &&
+            !pathname.startsWith("/app/ai/memory");
+          const isActive =
+            pathname === item.href ||
+            pathname.startsWith(item.href + "/") ||
+            (item.href === "/app/settings" &&
+              settingsAliases.some((route) => pathname.startsWith(route))) ||
+            (item.href === "/app/ai/agents" && isAiSettingsRoute);
           const Icon = item.icon;
           return (
             <Link
@@ -99,7 +146,9 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                isActive
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent/50 text-muted-foreground hover:text-foreground",
                 collapsed && "justify-center px-2",
               )}
             >
@@ -121,12 +170,16 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           onClick={() => startTransition(() => toggleSidebar(collapsed))}
           disabled={isPending}
           className={cn(
-            "flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+            "hover:bg-accent/50 flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:text-foreground",
             collapsed && "justify-center px-2",
           )}
           aria-label={collapsed ? "Expandir sidebar" : "Recolher sidebar"}
         >
-          {collapsed ? <CaretDoubleRight size={14} aria-hidden /> : <CaretDoubleLeft size={14} aria-hidden />}
+          {collapsed ? (
+            <CaretDoubleRight size={14} aria-hidden />
+          ) : (
+            <CaretDoubleLeft size={14} aria-hidden />
+          )}
           {!collapsed && <span>Recolher</span>}
         </button>
       </div>
@@ -138,5 +191,15 @@ function HumanCasesBadge({ collapsed }: { collapsed: boolean }) {
   const { data } = useCases({ status: "open" });
   const count = data?.open_count ?? 0;
   if (count === 0) return null;
-  return <span aria-label={`${count} casos humanos abertos`} className={cn("rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold text-destructive-foreground", collapsed ? "absolute right-0.5 top-0.5" : "ml-auto")}>{count > 99 ? "99+" : count}</span>;
+  return (
+    <span
+      aria-label={`${count} casos humanos abertos`}
+      className={cn(
+        "rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold text-destructive-foreground",
+        collapsed ? "absolute right-0.5 top-0.5" : "ml-auto",
+      )}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
 }

@@ -13,7 +13,23 @@ import type { Conversation } from "@/lib/types/messaging";
 
 type SB = SupabaseClient;
 
-const SELECT_COLS = `
+// A listagem do Inbox é a rota mais acessada do CRM. Não carregue nela JSONs
+// potencialmente grandes (metadata, consent e source_metadata): além de não
+// serem usados nos cartões, eles multiplicavam o Egress a cada atualização em
+// tempo real. O detalhe continua completo quando uma conversa é selecionada.
+const LIST_SELECT_COLS = `
+  id, organization_id, contact_id, channel_session_id, channel, status,
+  status_changed_at, assigned_to_user_id, assignee_kind, assigned_at, last_inbound_at,
+  last_outbound_at, last_message_at, last_message_preview,
+  unread_count_for_assignee, tags,
+  snooze_until, bot_silenced_until, ai_control_mode,
+  selected_agent_id, agent_selection_mode, agent_selection_reason,
+  agent_selected_at, agent_selected_by_user_id, created_at, updated_at,
+  contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, blocked_reason, blocked_at, source),
+  channel_sessions:channel_session_id (id, display_name, display_color, phone_number, external_session_name, archived_at, status)
+`;
+
+const DETAIL_SELECT_COLS = `
   id, organization_id, contact_id, channel_session_id, channel, status,
   status_changed_at, assigned_to_user_id, assignee_kind, assigned_at, last_inbound_at,
   last_outbound_at, last_message_at, last_message_preview,
@@ -22,7 +38,7 @@ const SELECT_COLS = `
   selected_agent_id, agent_selection_mode, agent_selection_reason,
   agent_selected_at, agent_selected_by_user_id, created_at, updated_at,
   contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, blocked_reason, blocked_at, consent, source, source_metadata),
-  channel_sessions:channel_session_id!inner (id, display_name, display_color, phone_number, external_session_name, archived_at, status)
+  channel_sessions:channel_session_id (id, display_name, display_color, phone_number, external_session_name, archived_at, status)
 `;
 
 interface CursorPayload {
@@ -89,9 +105,25 @@ export async function listConversationsHandler(
   const sortCol = isQueue ? "last_inbound_at" : "last_message_at";
   const asc = isQueue;
 
+  let allowedSessionIds: string[] | null = null;
+  if (!q.include_archived_connections && !q.channel_session_id) {
+    const { data: sessions, error: sessionsError } = await supabase
+      .from("channel_sessions")
+      .select("id")
+      .eq("organization_id", ctx.organization_id)
+      .is("archived_at", null);
+    if (sessionsError) {
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, sessionsError.message);
+    }
+    allowedSessionIds = (sessions ?? []).map((session) => session.id as string);
+    if (allowedSessionIds.length === 0) {
+      return { conversations: [], cursor: null, has_more: false };
+    }
+  }
+
   let query = supabase
     .from("conversations")
-    .select(SELECT_COLS)
+    .select(LIST_SELECT_COLS)
     .eq("organization_id", ctx.organization_id)
     .order(sortCol, { ascending: asc, nullsFirst: false })
     .order("id", { ascending: asc })
@@ -99,8 +131,8 @@ export async function listConversationsHandler(
 
   if (q.status) query = query.eq("status", q.status);
   if (q.channel_session_id) query = query.eq("channel_session_id", q.channel_session_id);
-  if (!q.include_archived_connections) {
-    query = query.is("channel_sessions.archived_at", null);
+  if (allowedSessionIds) {
+    query = query.in("channel_session_id", allowedSessionIds);
   }
   if (q.tag) query = query.contains("tags", [q.tag]); // tags @> array[tag] (GIN)
 
@@ -169,7 +201,7 @@ export async function getConversationHandler(
 ): Promise<Conversation> {
   const { data, error } = await supabase
     .from("conversations")
-    .select(SELECT_COLS)
+    .select(DETAIL_SELECT_COLS)
     .eq("id", conversationId)
     .eq("organization_id", ctx.organization_id)
     .maybeSingle();
@@ -214,7 +246,7 @@ export async function patchConversationHandler(
     .update(update)
     .eq("id", conversationId)
     .eq("organization_id", ctx.organization_id)
-    .select(SELECT_COLS)
+    .select(DETAIL_SELECT_COLS)
     .maybeSingle();
 
   if (error) {

@@ -158,8 +158,8 @@ function ManageAppointmentDialog({
             void update("reschedule");
           }}
           footer={
-            <DialogFooter className="gap-2 sm:justify-between">
-              <div className="flex gap-2">
+            <DialogFooter className="flex-wrap gap-2 sm:justify-between">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="destructive"
@@ -190,7 +190,7 @@ function ManageAppointmentDialog({
                   Revisar remarcação
                 </Button>
               ) : (
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={() => setStep(0)}>
                     Voltar
                   </Button>

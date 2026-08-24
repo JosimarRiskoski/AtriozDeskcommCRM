@@ -13,6 +13,7 @@ import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
 import { hashCpf, encryptCpfSql } from "@/lib/contacts/cpf";
 import { findActiveContactByPhone } from "@/lib/contacts/find-by-phone";
+import { contactSearchOrFilter } from "@/lib/contacts/search-filter";
 import type { Contact } from "@/lib/types/contacts";
 import type { ContactCreate, ContactPatch, ContactListQuery } from "@/lib/schemas";
 
@@ -92,13 +93,7 @@ export async function listContactsHandler(
     .limit(q.limit + 1);
 
   if (q.search) {
-    const s = q.search.trim();
-    const digits = s.replace(/\D/g, "");
-    const orParts = [`name.ilike.%${s}%`, `email.ilike.%${s}%`, `phone_number.ilike.%${s}%`];
-    if (digits.length === 11) {
-      orParts.push(`cpf_hash.eq.${hashCpf(digits)}`);
-    }
-    query = query.or(orParts.join(","));
+    query = query.or(contactSearchOrFilter(q.search));
   }
   if (q.tag) query = query.contains("tags", [q.tag]);
   if (q.source) query = query.eq("source", q.source);
@@ -239,7 +234,11 @@ export async function createContactHandler(
 ): Promise<CreateContactResult> {
   const a = actorAuditPayload(ctx.actor);
   if (input.phone_number) {
-    const identity = await findActiveContactByPhone(supabase, ctx.organization_id, input.phone_number);
+    const identity = await findActiveContactByPhone(
+      supabase,
+      ctx.organization_id,
+      input.phone_number,
+    );
     if (identity.kind === "found") {
       const { data: existing } = await supabase
         .from("contacts")

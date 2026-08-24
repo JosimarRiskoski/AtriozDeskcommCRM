@@ -50,8 +50,15 @@ export function ApiTokensClient() {
   const [scopes, setScopes] = useState<string[]>([]);
   const [expiresInDays, setExpiresInDays] = useState<string>("");
   const [created, setCreated] = useState<CreatedApiToken | null>(null);
+  const [showRevoked, setShowRevoked] = useState(false);
+  const [showInternal, setShowInternal] = useState(false);
 
   const tokens = data?.data ?? [];
+  const manualTokens = tokens.filter((token) => !token.name.startsWith("agent-run:"));
+  const internalTokens = tokens.filter((token) => token.name.startsWith("agent-run:"));
+  const visibleTokens = (showInternal ? tokens : manualTokens).filter(
+    (token) => showRevoked || !token.revoked_at,
+  );
 
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,9 +92,37 @@ export function ApiTokensClient() {
         <Button onClick={() => setCreateOpen(true)}>Criar token</Button>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
+        <div>
+          <p className="font-medium">Integrações criadas por você</p>
+          <p className="text-xs text-muted-foreground">
+            Tokens “agent-run” são temporários, usados internamente durante execuções da IA e
+            revogados ao terminar. Eles ficam ocultos para não poluir a lista operacional.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setShowRevoked((v) => !v)}
+          >
+            {showRevoked ? "Ocultar revogados" : "Mostrar revogados"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setShowInternal((v) => !v)}
+          >
+            {showInternal ? "Ocultar internos" : `Tokens internos (${internalTokens.length})`}
+          </Button>
+        </div>
+      </div>
+
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>
-      ) : tokens.length === 0 ? (
+      ) : visibleTokens.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nenhum token criado ainda.</p>
       ) : (
         <div className="rounded-md border">
@@ -103,7 +138,7 @@ export function ApiTokensClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tokens.map((t) => (
+              {visibleTokens.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell className="font-medium">{t.name}</TableCell>
                   <TableCell>
@@ -178,7 +213,7 @@ export function ApiTokensClient() {
                     key={s}
                     onClick={() => toggleScope(s)}
                     className={`rounded-md border px-2 py-1 text-xs ${
-                      scopes.includes(s) ? "border-primary bg-primary/10" : "border-border"
+                      scopes.includes(s) ? "bg-primary/10 border-primary" : "border-border"
                     }`}
                   >
                     {s}

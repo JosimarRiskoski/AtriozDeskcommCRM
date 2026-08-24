@@ -40,6 +40,14 @@ interface FormShape {
   internal_note: string;
 }
 
+interface ContactOption {
+  id: string;
+  name: string | null;
+  display_name: string | null;
+  phone_number: string | null;
+  email: string | null;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -89,6 +97,13 @@ export function NewLeadDialog({
   const members = useAssignableMembers(open);
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
   const [step, setStep] = useState(0);
+  const [selectedContactId, setSelectedContactId] = useState(contactId ?? "");
+  const [contactSearch, setContactSearch] = useState("");
+  const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
+  const [contactMode, setContactMode] = useState<"existing" | "quick">("existing");
+  const [quickName, setQuickName] = useState("");
+  const [quickPhone, setQuickPhone] = useState("");
+  const [creatingContact, setCreatingContact] = useState(false);
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -113,6 +128,12 @@ export function NewLeadDialog({
 
   useEffect(() => {
     if (!open) return;
+    setSelectedContactId(contactId ?? "");
+    setContactSearch("");
+    setContactOptions([]);
+    setContactMode("existing");
+    setQuickName("");
+    setQuickPhone("");
     form.reset({
       title: initialTitle,
       description: "",
@@ -124,9 +145,65 @@ export function NewLeadDialog({
       next_action: "",
       internal_note: "",
     });
-  }, [open, initialTitle, initialStage, form]);
+  }, [open, contactId, initialTitle, initialStage, form]);
+
+  useEffect(() => {
+    if (!open || contactId || contactMode !== "existing" || contactSearch.trim().length < 2) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/v1/contacts?search=${encodeURIComponent(contactSearch.trim())}&limit=20`,
+          { signal: controller.signal },
+        );
+        const json = (await response.json()) as { data?: ContactOption[] };
+        if (response.ok) setContactOptions(json.data ?? []);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) setContactOptions([]);
+      }
+    }, 300);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [open, contactId, contactMode, contactSearch]);
+
+  async function ensureContact(): Promise<string | null> {
+    if (contactId) return contactId;
+    if (contactMode === "existing") return selectedContactId || null;
+    setCreatingContact(true);
+    try {
+      const response = await fetch("/api/v1/contacts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: quickName.trim(),
+          phone_number: quickPhone.trim(),
+          source: "manual",
+        }),
+      });
+      const json = (await response.json()) as {
+        data?: { id?: string };
+        error?: { message?: string };
+      };
+      if (!response.ok || !json.data?.id) {
+        throw new Error(json.error?.message || "Não foi possível criar o contato.");
+      }
+      setSelectedContactId(json.data.id);
+      return json.data.id;
+    } finally {
+      setCreatingContact(false);
+    }
+  }
 
   async function onSubmit(values: FormShape) {
+    let effectiveContactId: string | null = null;
+    try {
+      effectiveContactId = await ensureContact();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível criar o contato.");
+      return;
+    }
     const tags = values.tagsRaw
       .split(",")
       .map((s) => s.trim())
@@ -152,7 +229,7 @@ export function NewLeadDialog({
       source,
       tags,
     };
-    if (contactId) payload.contact_id = contactId;
+    if (effectiveContactId) payload.contact_id = effectiveContactId;
     if (conversationId) payload.conversation_id = conversationId;
     if (values.owner_user_id !== "none") payload.owner_user_id = values.owner_user_id;
     if (values.next_action.trim()) payload.next_action = values.next_action.trim();
@@ -201,6 +278,19 @@ export function NewLeadDialog({
 
   const stageId = form.watch("stage_id");
 
+  async function advanceStep() {
+    const contactReady = Boolean(
+      contactId ||
+      (contactMode === "existing" && selectedContactId) ||
+      (contactMode === "quick" && quickName.trim().length >= 2 && quickPhone.trim().length >= 8),
+    );
+    const valid = step === 0 ? (await form.trigger("title")) && contactReady : Boolean(stageId);
+    if (step === 0 && !contactReady) {
+      toast.error("Selecione um contato ou informe nome e telefone para o cadastro rápido.");
+    }
+    if (valid) setStep((current) => Math.min(current + 1, 2));
+  }
+
   return (
     <Dialog
       open={open}
@@ -219,7 +309,16 @@ export function NewLeadDialog({
         <StepDialogForm
           labels={["Negócio", "Detalhes", "Valores"]}
           currentStep={step}
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            // Pressionar Enter nas duas primeiras etapas apenas avança. Antes,
+            // o submit do <form> podia criar a oportunidade sem confirmação.
+            if (step < 2) {
+              void advanceStep();
+              return;
+            }
+            void form.handleSubmit(onSubmit)(event);
+          }}
           footer={
             <DialogFooter>
               <Button
@@ -243,17 +342,14 @@ export function NewLeadDialog({
               {step < 2 ? (
                 <Button
                   type="button"
-                  onClick={async () => {
-                    const valid = step === 0 ? await form.trigger("title") : Boolean(stageId);
-                    if (valid) setStep((current) => current + 1);
-                  }}
-                  disabled={create.isPending || (step === 1 && !stageId)}
+                  onClick={() => void advanceStep()}
+                  disabled={create.isPending || creatingContact || (step === 1 && !stageId)}
                 >
                   Continuar
                 </Button>
               ) : (
-                <Button type="submit" disabled={create.isPending || !stageId}>
-                  {create.isPending ? "Criando…" : "Criar oportunidade"}
+                <Button type="submit" disabled={create.isPending || creatingContact || !stageId}>
+                  {create.isPending || creatingContact ? "Criando…" : "Confirmar e criar"}
                 </Button>
               )}
             </DialogFooter>
@@ -280,6 +376,95 @@ export function NewLeadDialog({
                 ) : null}
               </div>
             )}
+          {step === 0 && !contactId ? (
+            <div className="space-y-3 rounded-md border border-border p-3">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={contactMode === "existing" ? "default" : "outline"}
+                  onClick={() => setContactMode("existing")}
+                >
+                  Buscar contato
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={contactMode === "quick" ? "default" : "outline"}
+                  onClick={() => setContactMode("quick")}
+                >
+                  Cadastro rápido
+                </Button>
+              </div>
+              {contactMode === "existing" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="lead-contact-search">Contato existente</Label>
+                  <Input
+                    id="lead-contact-search"
+                    value={contactSearch}
+                    onChange={(event) => {
+                      setContactSearch(event.target.value);
+                      setSelectedContactId("");
+                    }}
+                    placeholder="Busque por nome, telefone ou e-mail"
+                  />
+                  {contactOptions.length > 0 ? (
+                    <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border p-1">
+                      {contactOptions.map((contact) => {
+                        const label = contact.name || contact.display_name || contact.phone_number;
+                        return (
+                          <button
+                            key={contact.id}
+                            type="button"
+                            className={`w-full rounded px-2 py-2 text-left text-sm ${selectedContactId === contact.id ? "bg-accent text-accent-foreground" : "hover:bg-muted"}`}
+                            onClick={() => {
+                              setSelectedContactId(contact.id);
+                              if (!form.getValues("title").trim() && label)
+                                form.setValue("title", label);
+                            }}
+                          >
+                            <span className="block font-medium">{label || "Contato sem nome"}</span>
+                            {contact.phone_number ? (
+                              <span className="text-xs text-muted-foreground">
+                                {contact.phone_number}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : contactSearch.trim().length >= 2 ? (
+                    <p className="text-xs text-muted-foreground">Nenhum contato encontrado.</p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="quick-contact-name">Nome</Label>
+                    <Input
+                      id="quick-contact-name"
+                      value={quickName}
+                      onChange={(event) => {
+                        setQuickName(event.target.value);
+                        if (!form.getValues("title").trim())
+                          form.setValue("title", event.target.value);
+                      }}
+                      placeholder="Nome do contato"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="quick-contact-phone">WhatsApp</Label>
+                    <Input
+                      id="quick-contact-phone"
+                      value={quickPhone}
+                      onChange={(event) => setQuickPhone(event.target.value)}
+                      placeholder="+55 11 99999-8888"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
           {step === 0 && pipelineOptions && pipelineOptions.length > 1 ? (
             <div className="space-y-2">
               <Label>Funil</Label>

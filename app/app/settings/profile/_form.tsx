@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,8 @@ export function ProfileForm({ email, initialFullName, initialAvatarUrl }: Props)
   const [locale, setLocale] = useState<Locale>("pt-BR");
   const [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl ?? "");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent) {
@@ -63,9 +65,7 @@ export function ProfileForm({ email, initialFullName, initialAvatarUrl }: Props)
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input id="email" value={email} disabled />
-          <p className="text-xs text-muted-foreground">
-            Trocar email — em breve.
-          </p>
+          <p className="text-xs text-muted-foreground">Trocar email — em breve.</p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="full_name">Nome completo</Label>
@@ -105,18 +105,66 @@ export function ProfileForm({ email, initialFullName, initialAvatarUrl }: Props)
             </Select>
           </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="avatar_url">Avatar URL</Label>
-          <Input
-            id="avatar_url"
-            type="url"
-            placeholder="https://…"
-            value={avatarUrl}
-            onChange={(e) => setAvatarUrl(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Upload de arquivo — em breve. Cole uma URL pública.
-          </p>
+        <div className="space-y-3">
+          <Label htmlFor="avatar_file">Foto do perfil</Label>
+          <div className="flex items-center gap-4">
+            <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-lg font-semibold">
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt="Prévia da foto" className="h-full w-full object-cover" />
+              ) : (
+                (fullName.trim().slice(0, 2) || "EU").toUpperCase()
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={avatarInputRef}
+                id="avatar_file"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  setUploadingAvatar(true);
+                  try {
+                    const form = new FormData();
+                    form.set("file", file);
+                    const upload = await fetch("/api/v1/profile/avatar", {
+                      method: "POST",
+                      body: form,
+                      credentials: "same-origin",
+                    });
+                    const response = (await upload.json()) as {
+                      data?: { avatar_url?: string };
+                    };
+                    if (!upload.ok || !response.data?.avatar_url) throw new Error("upload_failed");
+                    setAvatarUrl(response.data.avatar_url);
+                    toast.success("Foto carregada. Clique em Salvar para confirmar.");
+                  } catch {
+                    toast.error("Não foi possível carregar a foto.");
+                  } finally {
+                    setUploadingAvatar(false);
+                    event.target.value = "";
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar ? "Carregando…" : avatarUrl ? "Trocar foto" : "Enviar foto"}
+              </Button>
+              {avatarUrl ? (
+                <Button type="button" variant="ghost" onClick={() => setAvatarUrl("")}>
+                  Remover
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">JPG, PNG ou WebP, com até 2 MB.</p>
         </div>
         <div className="flex justify-end">
           <Button type="submit" disabled={isPending}>

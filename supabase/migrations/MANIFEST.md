@@ -113,6 +113,11 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 
 | `20260819190000` | `0131_finish_compacting_persisted_media` | Conclui a compactação de mídias antigas que já estavam no bucket, mas ainda conservavam metadados crus da Evolution mesmo sem data URL. |
 
+| `20260824150000` | `0132_webhook_log_retention` | Retenção em lotes somente para logs técnicos já processados, preservando mensagens e histórico comercial. |
+| `20260824151000` | `0133_profile_avatars_bucket` | Bucket e políticas autenticadas para avatar de perfil em JPEG, PNG ou WebP de até 2 MB. |
+| `20260824152000` | `0134_atomic_kanban_reorder` | Movimento e reordenação de oportunidades em uma única transação, evitando cartões inclinados ou posições concorrentes. |
+| `20260824153000` | `0135_ai_usage_server_aggregation` | Agrega custos, tokens, latência e handoff no Postgres e evita transferir até 250 mil linhas para o painel de Uso da IA. |
+
 ## Reproducibility
 
 Migrations were applied directly via the Supabase MCP `apply_migration` tool during the autonomous bootstrap session. The SQL of each migration is also embedded in the corresponding spec under `docs/specs/0X-spec-*.md` and the database keeps them in `supabase_migrations.schema_migrations`.

@@ -21,15 +21,7 @@ const brl = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
-function StatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
+function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <Card className="p-4">
       <p className="text-xs text-muted-foreground">{label}</p>
@@ -77,6 +69,29 @@ export function UsageDashboardClient({ agents, initial }: Props) {
 
   const q = useAiUsage(filters);
 
+  if (q.isError) {
+    return (
+      <div className="flex flex-col gap-6">
+        <UsageFilters agents={agents} initial={initial} />
+        <Card className="border-destructive/40 space-y-3 p-5">
+          <div>
+            <p className="font-medium">Não foi possível carregar o uso da IA.</p>
+            <p className="text-sm text-muted-foreground">
+              O orçamento continua protegido. Tente novamente para consultar as métricas do período.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="w-fit rounded-md border px-3 py-2 text-sm"
+            onClick={() => void q.refetch()}
+          >
+            Tentar novamente
+          </button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <UsageFilters agents={agents} initial={initial} />
@@ -86,13 +101,18 @@ export function UsageDashboardClient({ agents, initial }: Props) {
           <StatSkeletons />
           <ChartSkeletons />
         </>
+      ) : q.data.totals.invocations === 0 ? (
+        <Card className="p-5">
+          <p className="font-medium">Nenhum uso registrado neste período.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Isso é diferente de uma falha: a consulta terminou corretamente, mas nenhum agente
+            executou com os filtros selecionados.
+          </p>
+        </Card>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              label="Custo no período"
-              value={brl.format(q.data.totals.cost_cents / 100)}
-            />
+            <StatCard label="Custo no período" value={brl.format(q.data.totals.cost_cents / 100)} />
             <StatCard
               label="Invocações"
               value={q.data.totals.invocations.toLocaleString("pt-BR")}

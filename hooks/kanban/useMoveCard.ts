@@ -12,6 +12,7 @@ interface MoveArgs {
   stageId: string;
   positionInStage: number;
   expectedUpdatedAt: string;
+  targetIndex: number;
 }
 
 export function useMoveCard(pipelineId: string) {
@@ -25,6 +26,7 @@ export function useMoveCard(pipelineId: string) {
       return apiClient.post<{ data: Lead }>(`/api/v1/leads/${args.leadId}/move`, {
         stage_id: args.stageId,
         position_in_stage: args.positionInStage,
+        target_index: args.targetIndex,
         expected_updated_at: args.expectedUpdatedAt,
       });
     },

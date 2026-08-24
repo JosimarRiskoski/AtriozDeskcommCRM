@@ -45,6 +45,7 @@ export function HumanSupportSettingsClient() {
   const [manualGroupName, setManualGroupName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadingGroups, setLoadingGroups] = useState(false);
   useEffect(() => {
     apiClient
       .get<{ data: ResponseData }>("/api/v1/settings/human-support")
@@ -72,7 +73,9 @@ export function HumanSupportSettingsClient() {
       setValue(res.data);
       toast.success("Configuração de atendimento humano salva.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível salvar a configuração.");
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível salvar a configuração.",
+      );
     } finally {
       setSaving(false);
     }
@@ -83,6 +86,32 @@ export function HumanSupportSettingsClient() {
       toast.success("Mensagem de teste enviada ao grupo.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível enviar o teste.");
+    }
+  };
+  const fetchGroups = async () => {
+    if (!value.whatsapp_connection_id) {
+      toast.error("Escolha uma conexão antes de buscar os grupos.");
+      return;
+    }
+    setLoadingGroups(true);
+    try {
+      const res = await apiClient.post<{ data: Group[] }>("/api/v1/settings/human-support/groups", {
+        connection_id: value.whatsapp_connection_id,
+      });
+      setGroups((current) => {
+        const merged = new Map(current.map((group) => [group.chat_id, group]));
+        for (const group of res.data) merged.set(group.chat_id, group);
+        return [...merged.values()];
+      });
+      toast.success(
+        res.data.length > 0
+          ? `${res.data.length} grupo(s) encontrado(s).`
+          : "Nenhum grupo foi encontrado nesta conexão.",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível buscar os grupos.");
+    } finally {
+      setLoadingGroups(false);
     }
   };
   if (loading) return <p className="text-sm text-muted-foreground">Carregando configuração…</p>;
@@ -241,6 +270,14 @@ export function HumanSupportSettingsClient() {
             ))}
           </SelectField>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void fetchGroups()}
+          disabled={!value.whatsapp_connection_id || loadingGroups}
+        >
+          {loadingGroups ? "Buscando grupos…" : "Buscar grupos no WhatsApp"}
+        </Button>
         {availableGroups.length === 0 ? (
           <div className="space-y-3 rounded-md border border-dashed p-3">
             <p className="text-sm font-medium">Ainda não há grupos encontrados nesta conexão.</p>

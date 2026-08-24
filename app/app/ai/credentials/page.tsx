@@ -35,12 +35,16 @@ export default async function CredentialsPage() {
     const { data: linked } = await supabase
       .from("ai_agent_versions")
       .select(
-        "credential_id, ai_agents!ai_agent_versions_agent_id_fkey!inner(archived_at, published_version_id)",
+        "id, credential_id, ai_agents!ai_agent_versions_agent_id_fkey!inner(archived_at, published_version_id)",
       )
       .eq("organization_id", activeOrg.orgId)
-      .in("credential_id", credentials.map((c) => c.id));
+      .in(
+        "credential_id",
+        credentials.map((c) => c.id),
+      );
 
     type LinkedRow = {
+      id: string;
       credential_id: string;
       ai_agents:
         | { archived_at: string | null; published_version_id: string | null }
@@ -51,9 +55,7 @@ export default async function CredentialsPage() {
     for (const row of rows) {
       const agent = Array.isArray(row.ai_agents) ? row.ai_agents[0] : row.ai_agents;
       if (!agent || agent.archived_at) continue;
-      if (!agent.published_version_id) continue;
-      // Approximate: if credential is linked to a version belonging to a non-archived agent,
-      // we count it. Mais conservador que o DELETE endpoint, mas suficiente para UX.
+      if (agent.published_version_id !== row.id) continue;
       usageMap[row.credential_id] = (usageMap[row.credential_id] ?? 0) + 1;
     }
   }
@@ -63,15 +65,11 @@ export default async function CredentialsPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Credenciais de IA</h1>
         <p className="text-sm text-muted-foreground">
-          Chaves BYO (Bring-Your-Own) por provider. Cifradas em repouso (AES-GCM)
-          e nunca expostas via API após criação.
+          Chaves BYO (Bring-Your-Own) por provider. Cifradas em repouso (AES-GCM) e nunca expostas
+          via API após criação.
         </p>
       </header>
-      <CredentialsList
-        initialData={credentials}
-        canWrite={canWrite}
-        usageMap={usageMap}
-      />
+      <CredentialsList initialData={credentials} canWrite={canWrite} usageMap={usageMap} />
     </div>
   );
 }

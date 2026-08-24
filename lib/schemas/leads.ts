@@ -22,6 +22,7 @@ const flexibleTimestamp = z
 export const moveLeadSchema = z.object({
   stage_id: z.string().uuid(),
   position_in_stage: z.number().finite(),
+  target_index: z.number().int().nonnegative().optional(),
   expected_updated_at: flexibleTimestamp,
 });
 export type MoveLeadInput = z.infer<typeof moveLeadSchema>;

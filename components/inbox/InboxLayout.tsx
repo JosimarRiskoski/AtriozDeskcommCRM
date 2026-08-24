@@ -23,6 +23,7 @@ import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { NewContactDialog } from "@/components/contacts/NewContactDialog";
 import { Button } from "@/components/ui/button";
 import { Plus } from "@/lib/ui/icons";
+import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 
 function tabToFilter(tab: InboxFiltersValue["tab"]): Partial<ConversationsFilters> {
   switch (tab) {
@@ -69,6 +70,21 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     onlyUnread: false,
     includeArchivedConnections: false,
   });
+  const { data: channelSessions } = useChannelSessions();
+  const defaultChannelApplied = useRef(false);
+
+  useEffect(() => {
+    if (defaultChannelApplied.current || !channelSessions) return;
+    defaultChannelApplied.current = true;
+    const preferred =
+      channelSessions.find((channel) => channel.is_default && !channel.archived_at) ??
+      channelSessions.find((channel) => !channel.archived_at);
+    if (preferred) {
+      setAux((current) =>
+        current.channel_session_id ? current : { ...current, channel_session_id: preferred.id },
+      );
+    }
+  }, [channelSessions]);
   const filterValue: InboxFiltersValue = { tab, ...aux };
   const setFilterValue = useCallback(
     (next: InboxFiltersValue) => {
@@ -126,9 +142,11 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // Deep-link para conversa fora do filtro atual (ou fora do escopo do agent):
   // busca única RLS-scoped. 404/vazio ⇒ inacessível ⇒ estado vazio claro (GAP D),
   // nunca stack trace. A RLS (G4-01) é quem garante o não-vazamento.
-  const needsFetch = !!selectedId && !inList && !listQ.isLoading;
+  // A lista usa um payload mínimo para não multiplicar o Egress. Ao selecionar,
+  // buscamos o registro completo (consentimento, metadados e contexto lateral).
+  const needsFetch = !!selectedId;
   const single = useConversation(selectedId, needsFetch);
-  const selectedConversation: ConversationWithContact | null = inList ?? single.data ?? null;
+  const selectedConversation: ConversationWithContact | null = single.data ?? inList ?? null;
   const selectionNotFound =
     needsFetch && !single.isPending && !single.data && isNotFound(single.error);
 
@@ -218,7 +236,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         <div className="min-h-0 flex-1 overflow-hidden">
           <ConversationList
             filters={filters}
-            orgId={orgId}
+            query={listQ}
             selectedId={selectedId}
             onSelect={handleSelect}
             clientFilter={clientFilter}

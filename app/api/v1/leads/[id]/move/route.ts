@@ -83,20 +83,41 @@ export async function POST(
     );
   }
 
-  // OCC update (Pattern B / Spec 09 §7.2).
-  const { data: updated, error: updErr } = await supabase
-    .from("crm_leads")
-    .update({
-      stage_id: input.stage_id,
-      position_in_stage: input.position_in_stage,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", leadId)
-    .eq("updated_at", input.expected_updated_at)
-    .select("id")
-    .maybeSingle();
+  // Quando o board informa o índice, a operação normaliza a etapa inteira em
+  // uma única transação. Isso elimina colisões de posição que antes deixavam o
+  // cartão inclinado sem concluir o movimento.
+  const orderedMove = input.target_index !== undefined;
+  const mutation = orderedMove
+    ? await supabase.rpc("fn_move_crm_lead_ordered", {
+        p_lead_id: leadId,
+        p_stage_id: input.stage_id,
+        p_target_index: input.target_index,
+        p_expected_updated_at: input.expected_updated_at,
+      })
+    : await supabase
+        .from("crm_leads")
+        .update({
+          stage_id: input.stage_id,
+          position_in_stage: input.position_in_stage,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", leadId)
+        .eq("updated_at", input.expected_updated_at)
+        .select("id")
+        .maybeSingle();
+
+  const updated = orderedMove ? (mutation.data ? { id: mutation.data } : null) : mutation.data;
+  const updErr = mutation.error;
 
   if (updErr) {
+    if (updErr.message.includes("lead_stage_changed_concurrent")) {
+      return fail(
+        "lead_stage_changed_concurrent",
+        "Lead foi modificado por outro usuário. Recarregue e tente novamente.",
+        409,
+        { requestId },
+      );
+    }
     return fail("internal_error", updErr.message, 500, { requestId });
   }
 

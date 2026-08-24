@@ -31,9 +31,7 @@ const TIMEZONES = [
 
 export function TenantForm({ initial }: Props) {
   const [form, setForm] = useState<TenantInput>(initial);
-  const [reasonsText, setReasonsText] = useState(
-    (initial.lost_reasons_extra ?? []).join(", "),
-  );
+  const [reasonsText, setReasonsText] = useState((initial.lost_reasons_extra ?? []).join(", "));
   const [isPending, startTransition] = useTransition();
 
   function set<K extends keyof TenantInput>(key: K, value: TenantInput[K]) {
@@ -115,10 +113,7 @@ export function TenantForm({ initial }: Props) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="locale">Idioma</Label>
-            <Select
-              value={form.locale}
-              onValueChange={(v) => set("locale", v as Locale)}
-            >
+            <Select value={form.locale} onValueChange={(v) => set("locale", v as Locale)}>
               <SelectTrigger id="locale">
                 <SelectValue />
               </SelectTrigger>
@@ -147,6 +142,18 @@ export function TenantForm({ initial }: Props) {
               value={form.privacy_policy_url ?? ""}
               onChange={(e) => set("privacy_policy_url", e.target.value || null)}
             />
+            <p className="text-xs text-muted-foreground">
+              Informe a política própria da empresa ou use a{" "}
+              <a
+                href="/legal/privacy"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-accent hover:underline"
+              >
+                Política de Privacidade do Átrioz CRM
+              </a>
+              .
+            </p>
           </div>
         </div>
 

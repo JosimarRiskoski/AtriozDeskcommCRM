@@ -10,9 +10,11 @@ import {
   type ConversationWithContact,
 } from "@/hooks/inbox/useConversationsRealtime";
 
+type ConversationsQuery = ReturnType<typeof useConversationsRealtime>;
+
 interface Props {
   filters: ConversationsFilters;
-  orgId: string | null;
+  query: ConversationsQuery;
   selectedId: string | null;
   onSelect: (id: string) => void;
   /** Optional client-side filter (e.g. only-unread). */
@@ -23,14 +25,12 @@ interface Props {
 
 export function ConversationList({
   filters,
-  orgId,
+  query: q,
   selectedId,
   onSelect,
   clientFilter,
   onVisibleChange,
 }: Props) {
-  const q = useConversationsRealtime(filters, orgId);
-
   // Fila (G5-03): a lista já vem ordenada por tempo de espera (server), então a
   // posição é o índice na lista visível. Só mostramos posição/espera nessa visão.
   const isQueue = filters.assigned_to === "unassigned";
@@ -59,16 +59,11 @@ export function ConversationList({
     );
   }
 
-  if (q.isError) {
+  if (q.isError && items.length === 0) {
     return (
       <div className="p-4 text-center text-sm text-muted-foreground">
         <p>Erro ao carregar conversas.</p>
-        <Button
-          size="sm"
-          variant="outline"
-          className="mt-2"
-          onClick={() => q.refetch()}
-        >
+        <Button size="sm" variant="outline" className="mt-2" onClick={() => q.refetch()}>
           Tentar novamente
         </Button>
       </div>
@@ -85,6 +80,14 @@ export function ConversationList({
 
   return (
     <div className="flex h-full flex-col">
+      {q.isError ? (
+        <div className="border-warning/30 flex items-center justify-between border-b bg-warning-bg px-3 py-2 text-xs text-warning-fg">
+          <span>Não foi possível atualizar agora. Mantivemos as conversas já carregadas.</span>
+          <Button size="sm" variant="outline" onClick={() => q.refetch()}>
+            Tentar novamente
+          </Button>
+        </div>
+      ) : null}
       <div className="flex-1 overflow-y-auto">
         {items.map((c, i) => (
           <ConversationListItem
