@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MagnifyingGlass } from "@/lib/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -75,6 +75,19 @@ export function InboxFilters({ value, onChange }: Props) {
   const archivedChannels = (channels ?? []).filter((channel) => channel.archived_at);
   const visibleChannels = value.includeArchivedConnections ? (channels ?? []) : activeChannels;
   const showChannelSwitch = visibleChannels.length >= 2 || value.includeArchivedConnections;
+  const initialChannelApplied = useRef(false);
+
+  // A mesma consulta que abastece o seletor define a conexão inicial. Assim o
+  // Inbox não depende de uma segunda leitura das sessões. Depois da primeira
+  // escolha, a seleção manual do operador sempre prevalece.
+  useEffect(() => {
+    if (initialChannelApplied.current || activeChannels.length === 0) return;
+    const preferred = activeChannels.find((channel) => channel.is_default) ?? activeChannels[0];
+    initialChannelApplied.current = true;
+    if (!value.channel_session_id && preferred) {
+      onChange({ ...value, channel_session_id: preferred.id });
+    }
+  }, [activeChannels, onChange, value]);
 
   // Debounce search input → propagate to parent.
   useEffect(() => {

@@ -23,7 +23,6 @@ import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { NewContactDialog } from "@/components/contacts/NewContactDialog";
 import { Button } from "@/components/ui/button";
 import { Plus } from "@/lib/ui/icons";
-import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 
 function tabToFilter(tab: InboxFiltersValue["tab"]): Partial<ConversationsFilters> {
   switch (tab) {
@@ -70,24 +69,6 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     onlyUnread: false,
     includeArchivedConnections: false,
   });
-  const { data: channelSessions } = useChannelSessions();
-  const defaultChannelApplied = useRef(false);
-
-  useEffect(() => {
-    // React Query pode entregar um array vazio enquanto a primeira carga ainda
-    // está em andamento. Não marque a seleção automática como concluída nesse
-    // estado, senão o Inbox fica preso em "Todos os números" no primeiro acesso.
-    if (defaultChannelApplied.current || !channelSessions?.length) return;
-    defaultChannelApplied.current = true;
-    const preferred =
-      channelSessions.find((channel) => channel.is_default && !channel.archived_at) ??
-      channelSessions.find((channel) => !channel.archived_at);
-    if (preferred) {
-      setAux((current) =>
-        current.channel_session_id ? current : { ...current, channel_session_id: preferred.id },
-      );
-    }
-  }, [channelSessions]);
   const filterValue: InboxFiltersValue = { tab, ...aux };
   const setFilterValue = useCallback(
     (next: InboxFiltersValue) => {
