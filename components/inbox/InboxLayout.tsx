@@ -74,7 +74,10 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const defaultChannelApplied = useRef(false);
 
   useEffect(() => {
-    if (defaultChannelApplied.current || !channelSessions) return;
+    // React Query pode entregar um array vazio enquanto a primeira carga ainda
+    // está em andamento. Não marque a seleção automática como concluída nesse
+    // estado, senão o Inbox fica preso em "Todos os números" no primeiro acesso.
+    if (defaultChannelApplied.current || !channelSessions?.length) return;
     defaultChannelApplied.current = true;
     const preferred =
       channelSessions.find((channel) => channel.is_default && !channel.archived_at) ??
