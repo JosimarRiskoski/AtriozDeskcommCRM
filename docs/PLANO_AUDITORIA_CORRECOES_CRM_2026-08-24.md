@@ -193,4 +193,7 @@ Aceite: navegação ociosa não gera consultas contínuas; “Todos os números�
 - [x] Fallback degradado do Inbox reduzido para uma leitura a cada 30 segundos.
 - [x] Novo lead no Kanban permite buscar contato existente ou fazer cadastro rápido com nome e telefone.
 - [x] Migrations 0132, 0133, 0134 e 0135 executadas com sucesso no banco publicado em 24/08/2026.
-- [ ] Validar Inbox agregado e sugestão da IA depois do deploy.
+- [x] Deploy publicado e validado: Inbox abre na conexão principal “WhatsApp 7653”,
+  a visão agregada continua disponível, a lista não some em carga normal e a
+  sugestão da IA preenche o campo editável sem enviar automaticamente. A rota
+  pública `/legal/privacy` também foi validada no ambiente publicado.
