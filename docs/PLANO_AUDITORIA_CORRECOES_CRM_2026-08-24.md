@@ -192,5 +192,5 @@ Aceite: navegação ociosa não gera consultas contínuas; “Todos os números�
 - [x] Atendimento humano ganhou busca direta de grupos pela Evolution.
 - [x] Fallback degradado do Inbox reduzido para uma leitura a cada 30 segundos.
 - [x] Novo lead no Kanban permite buscar contato existente ou fazer cadastro rápido com nome e telefone.
-- [ ] Executar as migrations 0132, 0133, 0134 e 0135 no banco publicado.
+- [x] Migrations 0132, 0133, 0134 e 0135 executadas com sucesso no banco publicado em 24/08/2026.
 - [ ] Validar Inbox agregado e sugestão da IA depois do deploy.
