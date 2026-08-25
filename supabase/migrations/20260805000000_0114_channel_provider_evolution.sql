@@ -10,9 +10,25 @@ alter table public.channel_sessions
   add column if not exists last_inbound_event_at timestamptz,
   add column if not exists last_outbound_event_at timestamptz;
 
-update public.channel_sessions
-set external_session_name = waha_session_name
-where external_session_name is null or btrim(external_session_name) = '';
+-- Bancos atualizados a partir do legado ainda possuem waha_session_name.
+-- Instalações novas, geradas pelo baseline consolidado, já nascem somente com
+-- external_session_name. O backfill precisa funcionar nos dois cenários.
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'channel_sessions'
+      and column_name = 'waha_session_name'
+  ) then
+    execute $sql$
+      update public.channel_sessions
+      set external_session_name = waha_session_name
+      where external_session_name is null or btrim(external_session_name) = ''
+    $sql$;
+  end if;
+end $$;
 
 alter table public.channel_sessions
   alter column external_session_name set not null;
@@ -42,4 +58,3 @@ comment on column public.channel_sessions.last_inbound_event_at is
   'Último evento de entrada aceito pelo CRM; usado para detectar sessão que envia mas não recebe.';
 comment on column public.channel_sessions.last_outbound_event_at is
   'Último evento de saída confirmado pelo provedor; usado para saúde real da sessão.';
-

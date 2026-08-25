@@ -11,7 +11,7 @@ alter table public.channel_sessions
   add column if not exists archive_reason text;
 
 update public.channel_sessions
-set display_name = 'WhatsApp ' || right(coalesce(phone_number, waha_session_name), 4)
+set display_name = 'WhatsApp ' || right(coalesce(phone_number, external_session_name), 4)
 where display_name is null or btrim(display_name) = '';
 
 alter table public.channel_sessions alter column display_name set not null;
