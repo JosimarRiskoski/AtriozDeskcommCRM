@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
+  // O typecheck completo já é executado antes da publicação. Evita repetir a
+  // checagem dentro do build limitado do EasyPanel e impedir a troca do container.
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   // typedRoutes moved out of experimental in Next 15.5+
   typedRoutes: true,
   experimental: {
