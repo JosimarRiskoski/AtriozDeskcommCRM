@@ -2,8 +2,11 @@
  * POST /api/v1/leads/[id]/move
  *
  * Moves a lead within its pipeline (P-01: cross-pipeline moves require clone).
- * Uses Pattern B optimistic concurrency (P-08): client sends `expected_updated_at`,
- * UPDATE filters by it, zero rows affected ⇒ 409 lead_stage_changed_concurrent.
+ * Uses Pattern B optimistic concurrency (P-08). The route first reloads the
+ * authoritative lead and the atomic mutation compares against that freshly
+ * read version. This keeps the SELECT → UPDATE race protected without making
+ * an otherwise valid drag fail because a background process touched the lead
+ * after the board snapshot was rendered.
  *
  * Status transitions are driven by trigger `fn_crm_lead_close_on_stage` (P-02);
  * this endpoint NEVER sets `status` directly.
@@ -92,7 +95,7 @@ export async function POST(
         p_lead_id: leadId,
         p_stage_id: input.stage_id,
         p_target_index: input.target_index,
-        p_expected_updated_at: input.expected_updated_at,
+        p_expected_updated_at: lead.updated_at,
       })
     : await supabase
         .from("crm_leads")
@@ -102,7 +105,7 @@ export async function POST(
           updated_at: new Date().toISOString(),
         })
         .eq("id", leadId)
-        .eq("updated_at", input.expected_updated_at)
+        .eq("updated_at", lead.updated_at)
         .select("id")
         .maybeSingle();
 
