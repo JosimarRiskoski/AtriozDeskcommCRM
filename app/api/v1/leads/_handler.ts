@@ -456,6 +456,12 @@ export async function updateLeadHandler(
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description;
+  if (input.internal_note !== undefined) {
+    patch.custom_fields = {
+      ...((existing.custom_fields as Record<string, unknown> | null) ?? {}),
+      internal_note: input.internal_note,
+    };
+  }
   if (input.contact_id !== undefined) patch.contact_id = input.contact_id;
   if (input.value_cents !== undefined) patch.value_cents = input.value_cents;
   if (input.currency !== undefined) patch.currency = input.currency;

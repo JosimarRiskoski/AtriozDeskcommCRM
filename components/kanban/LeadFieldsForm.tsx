@@ -13,6 +13,7 @@ import { updateLeadSchema, type UpdateLeadInput } from "@/lib/schemas/leads";
 
 interface FormShape {
   title: string;
+  internal_note: string;
   description: string;
   valueReais: string;
   tagsRaw: string;
@@ -32,6 +33,11 @@ interface Props {
 function centsToReais(cents: number | null | undefined): string {
   if (cents === null || cents === undefined) return "";
   return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+export function internalNoteFromLead(lead: Lead): string {
+  const note = lead.custom_fields?.internal_note;
+  return typeof note === "string" ? note : "";
 }
 
 /**
@@ -55,6 +61,7 @@ export function LeadFieldsForm({
   const form = useForm<FormShape>({
     defaultValues: {
       title: lead.title,
+      internal_note: internalNoteFromLead(lead),
       description: lead.description ?? "",
       valueReais: centsToReais(lead.value_cents),
       tagsRaw: (lead.tags ?? []).join(", "),
@@ -65,6 +72,7 @@ export function LeadFieldsForm({
   useEffect(() => {
     form.reset({
       title: lead.title,
+      internal_note: internalNoteFromLead(lead),
       description: lead.description ?? "",
       valueReais: centsToReais(lead.value_cents),
       tagsRaw: (lead.tags ?? []).join(", "),
@@ -93,6 +101,7 @@ export function LeadFieldsForm({
 
     const patch: Record<string, unknown> = {
       title: values.title.trim(),
+      internal_note: values.internal_note.trim() ? values.internal_note.trim() : null,
       description: values.description.trim() ? values.description.trim() : null,
       value_cents: valueCents,
       tags,
@@ -126,11 +135,16 @@ export function LeadFieldsForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="description">Observação interna · somente humanos</Label>
-        <Textarea id="description" rows={3} {...form.register("description")} />
+        <Label htmlFor="internal_note">Observação interna · somente humanos</Label>
+        <Textarea id="internal_note" rows={3} {...form.register("internal_note")} />
         <p className="text-xs text-muted-foreground">
           Este texto não é incluído automaticamente na memória da IA.
         </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="description">Descrição</Label>
+        <Textarea id="description" rows={3} {...form.register("description")} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">

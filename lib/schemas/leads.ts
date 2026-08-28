@@ -91,6 +91,7 @@ export type CreateLeadInput = z.infer<typeof createLeadSchema>;
 export const updateLeadSchema = z.object({
   title: z.string().min(2).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
+  internal_note: z.string().trim().max(2000).nullable().optional(),
   contact_id: z.string().uuid().nullable().optional(),
   value_cents: z.coerce.number().int().nonnegative().nullable().optional(),
   currency: z.string().length(3).optional(),
