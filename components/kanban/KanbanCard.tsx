@@ -31,6 +31,16 @@ interface KanbanCardProps {
   onOpen?: (leadId: string) => void;
 }
 
+export function mergeKanbanCardDragStyle(
+  draggableStyle: CSSProperties | undefined,
+  stageColor: string | undefined,
+): CSSProperties {
+  return {
+    ...draggableStyle,
+    ...(stageColor ? { borderLeftColor: stageColor } : {}),
+  };
+}
+
 function formatBRL(cents: number | null, currency: string | null): string | null {
   if (cents == null) return null;
   const code = currency ?? "BRL";
@@ -106,7 +116,10 @@ export function KanbanCard({
             snapshot.isDragging && "ring-accent/40 rotate-1 shadow-md ring-1",
             isSelected && "ring-2 ring-accent",
           )}
-          style={stageColor ? ({ borderLeftColor: stageColor } satisfies CSSProperties) : undefined}
+          // `draggableProps.style` carrega transform/transition/position usados
+          // pela biblioteca para mover o cartão. A cor da etapa deve ser
+          // acrescentada, nunca substituir esse objeto.
+          style={mergeKanbanCardDragStyle(provided.draggableProps.style, stageColor)}
         >
           {/* key = contador: cada evento remoto monta um overlay NOVO, e é isso
               que reinicia a animação. Fica no elemento interno — pôr no wrapper
