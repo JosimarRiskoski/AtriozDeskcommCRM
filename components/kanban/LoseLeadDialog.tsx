@@ -63,7 +63,7 @@ export function LoseLeadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Marcar como perdido</DialogTitle>
+          <DialogTitle>Marcar como perdido ou cancelado</DialogTitle>
           <DialogDescription>
             Informe o motivo. Essa informação ajuda a melhorar o funil.
           </DialogDescription>

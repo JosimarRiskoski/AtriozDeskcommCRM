@@ -9,10 +9,12 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAtRiskLeads } from "@/hooks/leads/useAtRiskLeads";
 import { useReactivations } from "@/hooks/leads/useReactivations";
 import { midpoint } from "@/lib/kanban/fractional-indexing";
+import { shouldRequestLostReason } from "@/lib/kanban/drop-policy";
 import type { Lead } from "@/lib/types/leads";
 import type { Pipeline, Stage } from "@/lib/kanban/types";
 import { StageColumn } from "./StageColumn";
 import { LeadDossier } from "./LeadDossier";
+import { LoseLeadDialog } from "./LoseLeadDialog";
 
 interface KanbanBoardProps {
   pipelineId: string;
@@ -124,6 +126,7 @@ export function KanbanBoard({
   // O dossiê é do BOARD e não da página: ele precisa do lead inteiro e do nome
   // do estágio, que só existem aqui depois do agrupamento.
   const [dossieId, setDossieId] = useState<string | null>(null);
+  const [pendingLostLeadId, setPendingLostLeadId] = useState<string | null>(null);
   const [internalSelected, setInternalSelected] = useState<Set<string>>(new Set());
   const selectedLeadIds = useMemo(
     () => (selectedIds ? new Set(selectedIds) : internalSelected),
@@ -182,6 +185,17 @@ export function KanbanBoard({
       if (!lead) return;
 
       const destStageId = destination.droppableId;
+      const destStage = data.stages.find((stage) => stage.id === destStageId);
+      if (!destStage) return;
+
+      // Entrar numa etapa de perda exige um motivo pelo contrato do banco.
+      // O gesto de arrastar apenas abre a confirmação; o endpoint /lose faz a
+      // transição completa depois que o operador escolhe o motivo.
+      if (shouldRequestLostReason(lead, destStage)) {
+        setPendingLostLeadId(lead.id);
+        return;
+      }
+
       const destList = (grouped.get(destStageId) ?? []).filter((l) => l.id !== draggableId);
 
       const before = destination.index > 0 ? destList[destination.index - 1] : null;
@@ -270,6 +284,14 @@ export function KanbanBoard({
           valueLabel={valueLabel}
         />
       )}
+      {pendingLostLeadId ? (
+        <LoseLeadDialog
+          open
+          onOpenChange={(open) => !open && setPendingLostLeadId(null)}
+          leadId={pendingLostLeadId}
+          pipelineId={pipelineId}
+        />
+      ) : null}
     </DragDropContext>
   );
 }
