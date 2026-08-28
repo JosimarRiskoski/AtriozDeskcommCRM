@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const createMock = vi.fn();
 const pushMock = vi.fn();
 const successMock = vi.fn();
+const warningMock = vi.fn();
 
 vi.mock("@/hooks/kanban/useCreateLead", () => ({
   useCreateLead: () => ({ mutateAsync: createMock, isPending: false }),
@@ -13,10 +14,15 @@ vi.mock("@/hooks/inbox/useAssignableMembers", () => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock }) }));
 vi.mock("sonner", () => ({
-  toast: { success: (...args: unknown[]) => successMock(...args), error: vi.fn() },
+  toast: {
+    success: (...args: unknown[]) => successMock(...args),
+    warning: (...args: unknown[]) => warningMock(...args),
+    error: vi.fn(),
+  },
 }));
 
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
+import { ApiError } from "@/lib/api/types";
 
 const PIPELINE_ID = "11111111-1111-4111-8111-111111111111";
 const STAGE_ID = "22222222-2222-4222-8222-222222222222";
@@ -28,6 +34,7 @@ describe("NewLeadDialog no Inbox", () => {
     createMock.mockReset();
     createMock.mockResolvedValue({ data: { id: "lead-1" } });
     successMock.mockReset();
+    warningMock.mockReset();
     pushMock.mockReset();
   });
 
@@ -131,5 +138,60 @@ describe("NewLeadDialog no Inbox", () => {
     fireEvent.submit(screen.getByRole("list", { name: "Etapa 1 de 3" }).closest("form")!);
     await screen.findByRole("list", { name: "Etapa 2 de 3" });
     expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("fecha o fluxo duplicado e oferece abrir a oportunidade existente", async () => {
+    const onOpenChange = vi.fn();
+    createMock.mockRejectedValueOnce(
+      new ApiError(
+        409,
+        "open_opportunity_exists",
+        {
+          existing_opportunity: {
+            id: "lead-existing",
+            pipeline_id: PIPELINE_ID,
+            title: "Oportunidade de Maria",
+          },
+        },
+        "request-1",
+        "Este contato já possui uma oportunidade aberta.",
+      ),
+    );
+    render(
+      <NewLeadDialog
+        open
+        onOpenChange={onOpenChange}
+        pipelineId={PIPELINE_ID}
+        stages={[{
+          id: STAGE_ID,
+          organization_id: "org-1",
+          pipeline_id: PIPELINE_ID,
+          name: "Interesse",
+          slug: "interesse",
+          position: 1,
+          color: null,
+          is_won: false,
+          is_lost: false,
+          is_archived: false,
+          expected_duration_hours: null,
+        }]}
+        contactId={CONTACT_ID}
+        initialTitle="Maria Silva"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByRole("list", { name: "Etapa 2 de 3" });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByRole("list", { name: "Etapa 3 de 3" });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar e criar" }));
+
+    await waitFor(() => expect(warningMock).toHaveBeenCalledTimes(1));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    const options = warningMock.mock.calls[0]?.[1] as {
+      action?: { onClick?: () => void };
+    };
+    options.action?.onClick?.();
+    expect(pushMock).toHaveBeenCalledWith(`/app/pipelines/${PIPELINE_ID}`);
   });
 });

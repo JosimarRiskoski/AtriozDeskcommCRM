@@ -308,7 +308,21 @@ export function CRMSidePanel({ conversation }: Props) {
             <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
               <Tag size={12} className="mr-1" weight="regular" aria-hidden /> Tag
             </Button>
-            {openLeads.length === 1 ? (
+            {sectionsLoading ? (
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled>
+                <Briefcase size={12} className="mr-1" weight="regular" aria-hidden />
+                Verificando oportunidades…
+              </Button>
+            ) : erro ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={() => setTentativa((value) => value + 1)}
+              >
+                Tentar ler oportunidades
+              </Button>
+            ) : openLeads.length === 1 ? (
               <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
                 <Link href={`/app/pipelines/${openLeads[0]!.pipeline_id}`}>
                   <Briefcase size={12} className="mr-1" weight="regular" aria-hidden />

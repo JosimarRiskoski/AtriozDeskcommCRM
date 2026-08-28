@@ -11,6 +11,52 @@ import { createBrowserClient } from "@supabase/ssr";
 
 let _client: ReturnType<typeof createBrowserClient> | null = null;
 
+const REALTIME_TOKEN_REFRESH_MARGIN_MS = 60_000;
+let realtimeTokenCache: { value: string; expiresAt: number } | null = null;
+let realtimeTokenRequest: Promise<string | null> | null = null;
+
+/** Exposto apenas para os testes isolarem o cache entre cenários. */
+export function __resetRealtimeToken(): void {
+  realtimeTokenCache = null;
+  realtimeTokenRequest = null;
+}
+
+async function getRealtimeToken(): Promise<string | null> {
+  if (
+    realtimeTokenCache &&
+    Date.now() < realtimeTokenCache.expiresAt - REALTIME_TOKEN_REFRESH_MARGIN_MS
+  ) {
+    return realtimeTokenCache.value;
+  }
+
+  realtimeTokenRequest ??= (async () => {
+    try {
+      const response = await fetch("/api/v1/auth/realtime-token", {
+        credentials: "include",
+      });
+      if (!response.ok) return null;
+      const body = (await response.json()) as {
+        data?: { access_token?: string; expires_at?: number | null };
+      };
+      const value = body.data?.access_token;
+      if (!value) return null;
+      realtimeTokenCache = {
+        value,
+        // Sem expiração, a próxima chamada consulta novamente em vez de servir
+        // indefinidamente um token que pode ter morrido.
+        expiresAt: body.data?.expires_at ? body.data.expires_at * 1000 : 0,
+      };
+      return value;
+    } catch {
+      return null;
+    } finally {
+      realtimeTokenRequest = null;
+    }
+  })();
+
+  return realtimeTokenRequest;
+}
+
 export function createClient() {
   // Singleton no browser pra reaproveitar canais Realtime e auth state.
   if (_client) return _client;
@@ -38,6 +84,9 @@ export function createClient() {
       sameSite: "strict",
       path: "/",
     },
+    // Fonte única de autenticação do socket. Funciona no join, heartbeat e
+    // reconexão, inclusive com a sessão guardada em cookie httpOnly.
+    realtime: { accessToken: getRealtimeToken },
   });
   return _client;
 }

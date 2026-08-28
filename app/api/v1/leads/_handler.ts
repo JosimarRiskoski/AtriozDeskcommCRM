@@ -219,7 +219,7 @@ export async function createLeadHandler(
   if (input.contact_id) {
     const { data: existing, error: existingError } = await supabase
       .from("crm_leads")
-      .select("id")
+      .select("id, pipeline_id, stage_id, title")
       .eq("organization_id", ctx.organization_id)
       .eq("contact_id", input.contact_id)
       .eq("status", "open")
@@ -232,7 +232,7 @@ export async function createLeadHandler(
       throw new ApiError(
         409,
         "open_opportunity_exists",
-        undefined,
+        { existing_opportunity: existing },
         ctx.requestId,
         "Este contato já possui uma oportunidade aberta.",
       );
@@ -344,10 +344,20 @@ export async function createLeadHandler(
 
   if (insErr || !lead) {
     if (insErr?.code === "23505") {
+      const { data: existing } = input.contact_id
+        ? await supabase
+            .from("crm_leads")
+            .select("id, pipeline_id, stage_id, title")
+            .eq("organization_id", ctx.organization_id)
+            .eq("contact_id", input.contact_id)
+            .eq("status", "open")
+            .limit(1)
+            .maybeSingle()
+        : { data: null };
       throw new ApiError(
         409,
         "open_opportunity_exists",
-        undefined,
+        existing ? { existing_opportunity: existing } : undefined,
         ctx.requestId,
         "Este contato já possui uma oportunidade aberta.",
       );

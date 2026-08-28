@@ -27,6 +27,7 @@ import type { Stage } from "@/lib/kanban/types";
 import { createLeadSchema, type CreateLeadInput } from "@/lib/schemas/leads";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { StepDialogForm } from "@/components/ui/step-dialog-form";
+import { ApiError } from "@/lib/api/types";
 
 interface FormShape {
   title: string;
@@ -271,8 +272,23 @@ export function NewLeadDialog({
       });
       onOpenChange(false);
       onCreated?.();
-    } catch {
-      // toast already shown
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "open_opportunity_exists") {
+        const existing = error.details?.existing_opportunity as
+          | { pipeline_id?: string; title?: string }
+          | undefined;
+        const existingPipelineId = existing?.pipeline_id ?? pipelineId;
+        onOpenChange(false);
+        onCreated?.();
+        toast.warning("Este contato já tem uma oportunidade aberta.", {
+          description: existing?.title,
+          action: {
+            label: "Abrir oportunidade",
+            onClick: () => router.push(`/app/pipelines/${existingPipelineId}`),
+          },
+        });
+      }
+      // Demais erros já são exibidos pelo hook.
     }
   }
 
