@@ -538,7 +538,7 @@ function ManageConnectionDialog({
           action: "archive",
           reason: reason.trim(),
         });
-        toast.success("Conexão arquivada. O histórico foi preservado.");
+        toast.success("Conexão removida do CRM. As conversas foram preservadas e ocultadas.");
       } else {
         await apiClient.delete(`/api/v1/channel-sessions/${connection!.id}`, {
           headers: {
@@ -632,16 +632,9 @@ function ManageConnectionDialog({
                 Defina outra conexão como padrão antes de remover esta.
               </p>
             ) : null}
-            <Button
-              variant="outline"
-              disabled={pending || !inactive || connection.is_default || reason.trim().length < 3}
-              onClick={() => void mutate("archive")}
-            >
-              <Archive size={14} /> Arquivar e preservar histórico
-            </Button>
             <div className="space-y-2 border-t pt-3">
               <Label htmlFor="delete-confirmation">
-                Para excluir a sessão técnica, digite: {connection.display_name}
+                Para remover esta conexão do CRM, digite: {connection.display_name}
               </Label>
               <Input
                 id="delete-confirmation"
@@ -654,20 +647,38 @@ function ManageConnectionDialog({
                   pending ||
                   !inactive ||
                   connection.is_default ||
-                  totalDependencies > 0 ||
                   confirmation !== connection.display_name ||
                   reason.trim().length < 3
                 }
-                onClick={() => void mutate("delete")}
+                onClick={() => void mutate("archive")}
               >
-                <Trash size={14} /> Excluir sessão técnica
+                <Archive size={14} /> Remover conexão do CRM
               </Button>
-              {totalDependencies > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                O número deixa de aparecer nas conexões ativas, suas conversas ficam ocultas no
+                Inbox e os alertas de desconexão são encerrados. O histórico permanece protegido
+                no banco e pode ser consultado ativando “Incluir conexões arquivadas”.
+              </p>
+              {totalDependencies === 0 ? (
+                <Button
+                  variant="outline"
+                  disabled={
+                    pending ||
+                    !inactive ||
+                    connection.is_default ||
+                    confirmation !== connection.display_name ||
+                    reason.trim().length < 3
+                  }
+                  onClick={() => void mutate("delete")}
+                >
+                  <Trash size={14} /> Excluir sessão técnica sem histórico
+                </Button>
+              ) : (
                 <p className="text-xs text-muted-foreground">
-                  A exclusão técnica está bloqueada porque existem vínculos. Use Arquivar ou
-                  reatribua as configurações.
+                  A exclusão física está indisponível porque esta conexão possui vínculos. A
+                  remoção segura acima preserva esses dados sem deixá-los na operação diária.
                 </p>
-              ) : null}
+              )}
             </div>
           </div>
         </div>
