@@ -150,6 +150,61 @@ export async function deleteGoogleEvent(accessToken: string, calendarId: string,
   }
 }
 
+export interface GoogleCalendarEvent {
+  id: string;
+  status?: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  htmlLink?: string;
+  hangoutLink?: string;
+  updated?: string;
+  start?: { dateTime?: string; date?: string; timeZone?: string };
+  end?: { dateTime?: string; date?: string; timeZone?: string };
+  attendees?: Array<{ email?: string; responseStatus?: string }>;
+  conferenceData?: { entryPoints?: Array<{ entryPointType?: string; uri?: string }> };
+}
+
+export class GoogleSyncTokenExpiredError extends Error {}
+
+export async function listGoogleEvents(
+  accessToken: string,
+  calendarId: string,
+  options: { syncToken?: string | null; timeMin?: string },
+): Promise<{ events: GoogleCalendarEvent[]; nextSyncToken: string }> {
+  const events: GoogleCalendarEvent[] = [];
+  let pageToken: string | undefined;
+  let nextSyncToken = "";
+  do {
+    const url = new URL(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+    );
+    url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("showDeleted", "true");
+    url.searchParams.set("maxResults", "2500");
+    if (options.syncToken) url.searchParams.set("syncToken", options.syncToken);
+    else if (options.timeMin) url.searchParams.set("timeMin", options.timeMin);
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const response = await fetch(url, {
+      headers: { authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (response.status === 410) throw new GoogleSyncTokenExpiredError("google_sync_token_expired");
+    const json = (await response.json()) as {
+      items?: GoogleCalendarEvent[];
+      nextPageToken?: string;
+      nextSyncToken?: string;
+      error?: { message?: string };
+    };
+    if (!response.ok) throw new Error(json.error?.message || `google_calendar_${response.status}`);
+    events.push(...(json.items ?? []));
+    pageToken = json.nextPageToken;
+    nextSyncToken = json.nextSyncToken || nextSyncToken;
+  } while (pageToken);
+  if (!nextSyncToken) throw new Error("google_calendar_missing_sync_token");
+  return { events, nextSyncToken };
+}
+
 export async function queryGoogleFreeBusy(
   accessToken: string,
   calendarId: string,

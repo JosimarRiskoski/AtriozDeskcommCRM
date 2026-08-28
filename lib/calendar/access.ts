@@ -11,6 +11,7 @@ export interface CalendarIntegrationRow {
   oauth_refresh_token_encrypted: string | null;
   token_expires_at: string | null;
   calendar_id: string;
+  events_sync_token: string | null;
   timezone: string;
   reminder_24h_enabled: boolean;
   reminder_1h_enabled: boolean;

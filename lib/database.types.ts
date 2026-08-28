@@ -1478,7 +1478,7 @@ export type Database = {
           attendee_email: string | null;
           cancellation_reason: string | null;
           cancelled_at: string | null;
-          contact_id: string;
+          contact_id: string | null;
           conversation_id: string | null;
           created_at: string;
           created_by_user_id: string | null;
@@ -1507,7 +1507,7 @@ export type Database = {
           attendee_email?: string | null;
           cancellation_reason?: string | null;
           cancelled_at?: string | null;
-          contact_id: string;
+          contact_id?: string | null;
           conversation_id?: string | null;
           created_at?: string;
           created_by_user_id?: string | null;
@@ -1536,7 +1536,7 @@ export type Database = {
           attendee_email?: string | null;
           cancellation_reason?: string | null;
           cancelled_at?: string | null;
-          contact_id?: string;
+          contact_id?: string | null;
           conversation_id?: string | null;
           created_at?: string;
           created_by_user_id?: string | null;
@@ -1605,6 +1605,7 @@ export type Database = {
           created_by_user_id: string | null;
           default_duration_minutes: number;
           google_account_email: string | null;
+          events_sync_token: string | null;
           id: string;
           last_error: string | null;
           last_sync_at: string | null;
@@ -1629,6 +1630,7 @@ export type Database = {
           created_by_user_id?: string | null;
           default_duration_minutes?: number;
           google_account_email?: string | null;
+          events_sync_token?: string | null;
           id?: string;
           last_error?: string | null;
           last_sync_at?: string | null;
@@ -1653,6 +1655,7 @@ export type Database = {
           created_by_user_id?: string | null;
           default_duration_minutes?: number;
           google_account_email?: string | null;
+          events_sync_token?: string | null;
           id?: string;
           last_error?: string | null;
           last_sync_at?: string | null;

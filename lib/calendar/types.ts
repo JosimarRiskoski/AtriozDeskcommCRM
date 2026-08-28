@@ -24,7 +24,7 @@ export function appointmentContactName(appointment: CalendarAppointment) {
   const contact = Array.isArray(appointment.contacts)
     ? appointment.contacts[0]
     : appointment.contacts;
-  return contact?.name || contact?.display_name || contact?.phone_number || "Contato";
+  return contact?.name || contact?.display_name || contact?.phone_number || "Evento externo do Google";
 }
 
 export const appointmentStatusLabels: Record<AppointmentStatus, string> = {

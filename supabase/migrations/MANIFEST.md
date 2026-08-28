@@ -118,6 +118,7 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 | `20260824152000` | `0134_atomic_kanban_reorder` | Movimento e reordenação de oportunidades em uma única transação, evitando cartões inclinados ou posições concorrentes. |
 | `20260824153000` | `0135_ai_usage_server_aggregation` | Agrega custos, tokens, latência e handoff no Postgres e evita transferir até 250 mil linhas para o painel de Uso da IA. |
 | `20260828150000` | `0136_actionable_notifications` | Mantém no sino apenas alertas acionáveis: anexos continuam no Inbox sem gerar ruído e conexões arquivadas têm alertas de desconexão resolvidos. |
+| `20260828170000` | `0137_google_calendar_bidirectional_sync` | Permite importar eventos Google sem contato inventado e persiste o token incremental para evitar duplicações e releituras completas. |
 
 ## Reproducibility
 

@@ -30,6 +30,7 @@ export function GoogleCalendarSettings() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [connecting, startConnecting] = useTransition();
 
   async function load() {
@@ -75,6 +76,26 @@ export function GoogleCalendarSettings() {
     }
   }
 
+  async function syncNow() {
+    setSyncing(true);
+    try {
+      const response = await fetch("/api/v1/calendar/sync", { method: "POST" });
+      const json = (await response.json()) as {
+        data?: { imported_or_updated?: number; cancelled?: number };
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(json.error?.message || "Não foi possível sincronizar.");
+      await load();
+      toast.success(
+        `Agenda sincronizada: ${json.data?.imported_or_updated ?? 0} atualizado(s), ${json.data?.cancelled ?? 0} cancelado(s).`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível sincronizar.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-muted-foreground">Carregando integração…</p>;
   if (!settings || settings.status === "disconnected") {
     return (
@@ -89,7 +110,7 @@ export function GoogleCalendarSettings() {
     <div className="space-y-5">
       <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div><div className="font-medium">{settings.google_account_email || "Conta Google conectada"}</div><div className="text-xs text-muted-foreground">Última sincronização: {settings.last_sync_at ? new Date(settings.last_sync_at).toLocaleString("pt-BR") : "ainda não realizada"}</div></div>
-        <div className="flex items-center gap-2"><Badge variant={settings.status === "connected" ? "success" : "warning"}>{settings.status === "connected" ? "Conectado" : settings.status}</Badge><Button variant="outline" size="sm" onClick={connect}>Reconectar</Button></div>
+        <div className="flex items-center gap-2"><Badge variant={settings.status === "connected" ? "success" : "warning"}>{settings.status === "connected" ? "Conectado" : settings.status}</Badge><Button variant="outline" size="sm" onClick={() => void syncNow()} disabled={syncing}>{syncing ? "Sincronizando…" : "Sincronizar agora"}</Button><Button variant="outline" size="sm" onClick={connect}>Reconectar</Button></div>
       </Card>
       <Card className="space-y-4 p-5">
         <div className="grid gap-4 sm:grid-cols-2">

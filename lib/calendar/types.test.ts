@@ -32,4 +32,8 @@ describe("agenda", () => {
       }),
     ).toBe("+5547999999999");
   });
+
+  it("identifica evento importado sem contato", () => {
+    expect(appointmentContactName({ ...base, contacts: null })).toBe("Evento externo do Google");
+  });
 });
