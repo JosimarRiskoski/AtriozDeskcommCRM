@@ -35,6 +35,7 @@ import {
   Archive,
 } from "@/lib/ui/icons";
 import { CHANNEL_COLOR_PALETTE, DEFAULT_CHANNEL_COLOR, channelColor } from "@/lib/channels/display";
+import { canRemoveChannel } from "@/lib/schemas/channels";
 
 type Variant = "success" | "warning" | "error" | "neutral";
 
@@ -519,7 +520,7 @@ function ManageConnectionDialog({
     (sum, count) => sum + count,
     0,
   );
-  const inactive = ["FAILED", "STOPPED"].includes(connection.status);
+  const inactive = canRemoveChannel(connection.status);
 
   async function mutate(action: "save" | "archive" | "delete") {
     setPending(true);

@@ -49,3 +49,8 @@ export type ChannelStatus = (typeof CHANNEL_STATUSES)[number];
 export function isChannelStatus(v: string): v is ChannelStatus {
   return (CHANNEL_STATUSES as readonly string[]).includes(v);
 }
+
+/** Sessões sem transporte ativo podem sair da operação com segurança. */
+export function canRemoveChannel(status: string): boolean {
+  return status === "SCAN_QR_CODE" || status === "STOPPED" || status === "FAILED";
+}

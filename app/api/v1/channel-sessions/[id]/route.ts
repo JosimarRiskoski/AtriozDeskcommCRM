@@ -14,7 +14,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
-import { isChannelStatus, updateChannelSchema } from "@/lib/schemas/channels";
+import { canRemoveChannel, isChannelStatus, updateChannelSchema } from "@/lib/schemas/channels";
 import { createClient } from "@/lib/supabase/server";
 import { evolutionFriendlyError, getEvolutionClient } from "@/lib/evolution/client";
 
@@ -202,7 +202,7 @@ export async function PATCH(
     };
     action = "channel.updated";
   } else if (parsed.data.action === "archive") {
-    if (!["FAILED", "STOPPED"].includes(session.status))
+    if (!canRemoveChannel(session.status))
       return fail("conflict", "Desconecte a conexão antes de arquivá-la.", 409, { requestId });
     if (session.is_default)
       return fail(
@@ -291,7 +291,7 @@ export async function DELETE(
       { requestId },
     );
 
-  if (!["FAILED", "STOPPED"].includes(session.status)) {
+  if (!canRemoveChannel(session.status)) {
     return fail(
       "conflict",
       "Desconecte a conexão antes de excluí-la. Conexões ativas não podem ser apagadas.",
