@@ -17,6 +17,7 @@ import { CaretLeft, CaretRight, Plus } from "@/lib/ui/icons";
 
 import { AppointmentDialog } from "./AppointmentDialog";
 import { CalendarBoard } from "./CalendarBoard";
+import { CalendarTimeGrid } from "./CalendarTimeGrid";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -263,6 +264,8 @@ export function AgendaClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [dragProposal, setDragProposal] = useState<{ appointment: Appointment; startsAt: Date } | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
   const [createDate, setCreateDate] = useState<Date | null>(null);
   const [view, setView] = useState<CalendarView>("month");
   const [viewTouched, setViewTouched] = useState(false);
@@ -345,6 +348,38 @@ export function AgendaClient() {
           ? addWeeks(date, direction)
           : addDays(date, direction),
     );
+  }
+
+  async function confirmDragReschedule() {
+    if (!dragProposal) return;
+    setRescheduling(true);
+    try {
+      const duration = Math.max(
+        new Date(dragProposal.appointment.ends_at).getTime() - new Date(dragProposal.appointment.starts_at).getTime(),
+        15 * 60_000,
+      );
+      const response = await fetch(`/api/v1/calendar/appointments/${dragProposal.appointment.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "reschedule",
+          confirmed: true,
+          starts_at: dragProposal.startsAt.toISOString(),
+          ends_at: new Date(dragProposal.startsAt.getTime() + duration).toISOString(),
+          timezone: "America/Sao_Paulo",
+          location: dragProposal.appointment.location,
+        }),
+      });
+      const json = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(json.error?.message || "Não foi possível remarcar.");
+      toast.success("Compromisso remarcado no CRM e no Google Agenda.");
+      setDragProposal(null);
+      await load();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Não foi possível remarcar.");
+    } finally {
+      setRescheduling(false);
+    }
   }
 
   const periodLabel =
@@ -482,16 +517,37 @@ export function AgendaClient() {
       {loading ? <p className="text-sm text-muted-foreground">Carregando agenda…</p> : null}
       {error ? <Card className="p-4 text-sm text-destructive">{error}</Card> : null}
       {!loading && !error ? (
-        <CalendarBoard
-          view={effectiveView}
-          focusDate={focusDate}
-          appointments={filteredAppointments}
-          onSelect={setSelectedAppointment}
-          onCreate={(date) => {
-            setCreateDate(date);
-            setOpen(true);
-          }}
-        />
+        effectiveView === "week" || effectiveView === "day" ? (
+          <CalendarTimeGrid
+            days={
+              effectiveView === "day"
+                ? [focusDate]
+                : Array.from({ length: 7 }, (_, index) =>
+                    addDays(startOfWeek(focusDate, { weekStartsOn: 0 }), index),
+                  )
+            }
+            appointments={filteredAppointments}
+            onSelect={setSelectedAppointment}
+            onCreate={(date) => {
+              setCreateDate(date);
+              setOpen(true);
+            }}
+            onRequestReschedule={(appointment, startsAt) =>
+              setDragProposal({ appointment, startsAt })
+            }
+          />
+        ) : (
+          <CalendarBoard
+            view={effectiveView}
+            focusDate={focusDate}
+            appointments={filteredAppointments}
+            onSelect={setSelectedAppointment}
+            onCreate={(date) => {
+              setCreateDate(date);
+              setOpen(true);
+            }}
+          />
+        )
       ) : null}
       <AppointmentDialog
         open={open}
@@ -509,6 +565,30 @@ export function AgendaClient() {
         }}
         onUpdated={() => void load()}
       />
+      <Dialog open={Boolean(dragProposal)} onOpenChange={(open) => !open && setDragProposal(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar remarcação</DialogTitle>
+            <DialogDescription>
+              O compromisso será atualizado no CRM, no Google Agenda e nos lembretes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border p-4 text-sm">
+            <div className="font-semibold">{dragProposal?.appointment.title}</div>
+            <div className="mt-2 text-muted-foreground">
+              Novo horário: {dragProposal?.startsAt.toLocaleString("pt-BR")}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDragProposal(null)} disabled={rescheduling}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void confirmDragReschedule()} disabled={rescheduling}>
+              {rescheduling ? "Remarcando…" : "Confirmar remarcação"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

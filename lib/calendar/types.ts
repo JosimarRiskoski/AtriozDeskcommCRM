@@ -3,6 +3,7 @@ export type AppointmentType = "visit" | "consultation" | "online" | "other";
 
 export interface CalendarAppointment {
   id: string;
+  contact_id?: string | null;
   title: string;
   status: AppointmentStatus;
   appointment_type: AppointmentType;
@@ -11,6 +12,7 @@ export interface CalendarAppointment {
   location: string | null;
   meet_url: string | null;
   assigned_user_id: string | null;
+  metadata?: { imported_from_google?: boolean; [key: string]: unknown } | null;
   contacts?: {
     name?: string | null;
     display_name?: string | null;
