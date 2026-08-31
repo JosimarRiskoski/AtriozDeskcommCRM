@@ -19,6 +19,7 @@ type SB = SupabaseClient;
 // tempo real. O detalhe continua completo quando uma conversa é selecionada.
 const LIST_SELECT_COLS = `
   id, organization_id, contact_id, channel_session_id, channel, status,
+  conversation_command,
   status_changed_at, assigned_to_user_id, assignee_kind, assigned_at, last_inbound_at,
   last_outbound_at, last_message_at, last_message_preview,
   unread_count_for_assignee, tags,
@@ -101,7 +102,7 @@ export async function listConversationsHandler(
   // mais tempo primeiro. `last_inbound_at` = última mensagem do cliente = "há
   // quanto tempo aguarda resposta" (não `created_at`, que pode ser uma conversa
   // antiga reaberta). Demais visões: por atividade recente (last_message_at desc).
-  const isQueue = q.assigned_to === "unassigned";
+  const isQueue = q.command === "waiting" || q.assigned_to === "unassigned";
   const sortCol = isQueue ? "last_inbound_at" : "last_message_at";
   const asc = isQueue;
 
@@ -130,6 +131,8 @@ export async function listConversationsHandler(
     .limit(q.limit + 1);
 
   if (q.status) query = query.eq("status", q.status);
+  if (q.command) query = query.eq("conversation_command", q.command);
+  if (q.exclude_finished) query = query.not("status", "in", "(closed,archived)");
   if (q.channel_session_id) query = query.eq("channel_session_id", q.channel_session_id);
   if (allowedSessionIds) {
     query = query.in("channel_session_id", allowedSessionIds);

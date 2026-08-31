@@ -27,13 +27,13 @@ import { Plus } from "@/lib/ui/icons";
 function tabToFilter(tab: InboxFiltersValue["tab"]): Partial<ConversationsFilters> {
   switch (tab) {
     case "unassigned":
-      return { assigned_to: "unassigned", status: "open" };
+      return { command: "waiting" };
     case "mine":
-      return { assigned_to: "me" };
+      return { assigned_to: "me", exclude_finished: true };
     case "closed":
       return { status: "closed" };
     case "ai":
-      return { status: "ai_handling" };
+      return { command: "automatic" };
     case "all":
     default:
       return {};

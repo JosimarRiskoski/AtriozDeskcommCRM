@@ -4,6 +4,7 @@ import { apiClient } from "@/lib/api/client";
 
 export interface ConversationCounts {
   unassigned: number;
+  automatic: number;
   mine: number;
   all: number;
 }

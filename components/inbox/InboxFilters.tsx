@@ -25,7 +25,7 @@ const INBOX_TABS: { value: InboxTab; label: string }[] = [
   { value: "mine", label: "Minhas" },
   { value: "all", label: "Todas" },
   { value: "closed", label: "Fechadas" },
-  { value: "ai", label: "IA" },
+  { value: "ai", label: "Automático" },
 ];
 
 /**
@@ -69,6 +69,7 @@ export function InboxFilters({ value, onChange }: Props) {
     unassigned: counts?.unassigned,
     mine: counts?.mine,
     all: counts?.all,
+    ai: counts?.automatic,
   };
   // Alternador só aparece com 2+ números — com um só não há o que alternar.
   const activeChannels = (channels ?? []).filter((channel) => !channel.archived_at);

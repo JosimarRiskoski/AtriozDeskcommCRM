@@ -12,6 +12,7 @@ export interface Conversation {
   status: string;
   status_changed_at: string;
   assigned_to_user_id: string | null;
+  conversation_command?: "human" | "automatic" | "waiting" | "finished";
   assignee_kind: string | null;
   assigned_at: string | null;
   last_inbound_at: string | null;

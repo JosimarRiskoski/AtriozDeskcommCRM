@@ -42,13 +42,14 @@ export async function GET(): Promise<Response> {
 
   // Espelha tabToFilter (InboxLayout): unassigned = fila aberta sem dono;
   // mine = atribuídas a mim; all = tudo que o usuário VÊ (RLS-scoped).
-  const [unassigned, mine, all] = await Promise.all([
-    countExact().is("assigned_to_user_id", null).eq("status", "open"),
-    countExact().eq("assigned_to_user_id", user.id),
+  const [unassigned, automatic, mine, all] = await Promise.all([
+    countExact().eq("conversation_command", "waiting"),
+    countExact().eq("conversation_command", "automatic"),
+    countExact().eq("assigned_to_user_id", user.id).not("status", "in", "(closed,archived)"),
     countExact(),
   ]);
 
-  const firstErr = unassigned.error ?? mine.error ?? all.error;
+  const firstErr = unassigned.error ?? automatic.error ?? mine.error ?? all.error;
   if (firstErr) {
     return fail("internal_error", firstErr.message, 500, { requestId });
   }
@@ -56,6 +57,7 @@ export async function GET(): Promise<Response> {
   return ok(
     {
       unassigned: unassigned.count ?? 0,
+      automatic: automatic.count ?? 0,
       mine: mine.count ?? 0,
       all: all.count ?? 0,
     },

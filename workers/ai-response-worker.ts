@@ -41,6 +41,7 @@ import type {
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { activeSilence } from "@/lib/inbox/conversation-command";
 
 const RECENT_MESSAGES_LIMIT = 20;
 const RAG_TOP_K = 5;
@@ -294,7 +295,7 @@ async function buildContext(input: BuildContextInput): Promise<GuardDecision> {
     if (age > WINDOW_24H_MS) return skip("window_24h_expired");
   }
   // Post-handoff silence (IA-06)
-  if (c.bot_silenced_until && new Date(c.bot_silenced_until).getTime() > Date.now()) {
+  if (activeSilence(c.bot_silenced_until)) {
     return skip("silenced_post_handoff");
   }
   // Recent handoff (idempotency for S-06.03)

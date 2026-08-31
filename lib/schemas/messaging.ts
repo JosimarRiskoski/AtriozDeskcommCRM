@@ -109,6 +109,8 @@ export type PatchConversationInput = z.infer<typeof patchConversationSchema>;
 
 export const listConversationsQuerySchema = z.object({
   status: conversationStatusSchema.optional(),
+  command: z.enum(["human", "automatic", "waiting", "finished"]).optional(),
+  exclude_finished: z.boolean().optional(),
   assigned_to: z.union([z.string().uuid(), z.literal("me"), z.literal("unassigned")]).optional(),
   channel_session_id: z.string().uuid().optional(),
   include_archived_connections: z.boolean().default(false),
