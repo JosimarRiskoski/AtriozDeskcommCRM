@@ -1,6 +1,7 @@
 # Worker 24/7 do agent-engine (fusão Vendaval) — processo long-running fora do Next.
 # Roda TS direto via tsx (sem build): o worker é I/O-bound e o cold start não importa.
-# ponytail: imagem single-stage com devDeps (tsx precisa); multi-stage + prune é Fase 4.
+# Instala apenas dependências de produção. O tsx fica global e fixado para não
+# obrigar o EasyPanel a instalar todas as ferramentas de teste em cada deploy.
 FROM node:22-alpine
 
 WORKDIR /app
@@ -8,11 +9,12 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --prod --frozen-lockfile \
+    && npm install --global tsx@4.23.1
 
 COPY . .
 
 # Healthz do worker (bind 0.0.0.0 dentro do container).
 EXPOSE 8787
 
-CMD ["pnpm", "exec", "tsx", "workers/agent-worker/main.ts"]
+CMD ["tsx", "workers/agent-worker/main.ts"]
