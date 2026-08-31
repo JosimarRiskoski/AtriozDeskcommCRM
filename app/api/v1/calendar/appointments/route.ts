@@ -11,6 +11,8 @@ import { renderReminderTemplate } from "@/lib/calendar/templates";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { syncGoogleCalendar } from "@/lib/calendar/sync";
+import { moveLeadForAppointment } from "@/lib/leads/appointment-stage-move";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -226,6 +228,19 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (reminderRows.length) {
       const { error: reminderError } = await admin.from("calendar_reminders").insert(reminderRows);
       if (reminderError) throw reminderError;
+    }
+    if (input.lead_id) {
+      await moveLeadForAppointment(admin, {
+        organizationId: authz.org.orgId,
+        leadId: input.lead_id,
+        transition: "confirmed",
+      }).catch((stageError) => {
+        logger.error("[calendar] appointment created but lead stage sync failed", {
+          appointment_id: appointment.id,
+          lead_id: input.lead_id,
+          error: stageError instanceof Error ? stageError.message : String(stageError),
+        });
+      });
     }
     return ok(appointment, { status: 201, requestId });
   } catch (error) {
