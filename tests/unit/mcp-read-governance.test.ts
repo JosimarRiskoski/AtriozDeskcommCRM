@@ -264,7 +264,11 @@ describe("crm_list_conversations — coerência queue_position ↔ inbox", () =>
     const res = (await crmListConversations.handler(
       { limit: 10 } as Parameters<typeof crmListConversations.handler>[0],
       makeCtx((q) =>
-        q.select === "id" ? { data: [], error: null } : { data: rows, error: null },
+        q.table === "channel_sessions" && q.select === "id"
+          ? { data: [{ id: rows[0]!.channel_session_id }], error: null }
+          : q.table === "conversations" && q.select === "id"
+            ? { data: [], error: null }
+            : { data: rows, error: null },
       ),
     )) as { conversations: Array<Record<string, unknown>> };
     const c = res.conversations[0]!;
