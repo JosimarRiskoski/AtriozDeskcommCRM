@@ -8,6 +8,7 @@ import {
   updateGoogleEvent,
 } from "@/lib/calendar/google";
 import { renderReminderTemplate } from "@/lib/calendar/templates";
+import { moveLeadForAppointment } from "@/lib/leads/appointment-stage-move";
 import type { McpToolDefinition } from "../types";
 
 const listShape = {
@@ -69,6 +70,7 @@ export const crmCalendarCheckAvailability: McpToolDefinition<typeof availability
 const createShape = {
   explicit_confirmation: z.literal(true).describe("Somente true após o cliente confirmar claramente data e horário."),
   contact_id: z.string().uuid(),
+  lead_id: z.string().uuid().optional(),
   conversation_id: z.string().uuid().optional(),
   title: z.string().min(2).max(180),
   appointment_type: z.enum(["visit", "consultation", "online", "other"]),
@@ -136,6 +138,7 @@ export const crmCalendarCreateAppointment: McpToolDefinition<typeof createShape>
         organization_id: ctx.organizationId,
         integration_id: integration.id,
         contact_id: input.contact_id,
+        lead_id: input.lead_id ?? null,
         conversation_id: conversationId,
         external_event_id: event.id,
         external_calendar_id: integration.calendar_id,
@@ -174,6 +177,13 @@ export const crmCalendarCreateAppointment: McpToolDefinition<typeof createShape>
         scheduled_for: new Date(item.at).toISOString(),
         message_body: renderReminderTemplate(item.template, templateContext),
       })));
+    }
+    if (input.lead_id) {
+      await moveLeadForAppointment(ctx.supabase, {
+        organizationId: ctx.organizationId,
+        leadId: input.lead_id,
+        transition: "confirmed",
+      });
     }
     return { created: true, appointment_id: appointment.id, starts_at: input.starts_at, meet_url: meetUrl };
   },
