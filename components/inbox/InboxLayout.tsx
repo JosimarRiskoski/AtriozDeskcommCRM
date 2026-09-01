@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
@@ -23,6 +23,11 @@ import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { NewContactDialog } from "@/components/contacts/NewContactDialog";
 import { Button } from "@/components/ui/button";
 import { Plus } from "@/lib/ui/icons";
+import {
+  clampInboxListWidth,
+  InboxResizeHandle,
+  INBOX_LIST_DEFAULT_WIDTH,
+} from "./InboxResizeHandle";
 
 function tabToFilter(tab: InboxFiltersValue["tab"]): Partial<ConversationsFilters> {
   switch (tab) {
@@ -55,8 +60,9 @@ interface InboxLayoutProps {
 }
 
 export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {}) {
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
   const orgId = activeOrg?.orgId ?? null;
+  const listWidthStorageKey = `atrioz-crm-inbox-list-width:${user.id}:${orgId ?? "no-org"}`;
 
   const router = useRouter();
   const pathname = usePathname();
@@ -88,7 +94,37 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const [helpOpen, setHelpOpen] = useState(false);
   const [newContactOpen, setNewContactOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [listWidth, setListWidth] = useState(INBOX_LIST_DEFAULT_WIDTH);
   const composerRef = useRef<ComposerHandle | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(listWidthStorageKey);
+      const parsed = stored ? Number(stored) : Number.NaN;
+      setListWidth(
+        Number.isFinite(parsed) ? clampInboxListWidth(parsed) : INBOX_LIST_DEFAULT_WIDTH,
+      );
+    } catch {
+      setListWidth(INBOX_LIST_DEFAULT_WIDTH);
+    }
+  }, [listWidthStorageKey]);
+
+  const persistListWidth = useCallback(
+    (nextWidth: number) => {
+      const clamped = clampInboxListWidth(nextWidth);
+      setListWidth(clamped);
+      try {
+        window.localStorage.setItem(listWidthStorageKey, String(clamped));
+      } catch {
+        // O redimensionamento continua funcionando mesmo sem armazenamento local.
+      }
+    },
+    [listWidthStorageKey],
+  );
+
+  const resetListWidth = useCallback(() => {
+    persistListWidth(INBOX_LIST_DEFAULT_WIDTH);
+  }, [persistListWidth]);
 
   const filters: ConversationsFilters = useMemo(
     () => ({
@@ -208,8 +244,11 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         : null;
 
   return (
-    <div className="relative grid h-full min-h-0 w-full grid-cols-1 overflow-hidden md:grid-cols-[300px_minmax(0,1fr)]">
-      <div className="flex h-full min-h-0 flex-col border-r border-border">
+    <div
+      className="relative grid h-full min-h-0 w-full grid-cols-1 overflow-hidden md:grid-cols-[var(--inbox-list-width)_8px_minmax(0,1fr)]"
+      style={{ "--inbox-list-width": `${listWidth}px` } as CSSProperties}
+    >
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-sm font-semibold">Conversas</span>
           <Button size="sm" variant="outline" onClick={() => setNewContactOpen(true)}>
@@ -229,7 +268,13 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         </div>
       </div>
 
-      <div className="flex h-full min-h-0 flex-col">
+      <InboxResizeHandle
+        width={listWidth}
+        onWidthChange={persistListWidth}
+        onReset={resetListWidth}
+      />
+
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
         {selectedConversation ? (
           <>
             <ConversationHeader
