@@ -94,4 +94,14 @@ describe("InboxFilters render — 3 visões + escopo", () => {
     expect(screen.getByRole("tab", { name: /Minhas/ })).toHaveTextContent("2");
     expect(screen.getByRole("tab", { name: /Todas/ })).toHaveTextContent("5");
   });
+
+  it("mantém filtros inteiros em uma faixa com rolagem horizontal", () => {
+    setOrg("manager", "all");
+    render(<InboxFilters value={VALUE} onChange={() => {}} />);
+
+    expect(screen.getByTestId("inbox-tab-scroll")).toHaveClass("overflow-x-auto");
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(tab).toHaveClass("shrink-0");
+    }
+  });
 });

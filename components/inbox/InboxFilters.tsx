@@ -191,23 +191,32 @@ export function InboxFilters({ value, onChange }: Props) {
       )}
 
       <Tabs value={value.tab} onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}>
-        <TabsList
-          className="grid h-8 w-full"
-          style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+        <div
+          data-testid="inbox-tab-scroll"
+          className="max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-color:var(--color-border-strong)_transparent] [scrollbar-width:thin]"
+          aria-label="Navegue horizontalmente pelos filtros do Inbox"
         >
-          {tabs.map((tab) => {
-            const meta = INBOX_TABS.find((t) => t.value === tab)!;
-            const count = countFor[tab];
-            return (
-              <TabsTrigger key={tab} value={tab} className="gap-1 text-[11px]">
-                {meta.label}
-                {typeof count === "number" && count > 0 && (
-                  <span className="text-[10px] tabular-nums text-muted-foreground">{count}</span>
-                )}
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
+          <TabsList className="h-8 w-max min-w-full justify-start">
+            {tabs.map((tab) => {
+              const meta = INBOX_TABS.find((t) => t.value === tab)!;
+              const count = countFor[tab];
+              return (
+                <TabsTrigger
+                  key={tab}
+                  value={tab}
+                  className="shrink-0 gap-1.5 px-2.5 text-[11px]"
+                >
+                  {meta.label}
+                  {typeof count === "number" && count > 0 && (
+                    <span className="rounded-full bg-background/70 px-1.5 py-0.5 text-[10px] tabular-nums leading-none text-muted-foreground">
+                      {count}
+                    </span>
+                  )}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </div>
       </Tabs>
 
       <div className="flex items-center justify-between">
