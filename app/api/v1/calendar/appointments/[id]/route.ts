@@ -24,6 +24,7 @@ const updateSchema = z.discriminatedUnion("action", [
       ends_at: z.string().datetime(),
       timezone: z.string().trim().min(3).max(80),
       location: z.string().trim().max(500).nullable().optional(),
+      assigned_user_id: z.string().uuid().nullable().optional(),
     })
     .refine((value) => new Date(value.ends_at) > new Date(value.starts_at), {
       path: ["ends_at"],
@@ -55,6 +56,29 @@ export async function PATCH(
     .eq("organization_id", authz.org.orgId)
     .maybeSingle();
   if (!appointment) return fail("not_found", "Compromisso não encontrado.", 404, { requestId });
+
+  if (parsed.data.action === "reschedule" && parsed.data.assigned_user_id) {
+    const { data: member, error: memberError } = await admin
+      .from("user_organizations")
+      .select("role")
+      .eq("organization_id", authz.org.orgId)
+      .eq("user_id", parsed.data.assigned_user_id)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (memberError) {
+      return fail("internal_error", "Não foi possível validar o responsável.", 500, {
+        requestId,
+      });
+    }
+    if (!member || member.role === "viewer") {
+      return fail(
+        "invalid_assignee",
+        "Responsável não é um atendente ativo desta organização.",
+        422,
+        { requestId },
+      );
+    }
+  }
 
   try {
     const { accessToken, integration } = await getCalendarAccess(admin, authz.org.orgId);
@@ -113,6 +137,9 @@ export async function PATCH(
         ends_at: parsed.data.ends_at,
         timezone: parsed.data.timezone,
         location: parsed.data.location ?? null,
+        ...(parsed.data.assigned_user_id !== undefined
+          ? { assigned_user_id: parsed.data.assigned_user_id }
+          : {}),
         cancelled_at: null,
         cancellation_reason: null,
       })

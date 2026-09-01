@@ -45,6 +45,7 @@ import {
   type CalendarView,
 } from "@/lib/calendar/types";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
+import { copyToClipboard } from "@/lib/clipboard";
 
 type Appointment = CalendarAppointment;
 
@@ -63,7 +64,7 @@ function toLocalDateTime(value: string) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-function ManageAppointmentDialog({
+export function ManageAppointmentDialog({
   appointment,
   onOpenChange,
   onUpdated,
@@ -76,8 +77,10 @@ function ManageAppointmentDialog({
   const [startsAt, setStartsAt] = useState("");
   const [duration, setDuration] = useState("60");
   const [location, setLocation] = useState("");
+  const [assignedUserId, setAssignedUserId] = useState("unassigned");
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const members = useAssignableMembers(Boolean(appointment));
 
   useEffect(() => {
     if (!appointment) return;
@@ -95,8 +98,19 @@ function ManageAppointmentDialog({
       ),
     );
     setLocation(appointment.location ?? "");
+    setAssignedUserId(appointment.assigned_user_id ?? "unassigned");
     setConfirmed(false);
   }, [appointment]);
+
+  async function copyMeetLink() {
+    if (!appointment?.meet_url) return;
+    const copied = await copyToClipboard(appointment.meet_url);
+    if (copied) {
+      toast.success("Link do Google Meet copiado.");
+    } else {
+      toast.error("Não foi possível copiar o link. Selecione o endereço e copie manualmente.");
+    }
+  }
 
   async function update(action: "reschedule" | "cancel" | "complete" | "no_show") {
     if (!appointment || !confirmed) return;
@@ -112,6 +126,7 @@ function ManageAppointmentDialog({
               ends_at: new Date(start.getTime() + Number(duration) * 60000).toISOString(),
               timezone: "America/Sao_Paulo",
               location: location || null,
+              assigned_user_id: assignedUserId === "unassigned" ? null : assignedUserId,
             }
           : { action, confirmed: true };
       const response = await fetch(`/api/v1/calendar/appointments/${appointment.id}`, {
@@ -129,7 +144,7 @@ function ManageAppointmentDialog({
             ? "Compromisso concluído."
             : action === "no_show"
               ? "Ausência registrada."
-              : "Compromisso remarcado.",
+              : "Compromisso atualizado.",
       );
       onOpenChange(false);
       onUpdated();
@@ -152,7 +167,7 @@ function ManageAppointmentDialog({
           </DialogDescription>
         </DialogHeader>
         <StepDialogForm
-          labels={["Nova data", "Confirmar"]}
+          labels={["Dados", "Confirmar"]}
           currentStep={step}
           onSubmit={(event) => {
             event.preventDefault();
@@ -188,7 +203,7 @@ function ManageAppointmentDialog({
               </div>
               {step === 0 ? (
                 <Button type="button" onClick={() => setStep(1)}>
-                  Revisar remarcação
+                  Revisar alterações
                 </Button>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -196,7 +211,7 @@ function ManageAppointmentDialog({
                     Voltar
                   </Button>
                   <Button type="submit" disabled={!confirmed || submitting}>
-                    Confirmar nova data
+                    Confirmar alterações
                   </Button>
                 </div>
               )}
@@ -231,6 +246,44 @@ function ManageAppointmentDialog({
                   value={location}
                   onChange={(event) => setLocation(event.target.value)}
                 />
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="manage-appointment-owner">Responsável</Label>
+              <Select value={assignedUserId} onValueChange={setAssignedUserId}>
+                <SelectTrigger id="manage-appointment-owner">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Sem responsável</SelectItem>
+                  {(members.data ?? []).map((member) => (
+                    <SelectItem key={member.user_id} value={member.user_id}>
+                      {member.full_name || "Membro"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {appointment?.meet_url ? (
+              <div className="space-y-2 rounded-md border p-3">
+                <Label htmlFor="manage-appointment-meet">Link do Google Meet</Label>
+                <Input id="manage-appointment-meet" value={appointment.meet_url} readOnly />
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => void copyMeetLink()}>
+                    Copiar link do Meet
+                  </Button>
+                  <a
+                    href={appointment.meet_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-10 items-center justify-center rounded-sm border border-border px-4 text-sm font-medium hover:bg-muted"
+                  >
+                    Abrir Google Meet
+                  </a>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Copie este link para enviar na conversa do WhatsApp.
+                </p>
               </div>
             ) : null}
           </div>
