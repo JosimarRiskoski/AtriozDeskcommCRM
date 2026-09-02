@@ -10,6 +10,7 @@ import { createGoogleEvent, deleteGoogleEvent } from "@/lib/calendar/google";
 import { renderReminderTemplate } from "@/lib/calendar/templates";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { syncGoogleCalendar } from "@/lib/calendar/sync";
 import { moveLeadForAppointment } from "@/lib/leads/appointment-stage-move";
 import { logger } from "@/lib/logger";
 
@@ -48,9 +49,24 @@ export async function GET(request: NextRequest): Promise<Response> {
   const from = url.searchParams.get("from") || new Date().toISOString();
   const until =
     url.searchParams.get("until") || new Date(Date.now() + 90 * 86400000).toISOString();
-  // Leitura local: Google é sincronizado pelo cron e pela ação manual.
-  // Abrir a Agenda (ou seu cabeçalho) não deve depender da API externa,
-  // renovar tokens nem iniciar escritas concorrentes de sincronização.
+  const admin = createAdminClient() as unknown as SupabaseClient;
+  const { data: integration } = await admin
+    .from("calendar_integrations")
+    .select("last_sync_at")
+    .eq("organization_id", authz.org.orgId)
+    .eq("status", "connected")
+    .maybeSingle();
+  const stale =
+    !integration?.last_sync_at ||
+    Date.now() - new Date(integration.last_sync_at).getTime() > 60_000;
+  if (stale) {
+    await syncGoogleCalendar(admin, authz.org.orgId).catch(async (error) => {
+      await admin
+        .from("calendar_integrations")
+        .update({ last_error: error instanceof Error ? error.message.slice(0, 500) : "sync_failed" })
+        .eq("organization_id", authz.org.orgId);
+    });
+  }
   const { data, error } = await supabase
     .from("calendar_appointments")
     .select(

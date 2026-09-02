@@ -543,15 +543,6 @@ export function AgendaClient() {
           Novo compromisso
         </Button>
       </header>
-      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-        <span>Exibindo os dados salvos no CRM. A importação do Google ocorre em segundo plano.</span>
-        <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void load()}>
-          Atualizar lista
-        </Button>
-        <a className="underline underline-offset-4" href="/app/settings/google-calendar">
-          Ver sincronização Google
-        </a>
-      </div>
       <Card className="space-y-3 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-1">
