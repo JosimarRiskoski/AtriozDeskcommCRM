@@ -91,6 +91,9 @@ export function useRefetchDeSeguranca<T>({
   }, [assinatura]);
 
   const verificar = useCallback(async () => {
+    // A reconciliação ocorre imediatamente ao voltar. Não reler o board
+    // inteiro enquanto a aba está oculta; preservar o detector de divergência.
+    if (document.visibilityState === "hidden") return;
     const antes = assinaturaRef.current(qc.getQueryData<T>(queryKey));
 
     await qc.refetchQueries({ queryKey, exact: true });

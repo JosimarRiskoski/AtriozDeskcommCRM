@@ -54,14 +54,18 @@ export function AgendaQuickMenu() {
     void load();
   }, [load]);
   useEffect(() => {
-    const refresh = () => void load();
+    const refresh = () => {
+      if (document.visibilityState !== "hidden") void load();
+    };
     const interval = window.setInterval(refresh, 60_000);
     window.addEventListener("calendar:refresh", refresh);
     window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("calendar:refresh", refresh);
       window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, [load]);
 
@@ -222,7 +226,6 @@ export function AgendaQuickMenu() {
         initialStartsAt={selectedDate}
         onCreated={() => {
           window.dispatchEvent(new Event("calendar:refresh"));
-          void load();
         }}
       />
     </>

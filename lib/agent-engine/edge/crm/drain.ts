@@ -51,9 +51,11 @@ export async function drainTick(
   pool: pg.Pool,
   knobs: DrainKnobs,
   log: Logger,
+  reap = true,
 ): Promise<number> {
-  // Reaper de eventos órfãos — barato (update indexado), roda a cada tick.
-  await pool.query(
+  // Chamadas avulsas preservam a recuperação. O loop controla a cadência
+  // separadamente: varrer órfãos em todo claim gera trabalho mesmo sem fila.
+  if (reap) await pool.query(
     `update event_log set status = 'pending', updated_at = now()
      where event_type = 'ai_agent.dispatch_requested'
        and status = 'processing'
@@ -184,10 +186,16 @@ export async function runDrainLoop(
   log: Logger,
   signal: AbortSignal,
 ): Promise<void> {
+  let nextReapAt = 0;
+  // No máximo um minuto extra para recuperar um lease expirado; timeouts
+  // menores continuam sendo inspecionados pelo menos nessa mesma cadência.
+  const reapIntervalMs = Math.max(1, Math.min(60_000, knobs.reapTimeoutMs));
   while (!signal.aborted) {
     let drained = 0;
     try {
-      drained = await drainTick(pool, knobs, log);
+      const reap = Date.now() >= nextReapAt;
+      drained = await drainTick(pool, knobs, log, reap);
+      if (reap) nextReapAt = Date.now() + reapIntervalMs;
     } catch (err) {
       log.error('drain: tick falhou', {
         error: (err instanceof Error ? err.message : String(err)).slice(0, 300),
@@ -195,11 +203,14 @@ export async function runDrainLoop(
     }
     const waitMs = drained > 0 ? knobs.intervalMs : knobs.idleIntervalMs;
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, waitMs);
-      signal.addEventListener('abort', () => {
+      if (signal.aborted) { resolve(); return; }
+      const finish = () => {
         clearTimeout(timer);
+        signal.removeEventListener('abort', finish);
         resolve();
-      }, { once: true });
+      };
+      const timer = setTimeout(finish, waitMs);
+      signal.addEventListener('abort', finish, { once: true });
     });
   }
 }
