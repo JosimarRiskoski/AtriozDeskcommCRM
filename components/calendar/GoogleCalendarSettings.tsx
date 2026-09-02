@@ -80,11 +80,22 @@ export function GoogleCalendarSettings() {
     setSyncing(true);
     try {
       const response = await fetch("/api/v1/calendar/sync", { method: "POST" });
+      const requestId = response.headers.get("x-request-id");
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          `A sincronização recebeu uma resposta inválida do servidor (HTTP ${response.status})${requestId ? ` — ID: ${requestId}` : ""}.`,
+        );
+      }
       const json = (await response.json()) as {
         data?: { imported_or_updated?: number; cancelled?: number };
         error?: { message?: string };
       };
-      if (!response.ok) throw new Error(json.error?.message || "Não foi possível sincronizar.");
+      if (!response.ok) {
+        throw new Error(
+          `${json.error?.message || "Não foi possível sincronizar."}${requestId ? ` — ID: ${requestId}` : ""}`,
+        );
+      }
       await load();
       toast.success(
         `Agenda sincronizada: ${json.data?.imported_or_updated ?? 0} atualizado(s), ${json.data?.cancelled ?? 0} cancelado(s).`,
