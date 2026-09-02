@@ -48,6 +48,7 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { copyToClipboard } from "@/lib/clipboard";
 
 type Appointment = CalendarAppointment;
+type AppointmentAction = "reschedule" | "cancel" | "complete" | "no_show" | "reopen";
 
 function subscribeMobile(callback: () => void) {
   const media = window.matchMedia("(max-width: 640px)");
@@ -62,6 +63,18 @@ function mobileSnapshot() {
 function toLocalDateTime(value: string) {
   const date = new Date(value);
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function appointmentDurationMinutes(appointment: Appointment) {
+  return String(
+    Math.max(
+      5,
+      Math.round(
+        (new Date(appointment.ends_at).getTime() - new Date(appointment.starts_at).getTime()) /
+          60000,
+      ),
+    ),
+  );
 }
 
 export function ManageAppointmentDialog({
@@ -80,26 +93,18 @@ export function ManageAppointmentDialog({
   const [assignedUserId, setAssignedUserId] = useState("unassigned");
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<AppointmentAction>("reschedule");
   const members = useAssignableMembers(Boolean(appointment));
 
   useEffect(() => {
     if (!appointment) return;
     setStep(0);
     setStartsAt(toLocalDateTime(appointment.starts_at));
-    setDuration(
-      String(
-        Math.max(
-          5,
-          Math.round(
-            (new Date(appointment.ends_at).getTime() - new Date(appointment.starts_at).getTime()) /
-              60000,
-          ),
-        ),
-      ),
-    );
+    setDuration(appointmentDurationMinutes(appointment));
     setLocation(appointment.location ?? "");
     setAssignedUserId(appointment.assigned_user_id ?? "unassigned");
     setConfirmed(false);
+    setPendingAction("reschedule");
   }, [appointment]);
 
   async function copyMeetLink() {
@@ -112,22 +117,32 @@ export function ManageAppointmentDialog({
     }
   }
 
-  async function update(action: "reschedule" | "cancel" | "complete" | "no_show") {
+  async function update(action: AppointmentAction) {
     if (!appointment || !confirmed) return;
     setSubmitting(true);
     try {
       const start = new Date(startsAt);
+      const scheduleChanged =
+        startsAt !== toLocalDateTime(appointment.starts_at) ||
+        duration !== appointmentDurationMinutes(appointment) ||
+        location !== (appointment.location ?? "");
       const body =
         action === "reschedule"
-          ? {
-              action,
-              confirmed: true,
-              starts_at: start.toISOString(),
-              ends_at: new Date(start.getTime() + Number(duration) * 60000).toISOString(),
-              timezone: "America/Sao_Paulo",
-              location: location || null,
-              assigned_user_id: assignedUserId === "unassigned" ? null : assignedUserId,
-            }
+          ? scheduleChanged
+            ? {
+                action,
+                confirmed: true,
+                starts_at: start.toISOString(),
+                ends_at: new Date(start.getTime() + Number(duration) * 60000).toISOString(),
+                timezone: "America/Sao_Paulo",
+                location: location || null,
+                assigned_user_id: assignedUserId === "unassigned" ? null : assignedUserId,
+              }
+            : {
+                action: "assign",
+                confirmed: true,
+                assigned_user_id: assignedUserId === "unassigned" ? null : assignedUserId,
+              }
           : { action, confirmed: true };
       const response = await fetch(`/api/v1/calendar/appointments/${appointment.id}`, {
         method: "PATCH",
@@ -144,6 +159,8 @@ export function ManageAppointmentDialog({
             ? "Compromisso concluído."
             : action === "no_show"
               ? "Ausência registrada."
+              : action === "reopen"
+                ? "Compromisso reativado."
               : "Compromisso atualizado.",
       );
       onOpenChange(false);
@@ -171,47 +188,93 @@ export function ManageAppointmentDialog({
           currentStep={step}
           onSubmit={(event) => {
             event.preventDefault();
-            void update("reschedule");
+            void update(pendingAction);
           }}
           footer={
             <DialogFooter className="flex-wrap gap-2 sm:justify-between">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={!confirmed || submitting}
-                  onClick={() => void update("cancel")}
-                >
-                  Cancelar compromisso
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!confirmed || submitting}
-                  onClick={() => void update("complete")}
-                >
-                  Concluir
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!confirmed || submitting}
-                  onClick={() => void update("no_show")}
-                >
-                  Não compareceu
-                </Button>
-              </div>
               {step === 0 ? (
-                <Button type="button" onClick={() => setStep(1)}>
-                  Revisar alterações
-                </Button>
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {["cancelled", "completed", "no_show"].includes(appointment?.status ?? "") ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={submitting}
+                        onClick={() => {
+                          setPendingAction("reopen");
+                          setConfirmed(false);
+                          setStep(1);
+                        }}
+                      >
+                        Reativar compromisso
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          disabled={submitting}
+                          onClick={() => {
+                            setPendingAction("cancel");
+                            setConfirmed(false);
+                            setStep(1);
+                          }}
+                        >
+                          Cancelar compromisso
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={submitting}
+                          onClick={() => {
+                            setPendingAction("complete");
+                            setConfirmed(false);
+                            setStep(1);
+                          }}
+                        >
+                          Concluir
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={submitting}
+                          onClick={() => {
+                            setPendingAction("no_show");
+                            setConfirmed(false);
+                            setStep(1);
+                          }}
+                        >
+                          Não compareceu
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setPendingAction("reschedule");
+                      setConfirmed(false);
+                      setStep(1);
+                    }}
+                  >
+                    Revisar alterações
+                  </Button>
+                </>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={() => setStep(0)}>
                     Voltar
                   </Button>
                   <Button type="submit" disabled={!confirmed || submitting}>
-                    Confirmar alterações
+                    {pendingAction === "cancel"
+                      ? "Confirmar cancelamento"
+                      : pendingAction === "complete"
+                        ? "Confirmar conclusão"
+                        : pendingAction === "no_show"
+                          ? "Confirmar ausência"
+                          : pendingAction === "reopen"
+                            ? "Confirmar reativação"
+                            : "Confirmar alterações"}
                   </Button>
                 </div>
               )}
@@ -290,21 +353,40 @@ export function ManageAppointmentDialog({
           <div className={step === 1 ? "space-y-4" : "hidden"}>
             <div className="rounded-md border p-4 text-sm">
               <div className="font-semibold">{appointment?.title}</div>
-              <div className="mt-2">
-                {startsAt ? new Date(startsAt).toLocaleString("pt-BR") : "Data não informada"}
+              <div className="mt-2 font-medium">
+                {pendingAction === "cancel"
+                  ? "Cancelar compromisso"
+                  : pendingAction === "complete"
+                    ? "Marcar como concluído"
+                    : pendingAction === "no_show"
+                      ? "Registrar que não compareceu"
+                      : pendingAction === "reopen"
+                        ? "Reativar como compromisso agendado"
+                        : "Salvar dados e responsável"}
               </div>
-              <div>{appointment?.meet_url ? "Google Meet" : location || "Local não informado"}</div>
+              {pendingAction === "reschedule" ? (
+                <>
+                  <div className="mt-2">
+                    {startsAt ? new Date(startsAt).toLocaleString("pt-BR") : "Data não informada"}
+                  </div>
+                  <div>
+                    {appointment?.meet_url ? "Google Meet" : location || "Local não informado"}
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
-          <label className="mt-4 flex items-start gap-3 rounded-md border p-4 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={confirmed}
-              onChange={(event) => setConfirmed(event.target.checked)}
-            />
-            <span>Confirmo esta alteração no Google Agenda e nos lembretes do WhatsApp.</span>
-          </label>
+          {step === 1 ? (
+            <label className="mt-4 flex items-start gap-3 rounded-md border p-4 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={confirmed}
+                onChange={(event) => setConfirmed(event.target.checked)}
+              />
+              <span>Confirmo esta ação no CRM, no Google Agenda e nos lembretes do WhatsApp.</span>
+            </label>
+          ) : null}
         </StepDialogForm>
       </DialogContent>
     </Dialog>

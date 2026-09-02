@@ -75,10 +75,58 @@ describe("ManageAppointmentDialog", () => {
 
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     const [, request] = vi.mocked(fetch).mock.calls[0]!;
-    expect(JSON.parse(String(request?.body))).toEqual(
-      expect.objectContaining({
-        assigned_user_id: "11111111-1111-4111-8111-111111111111",
-      }),
+    expect(JSON.parse(String(request?.body))).toEqual({
+      action: "assign",
+      confirmed: true,
+      assigned_user_id: "11111111-1111-4111-8111-111111111111",
+    });
+  });
+
+  it("exige uma revisão específica antes de concluir", async () => {
+    render(
+      <ManageAppointmentDialog
+        appointment={{
+          id: "appointment-1",
+          title: "Visita das 17h",
+          status: "scheduled",
+          appointment_type: "visit",
+          starts_at: "2026-09-01T17:00:00-03:00",
+          ends_at: "2026-09-01T18:00:00-03:00",
+          location: "Cliente",
+          meet_url: null,
+          assigned_user_id: null,
+        }}
+        onOpenChange={vi.fn()}
+        onUpdated={vi.fn()}
+      />,
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Concluir" }));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByText("Marcar como concluído")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmar conclusão" })).toBeDisabled();
+  });
+
+  it("oferece reativação para compromisso concluído", () => {
+    render(
+      <ManageAppointmentDialog
+        appointment={{
+          id: "appointment-1",
+          title: "Visita das 17h",
+          status: "completed",
+          appointment_type: "visit",
+          starts_at: "2026-09-01T17:00:00-03:00",
+          ends_at: "2026-09-01T18:00:00-03:00",
+          location: "Cliente",
+          meet_url: null,
+          assigned_user_id: null,
+        }}
+        onOpenChange={vi.fn()}
+        onUpdated={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Reativar compromisso" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Concluir" })).not.toBeInTheDocument();
   });
 });

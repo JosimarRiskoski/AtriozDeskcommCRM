@@ -12,6 +12,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const updateSchema = z.discriminatedUnion("action", [
   z.object({
+    action: z.literal("assign"),
+    confirmed: z.literal(true),
+    assigned_user_id: z.string().uuid().nullable(),
+  }),
+  z.object({
     action: z.literal("cancel"),
     confirmed: z.literal(true),
     reason: z.string().trim().max(500).nullable().optional(),
@@ -32,6 +37,7 @@ const updateSchema = z.discriminatedUnion("action", [
     }),
   z.object({ action: z.literal("complete"), confirmed: z.literal(true) }),
   z.object({ action: z.literal("no_show"), confirmed: z.literal(true) }),
+  z.object({ action: z.literal("reopen"), confirmed: z.literal(true) }),
 ]);
 
 export async function PATCH(
@@ -57,7 +63,10 @@ export async function PATCH(
     .maybeSingle();
   if (!appointment) return fail("not_found", "Compromisso não encontrado.", 404, { requestId });
 
-  if (parsed.data.action === "reschedule" && parsed.data.assigned_user_id) {
+  if (
+    (parsed.data.action === "assign" || parsed.data.action === "reschedule") &&
+    parsed.data.assigned_user_id
+  ) {
     const { data: member, error: memberError } = await admin
       .from("user_organizations")
       .select("role")
@@ -78,6 +87,44 @@ export async function PATCH(
         { requestId },
       );
     }
+  }
+
+  if (parsed.data.action === "assign") {
+    const { error: assignError } = await admin
+      .from("calendar_appointments")
+      .update({ assigned_user_id: parsed.data.assigned_user_id })
+      .eq("id", id)
+      .eq("organization_id", authz.org.orgId);
+    if (assignError) {
+      return fail("calendar_assignment_failed", "Não foi possível alterar o responsável.", 500, {
+        requestId,
+      });
+    }
+    return ok(
+      { id, status: appointment.status, assigned_user_id: parsed.data.assigned_user_id },
+      { requestId },
+    );
+  }
+
+  if (parsed.data.action === "reopen") {
+    const { error: reopenError } = await admin
+      .from("calendar_appointments")
+      .update({ status: "scheduled", cancelled_at: null, cancellation_reason: null })
+      .eq("id", id)
+      .eq("organization_id", authz.org.orgId);
+    if (reopenError) {
+      return fail("calendar_reopen_failed", "Não foi possível reativar o compromisso.", 500, {
+        requestId,
+      });
+    }
+    await admin
+      .from("calendar_reminders")
+      .update({ status: "pending", claimed_at: null, claimed_until: null, last_error: null })
+      .eq("appointment_id", id)
+      .eq("status", "cancelled")
+      .gt("scheduled_for", new Date().toISOString())
+      .is("sent_at", null);
+    return ok({ id, status: "scheduled" }, { requestId });
   }
 
   try {
