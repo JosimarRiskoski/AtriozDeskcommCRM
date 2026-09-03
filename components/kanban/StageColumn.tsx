@@ -1,7 +1,7 @@
 "use client";
 import { Droppable } from "@hello-pangea/dnd";
 import type { CSSProperties } from "react";
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   archivePipelineStage,
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
 import type { Stage } from "@/lib/kanban/types";
 import { buildCardInput } from "@/lib/kanban/card-state";
+import { shouldShowKanbanOverflowCue } from "@/lib/kanban/overflow-cue";
 import { KanbanCard } from "./KanbanCard";
 
 interface StageColumnProps {
@@ -69,6 +70,8 @@ export function StageColumn({
   stageCount,
   valueLabel,
 }: StageColumnProps) {
+  const cardsScrollerRef = useRef<HTMLDivElement | null>(null);
+  const [showOverflowCue, setShowOverflowCue] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(stage.name);
   const [stageColor, setStageColor] = useState(stage.color ?? "#3b82f6");
@@ -76,6 +79,29 @@ export function StageColumn({
   const totalCents = leads.reduce((sum, l) => sum + (l.value_cents ?? 0), 0);
   const accentStyle: CSSProperties = { backgroundColor: stageColor };
   const cardAccent = stageColor;
+
+  const updateOverflowCue = useCallback(() => {
+    const scroller = cardsScrollerRef.current;
+    if (!scroller) return;
+
+    setShowOverflowCue(
+      shouldShowKanbanOverflowCue({
+        scrollTop: scroller.scrollTop,
+        clientHeight: scroller.clientHeight,
+        scrollHeight: scroller.scrollHeight,
+      }),
+    );
+  }, []);
+
+  useEffect(() => {
+    const scroller = cardsScrollerRef.current;
+    if (!scroller) return;
+
+    updateOverflowCue();
+    const observer = new ResizeObserver(updateOverflowCue);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [leads.length, updateOverflowCue]);
 
   function saveColor(color: string) {
     const previous = stageColor;
@@ -228,16 +254,21 @@ export function StageColumn({
         </div>
       )}
 
-      <Droppable droppableId={stage.id} type="LEAD">
-        {(provided, snapshot) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.droppableProps}
-            className={cn(
-              "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-y-contain p-2 transition-colors",
-              snapshot.isDraggingOver && "bg-accent/5",
-            )}
-          >
+      <div className="relative min-h-0 flex-1">
+        <Droppable droppableId={stage.id} type="LEAD">
+          {(provided, snapshot) => (
+            <div
+              ref={(node) => {
+                provided.innerRef(node);
+                cardsScrollerRef.current = node;
+              }}
+              {...provided.droppableProps}
+              onScroll={updateOverflowCue}
+              className={cn(
+                "flex h-full min-h-0 flex-col gap-2 overflow-y-auto overscroll-y-contain p-2 pr-1.5 transition-colors",
+                snapshot.isDraggingOver && "bg-accent/5",
+              )}
+            >
             {leads.map((lead, idx) => (
               <KanbanCard
                 key={lead.id}
@@ -265,9 +296,15 @@ export function StageColumn({
                 vazio
               </div>
             )}
+            </div>
+          )}
+        </Droppable>
+        {showOverflowCue && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-12 items-end justify-center bg-gradient-to-t from-surface-muted/95 via-surface-muted/70 to-transparent pb-1 text-[10px] font-medium text-text-muted">
+            Role para ver os demais negócios ↓
           </div>
         )}
-      </Droppable>
+      </div>
     </section>
   );
 }
