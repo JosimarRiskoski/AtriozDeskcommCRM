@@ -30,6 +30,7 @@ import { usePermission } from "@/hooks/auth/AuthProvider";
 import { ConnectionHealthDot } from "@/components/connections/ConnectionHealthDot";
 import { branding } from "@/lib/branding";
 import { useCases } from "@/hooks/ai/useCases";
+import { isSidebarNavActive } from "@/lib/shell/nav-active";
 
 interface NavItem {
   href: string;
@@ -132,8 +133,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
             !pathname.startsWith("/app/ai/cases") &&
             !pathname.startsWith("/app/ai/memory");
           const isActive =
-            pathname === item.href ||
-            pathname.startsWith(item.href + "/") ||
+            isSidebarNavActive(pathname, item.href) ||
             (item.href === "/app/settings" &&
               settingsAliases.some((route) => pathname.startsWith(route))) ||
             (item.href === "/app/ai/agents" && isAiSettingsRoute);
