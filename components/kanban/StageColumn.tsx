@@ -130,7 +130,10 @@ export function StageColumn({
 
   return (
     <section
-      className="bg-surface-muted/40 group flex h-full min-h-0 w-[min(18rem,calc(100vw-3rem))] shrink-0 flex-col overflow-hidden rounded-lg border border-border sm:w-72"
+      className={cn(
+        "bg-surface-muted/40 group flex min-h-0 w-[min(18rem,calc(100vw-3rem))] shrink-0 flex-col overflow-hidden rounded-lg border border-border sm:w-72",
+        cardsExpanded ? "h-auto min-h-[32rem]" : "h-full",
+      )}
       aria-labelledby={`kanban-stage-${stage.id}`}
     >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
@@ -239,7 +242,8 @@ export function StageColumn({
               ref={provided.innerRef}
               {...provided.droppableProps}
               className={cn(
-                "flex h-full min-h-0 flex-col gap-2 overflow-y-auto overscroll-y-contain p-2 pr-1.5 transition-colors",
+                "flex min-h-0 flex-1 flex-col gap-2 p-2 pr-1.5 transition-colors",
+                !cardsExpanded && "h-full overflow-y-auto overscroll-y-contain",
                 snapshot.isDraggingOver && "bg-accent/5",
               )}
             >

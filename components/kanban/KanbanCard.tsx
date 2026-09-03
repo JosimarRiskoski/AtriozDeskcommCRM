@@ -37,7 +37,12 @@ export function mergeKanbanCardDragStyle(
 ): CSSProperties {
   return {
     ...draggableStyle,
-    ...(stageColor ? { borderLeftColor: stageColor } : {}),
+    ...(stageColor
+      ? {
+          borderLeftColor: stageColor,
+          "--kanban-stage-color": stageColor,
+        }
+      : {}),
   };
 }
 
@@ -110,7 +115,7 @@ export function KanbanCard({
           // Tags saem do card (Lei A): ficam a um hover, sem ocupar altura.
           title={card.tags.length > 0 ? `Tags: ${card.tags.join(", ")}` : undefined}
           className={cn(
-            "group relative overflow-hidden rounded-md border border-border border-l-[3px] bg-surface",
+            "kanban-card group relative overflow-hidden rounded-md border border-border border-l-[3px] bg-surface",
             "py-2.5 pl-3 pr-3 shadow-xs transition-colors",
             "hover:border-border-strong",
             snapshot.isDragging && "ring-accent/40 rotate-1 shadow-md ring-1",
@@ -120,6 +125,7 @@ export function KanbanCard({
           // pela biblioteca para mover o cartão. A cor da etapa deve ser
           // acrescentada, nunca substituir esse objeto.
           style={mergeKanbanCardDragStyle(provided.draggableProps.style, stageColor)}
+          data-stage-color={stageColor ? "true" : undefined}
         >
           {/* key = contador: cada evento remoto monta um overlay NOVO, e é isso
               que reinicia a animação. Fica no elemento interno — pôr no wrapper

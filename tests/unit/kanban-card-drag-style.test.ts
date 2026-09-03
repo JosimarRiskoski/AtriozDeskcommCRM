@@ -21,6 +21,7 @@ describe("KanbanCard drag style", () => {
       top: 120,
       left: 80,
       borderLeftColor: "#2563eb",
+      "--kanban-stage-color": "#2563eb",
     });
   });
 });

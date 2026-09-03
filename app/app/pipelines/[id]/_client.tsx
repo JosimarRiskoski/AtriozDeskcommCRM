@@ -159,7 +159,7 @@ export function PipelinePageClient({
           Carregando…
         </div>
       ) : (
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           <KanbanBoard
             pipelineId={pipelineId}
             stages={data.stages}

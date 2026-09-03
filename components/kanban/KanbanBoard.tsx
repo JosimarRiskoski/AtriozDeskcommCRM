@@ -249,12 +249,12 @@ export function KanbanBoard({
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div
-        className="h-full min-h-0 min-w-0 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2"
+        className="h-full min-h-0 min-w-0 overflow-x-auto overflow-y-auto overscroll-x-contain pb-2"
         role="region"
         aria-label="Etapas do funil. Role horizontalmente para ver todas."
         tabIndex={0}
       >
-        <div className="flex h-full min-w-max gap-3 pr-1">
+        <div className="flex min-h-full min-w-max items-start gap-3 pr-1">
           {data.stages.map((stage, stageIndex) => (
             <StageColumn
               key={stage.id}
