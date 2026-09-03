@@ -49,4 +49,21 @@ describe("compactEvolutionWebhookLog", () => {
     expect(result.rawBody.length).toBeLessThan(1_000);
     expect(JSON.stringify(result.payloadParsed)).not.toContain("x".repeat(100));
   });
+
+  it("preserva o identificador do recibo normalizado pela Evolution", () => {
+    const result = compactEvolutionWebhookLog(
+      {
+        event: "messages.update",
+        instance: "evo_teste",
+        data: { keyId: "receipt-1", fromMe: true, status: "READ" },
+      },
+      "{}",
+    );
+
+    expect(result.payloadParsed).toMatchObject({
+      message_id: "receipt-1",
+      from_me: true,
+      status: "READ",
+    });
+  });
 });

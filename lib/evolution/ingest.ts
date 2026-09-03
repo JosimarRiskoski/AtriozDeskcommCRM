@@ -59,6 +59,17 @@ function string(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/**
+ * A Evolution v2 envia os recibos em dois formatos conforme a versão:
+ * `key.id` (Baileys bruto) ou `keyId` (payload normalizado pela API).
+ * O segundo é o formato em produção e precisa apontar para o mesmo
+ * `messages.external_id` gravado no envio.
+ */
+export function evolutionReceiptId(data: Json): string | undefined {
+  const key = object(data.key);
+  return string(key.id) ?? string(data.id) ?? string(data.keyId);
+}
+
 function messageData(value: unknown): Json {
   const data = object(value);
   return object(data.message);
@@ -225,8 +236,7 @@ export async function dispatchEvolutionEvent(
     }
 
     if (event === "MESSAGES_UPDATE" || event === "SEND_MESSAGE_UPDATE") {
-      const key = object(data.key);
-      const id = string(key.id) ?? string(data.id);
+      const id = evolutionReceiptId(data);
       if (!id) continue;
       await dispatchCommercialEvent(
         admin,

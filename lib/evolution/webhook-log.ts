@@ -40,9 +40,16 @@ export function compactEvolutionWebhookLog(
         ? key.id
         : typeof first.id === "string"
           ? first.id
+          : typeof first.keyId === "string"
+            ? first.keyId
           : null,
     remote_jid_suffix: remoteDigits ? remoteDigits.slice(-4) : null,
-    from_me: typeof key.fromMe === "boolean" ? key.fromMe : null,
+    from_me:
+      typeof key.fromMe === "boolean"
+        ? key.fromMe
+        : typeof first.fromMe === "boolean"
+          ? first.fromMe
+          : null,
     message_type: Object.keys(message)[0] ?? null,
     status: update.status ?? first.status ?? null,
     timestamp: first.messageTimestamp ?? first.timestamp ?? null,

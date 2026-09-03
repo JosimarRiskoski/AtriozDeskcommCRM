@@ -4,7 +4,7 @@ process.env.NEXT_PUBLIC_SUPABASE_URL ??= "https://example.supabase.co";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "test-anon-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const { isProcessableEvolutionEvent, normalizeEvolutionMessage } = await import("./ingest");
+const { evolutionReceiptId, isProcessableEvolutionEvent, normalizeEvolutionMessage } = await import("./ingest");
 
 describe("isProcessableEvolutionEvent", () => {
   it.each(["MESSAGES_UPSERT", "messages.update", "send-message-update", "CONNECTION_UPDATE"])(
@@ -52,5 +52,15 @@ describe("normalizeEvolutionMessage", () => {
     });
 
     expect(result?._data?.pushName).toBeUndefined();
+  });
+});
+
+describe("evolutionReceiptId", () => {
+  it.each([
+    [{ key: { id: "baileys-id" } }, "baileys-id"],
+    [{ id: "legacy-id" }, "legacy-id"],
+    [{ keyId: "evolution-v2-id" }, "evolution-v2-id"],
+  ])("reconhece o ID do recibo em %o", (payload, expected) => {
+    expect(evolutionReceiptId(payload)).toBe(expected);
   });
 });
