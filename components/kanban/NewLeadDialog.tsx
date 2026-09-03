@@ -327,13 +327,12 @@ export function NewLeadDialog({
           currentStep={step}
           onSubmit={(event) => {
             event.preventDefault();
-            // Pressionar Enter nas duas primeiras etapas apenas avança. Antes,
-            // o submit do <form> podia criar a oportunidade sem confirmação.
+            // O formulário nunca grava uma oportunidade. Ele só permite avançar
+            // pelas duas primeiras etapas ao pressionar Enter. A gravação fica
+            // isolada no clique explícito do botão final abaixo.
             if (step < 2) {
               void advanceStep();
-              return;
             }
-            void form.handleSubmit(onSubmit)(event);
           }}
           footer={
             <DialogFooter>
@@ -364,7 +363,11 @@ export function NewLeadDialog({
                   Continuar
                 </Button>
               ) : (
-                <Button type="submit" disabled={create.isPending || creatingContact || !stageId}>
+                <Button
+                  type="button"
+                  onClick={() => void form.handleSubmit(onSubmit)()}
+                  disabled={create.isPending || creatingContact || !stageId}
+                >
                   {create.isPending || creatingContact ? "Criando…" : "Confirmar e criar"}
                 </Button>
               )}

@@ -140,6 +140,44 @@ describe("NewLeadDialog no Inbox", () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
+  it("não cria por um submit genérico depois de avançar até Valores", async () => {
+    render(
+      <NewLeadDialog
+        open
+        onOpenChange={vi.fn()}
+        pipelineId={PIPELINE_ID}
+        stages={[
+          {
+            id: STAGE_ID,
+            organization_id: "org-1",
+            pipeline_id: PIPELINE_ID,
+            name: "Interesse",
+            slug: "interesse",
+            position: 1,
+            color: null,
+            is_won: false,
+            is_lost: false,
+            is_archived: false,
+            expected_duration_hours: null,
+          },
+        ]}
+        contactId={CONTACT_ID}
+        initialTitle="Emerson Hegen"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByRole("list", { name: "Etapa 2 de 3" });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    const valuesStep = await screen.findByRole("list", { name: "Etapa 3 de 3" });
+
+    fireEvent.submit(valuesStep.closest("form")!);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(createMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Confirmar e criar" })).toBeInTheDocument();
+  });
+
   it("fecha o fluxo duplicado e oferece abrir a oportunidade existente", async () => {
     const onOpenChange = vi.fn();
     createMock.mockRejectedValueOnce(
