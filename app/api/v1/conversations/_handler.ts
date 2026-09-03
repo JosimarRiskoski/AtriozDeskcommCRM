@@ -110,12 +110,29 @@ export async function listConversationsHandler(
 
   let allowedSessionIds: string[] | null = null;
   let matchingContactIds: string[] = [];
-  if (!q.include_archived_connections && !q.channel_session_id) {
-    const { data: sessions, error: sessionsError } = await supabase
-      .from("channel_sessions")
-      .select("id")
-      .eq("organization_id", ctx.organization_id)
-      .is("archived_at", null);
+  const sessionsRequest =
+    !q.include_archived_connections && !q.channel_session_id
+      ? supabase
+          .from("channel_sessions")
+          .select("id")
+          .eq("organization_id", ctx.organization_id)
+          .is("archived_at", null)
+      : null;
+  const contactsRequest = q.search?.trim()
+    ? supabase
+        .from("contacts")
+        .select("id")
+        .eq("organization_id", ctx.organization_id)
+        .or(contactSearchOrFilter(q.search))
+        .limit(100)
+    : null;
+
+  // Ambas as consultas pertencem ao mesmo escopo RLS, mas são independentes.
+  // Rodá-las juntas remove uma volta de rede da rota mais acessada do CRM.
+  const [sessionsResult, contactsResult] = await Promise.all([sessionsRequest, contactsRequest]);
+
+  if (sessionsResult) {
+    const { data: sessions, error: sessionsError } = sessionsResult;
     if (sessionsError) {
       throw new ApiError(500, "internal_error", undefined, ctx.requestId, sessionsError.message);
     }
@@ -128,13 +145,8 @@ export async function listConversationsHandler(
   // A busca do Inbox precisa encontrar a conversa pelo contato, não somente
   // pelo preview da última mensagem. Mantemos duas leituras pequenas e
   // RLS-scoped, em vez de carregar todos os contatos no navegador.
-  if (q.search?.trim()) {
-    const { data: contacts, error: contactsError } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("organization_id", ctx.organization_id)
-      .or(contactSearchOrFilter(q.search))
-      .limit(100);
+  if (contactsResult) {
+    const { data: contacts, error: contactsError } = contactsResult;
     if (contactsError) {
       throw new ApiError(500, "internal_error", undefined, ctx.requestId, contactsError.message);
     }
