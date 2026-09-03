@@ -1,7 +1,7 @@
 "use client";
 import { Droppable } from "@hello-pangea/dnd";
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   archivePipelineStage,
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
 import type { Stage } from "@/lib/kanban/types";
 import { buildCardInput } from "@/lib/kanban/card-state";
-import { shouldShowKanbanOverflowCue } from "@/lib/kanban/overflow-cue";
+import { getVisibleKanbanCards } from "@/lib/kanban/visible-cards";
 import { KanbanCard } from "./KanbanCard";
 
 interface StageColumnProps {
@@ -70,8 +70,7 @@ export function StageColumn({
   stageCount,
   valueLabel,
 }: StageColumnProps) {
-  const cardsScrollerRef = useRef<HTMLDivElement | null>(null);
-  const [showOverflowCue, setShowOverflowCue] = useState(false);
+  const [cardsExpanded, setCardsExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(stage.name);
   const [stageColor, setStageColor] = useState(stage.color ?? "#3b82f6");
@@ -79,29 +78,8 @@ export function StageColumn({
   const totalCents = leads.reduce((sum, l) => sum + (l.value_cents ?? 0), 0);
   const accentStyle: CSSProperties = { backgroundColor: stageColor };
   const cardAccent = stageColor;
-
-  const updateOverflowCue = useCallback(() => {
-    const scroller = cardsScrollerRef.current;
-    if (!scroller) return;
-
-    setShowOverflowCue(
-      shouldShowKanbanOverflowCue({
-        scrollTop: scroller.scrollTop,
-        clientHeight: scroller.clientHeight,
-        scrollHeight: scroller.scrollHeight,
-      }),
-    );
-  }, []);
-
-  useEffect(() => {
-    const scroller = cardsScrollerRef.current;
-    if (!scroller) return;
-
-    updateOverflowCue();
-    const observer = new ResizeObserver(updateOverflowCue);
-    observer.observe(scroller);
-    return () => observer.disconnect();
-  }, [leads.length, updateOverflowCue]);
+  const visibleLeads = getVisibleKanbanCards(leads, cardsExpanded);
+  const hiddenLeadCount = Math.max(0, leads.length - visibleLeads.length);
 
   function saveColor(color: string) {
     const previous = stageColor;
@@ -254,22 +232,18 @@ export function StageColumn({
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1">
+      <div className="min-h-0 flex-1">
         <Droppable droppableId={stage.id} type="LEAD">
           {(provided, snapshot) => (
             <div
-              ref={(node) => {
-                provided.innerRef(node);
-                cardsScrollerRef.current = node;
-              }}
+              ref={provided.innerRef}
               {...provided.droppableProps}
-              onScroll={updateOverflowCue}
               className={cn(
                 "flex h-full min-h-0 flex-col gap-2 overflow-y-auto overscroll-y-contain p-2 pr-1.5 transition-colors",
                 snapshot.isDraggingOver && "bg-accent/5",
               )}
             >
-            {leads.map((lead, idx) => (
+            {visibleLeads.map((lead, idx) => (
               <KanbanCard
                 key={lead.id}
                 card={buildCardInput(lead, {
@@ -296,14 +270,31 @@ export function StageColumn({
                 vazio
               </div>
             )}
+            {hiddenLeadCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-1 w-full shrink-0 text-xs"
+                onClick={() => setCardsExpanded(true)}
+              >
+                Ver mais ({hiddenLeadCount})
+              </Button>
+            )}
+            {cardsExpanded && leads.length > 3 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full shrink-0 text-xs text-text-muted"
+                onClick={() => setCardsExpanded(false)}
+              >
+                Mostrar menos
+              </Button>
+            )}
             </div>
           )}
         </Droppable>
-        {showOverflowCue && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-12 items-end justify-center bg-gradient-to-t from-surface-muted/95 via-surface-muted/70 to-transparent pb-1 text-[10px] font-medium text-text-muted">
-            Role para ver os demais negócios ↓
-          </div>
-        )}
       </div>
     </section>
   );
