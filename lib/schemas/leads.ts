@@ -53,6 +53,8 @@ export type CanonicalLostReason = (typeof CANONICAL_LOST_REASONS)[number];
  */
 export const loseLeadSchema = z.object({
   lost_reason: z.string().min(1, "lost_reason é obrigatório").max(500),
+  /** Quando veio do arraste, preserva exatamente a etapa de perda escolhida. */
+  stage_id: z.string().uuid().optional(),
 });
 export type LoseLeadInput = z.infer<typeof loseLeadSchema>;
 

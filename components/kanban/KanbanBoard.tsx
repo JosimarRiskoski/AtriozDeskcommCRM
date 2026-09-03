@@ -126,7 +126,10 @@ export function KanbanBoard({
   // O dossiê é do BOARD e não da página: ele precisa do lead inteiro e do nome
   // do estágio, que só existem aqui depois do agrupamento.
   const [dossieId, setDossieId] = useState<string | null>(null);
-  const [pendingLostLeadId, setPendingLostLeadId] = useState<string | null>(null);
+  const [pendingLostMove, setPendingLostMove] = useState<{
+    leadId: string;
+    stageId: string;
+  } | null>(null);
   const [internalSelected, setInternalSelected] = useState<Set<string>>(new Set());
   const selectedLeadIds = useMemo(
     () => (selectedIds ? new Set(selectedIds) : internalSelected),
@@ -192,7 +195,7 @@ export function KanbanBoard({
       // O gesto de arrastar apenas abre a confirmação; o endpoint /lose faz a
       // transição completa depois que o operador escolhe o motivo.
       if (shouldRequestLostReason(lead, destStage)) {
-        setPendingLostLeadId(lead.id);
+        setPendingLostMove({ leadId: lead.id, stageId: destStage.id });
         return;
       }
 
@@ -284,12 +287,13 @@ export function KanbanBoard({
           valueLabel={valueLabel}
         />
       )}
-      {pendingLostLeadId ? (
+      {pendingLostMove ? (
         <LoseLeadDialog
           open
-          onOpenChange={(open) => !open && setPendingLostLeadId(null)}
-          leadId={pendingLostLeadId}
+          onOpenChange={(open) => !open && setPendingLostMove(null)}
+          leadId={pendingLostMove.leadId}
           pipelineId={pipelineId}
+          targetStageId={pendingLostMove.stageId}
         />
       ) : null}
     </DragDropContext>

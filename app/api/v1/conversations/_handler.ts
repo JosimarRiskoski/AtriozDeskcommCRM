@@ -8,6 +8,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
+import { contactSearchOrFilter } from "@/lib/contacts/search-filter";
+import { conversationSearchOrFilter } from "@/lib/inbox/search-filter";
 import type { ListConversationsQuery, PatchConversationInput } from "@/lib/schemas";
 import type { Conversation } from "@/lib/types/messaging";
 
@@ -107,6 +109,7 @@ export async function listConversationsHandler(
   const asc = isQueue;
 
   let allowedSessionIds: string[] | null = null;
+  let matchingContactIds: string[] = [];
   if (!q.include_archived_connections && !q.channel_session_id) {
     const { data: sessions, error: sessionsError } = await supabase
       .from("channel_sessions")
@@ -120,6 +123,22 @@ export async function listConversationsHandler(
     if (allowedSessionIds.length === 0) {
       return { conversations: [], cursor: null, has_more: false };
     }
+  }
+
+  // A busca do Inbox precisa encontrar a conversa pelo contato, não somente
+  // pelo preview da última mensagem. Mantemos duas leituras pequenas e
+  // RLS-scoped, em vez de carregar todos os contatos no navegador.
+  if (q.search?.trim()) {
+    const { data: contacts, error: contactsError } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("organization_id", ctx.organization_id)
+      .or(contactSearchOrFilter(q.search))
+      .limit(100);
+    if (contactsError) {
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, contactsError.message);
+    }
+    matchingContactIds = (contacts ?? []).map((contact) => contact.id as string);
   }
 
   let query = supabase
@@ -157,8 +176,7 @@ export async function listConversationsHandler(
   }
 
   if (q.search) {
-    const s = q.search.trim().replace(/[%_]/g, (m) => `\\${m}`);
-    query = query.ilike("last_message_preview", `%${s}%`);
+    query = query.or(conversationSearchOrFilter(q.search, matchingContactIds));
   }
 
   if (q.cursor) {

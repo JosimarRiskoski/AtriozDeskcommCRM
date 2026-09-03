@@ -30,6 +30,8 @@ interface LoseLeadDialogProps {
   onOpenChange: (open: boolean) => void;
   leadId: string;
   pipelineId: string;
+  /** Etapa de perda escolhida pelo arraste; ação manual usa a padrão. */
+  targetStageId?: string;
 }
 
 const MAX_LEN = 500;
@@ -39,6 +41,7 @@ export function LoseLeadDialog({
   onOpenChange,
   leadId,
   pipelineId,
+  targetStageId,
 }: LoseLeadDialogProps) {
   const [reasonCode, setReasonCode] = useState<string>("");
   const [otherText, setOtherText] = useState("");
@@ -50,7 +53,7 @@ export function LoseLeadDialog({
   const handleSubmit = async () => {
     if (disabled) return;
     try {
-      await mutation.mutateAsync({ leadId, lostReason: finalReason });
+      await mutation.mutateAsync({ leadId, lostReason: finalReason, stageId: targetStageId });
       setReasonCode("");
       setOtherText("");
       onOpenChange(false);

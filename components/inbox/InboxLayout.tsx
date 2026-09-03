@@ -23,6 +23,7 @@ import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { NewContactDialog } from "@/components/contacts/NewContactDialog";
 import { Button } from "@/components/ui/button";
 import { Plus } from "@/lib/ui/icons";
+import { inboxSelectionHref } from "@/lib/inbox/selection-url";
 import {
   clampInboxListWidth,
   InboxResizeHandle,
@@ -94,6 +95,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const [helpOpen, setHelpOpen] = useState(false);
   const [newContactOpen, setNewContactOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [opportunityOpen, setOpportunityOpen] = useState(false);
   const [listWidth, setListWidth] = useState(INBOX_LIST_DEFAULT_WIDTH);
   const composerRef = useRef<ComposerHandle | null>(null);
 
@@ -170,6 +172,14 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const selectionNotFound =
     needsFetch && !single.isPending && !single.data && isNotFound(single.error);
 
+  const setSelectedConversation = useCallback(
+    (id: string | null) => {
+      setSelectedId(id);
+      router.replace(inboxSelectionHref(pathname, searchParams, id), { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
   // O filtro também governa o painel aberto. Manter uma conversa de outro
   // número visível enquanto o seletor mostra a conexão escolhida induz o
   // atendente a acreditar que responderá pelo canal errado.
@@ -182,13 +192,14 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       selectedConversation.channel_sessions?.archived_at && !filterValue.includeArchivedConnections,
     );
     if (outsideSelectedChannel || belongsToArchivedConnection) {
-      setSelectedId(null);
+      setSelectedConversation(null);
       setDetailsOpen(false);
     }
   }, [
     selectedConversation,
     filterValue.channel_session_id,
     filterValue.includeArchivedConnections,
+    setSelectedConversation,
   ]);
 
   const claim = useClaimConversation();
@@ -210,13 +221,13 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
 
   const handleSelect = useCallback(
     (id: string) => {
-      setSelectedId(id);
+      setSelectedConversation(id);
       const conversation = listQ.data?.pages
         .flatMap((page) => page.data)
         .find((item) => item.id === id);
       requestRead(conversation);
     },
-    [listQ.data, requestRead],
+    [listQ.data, requestRead, setSelectedConversation],
   );
   useEffect(() => requestRead(selectedConversation), [requestRead, selectedConversation]);
   const handleVisibleChange = useCallback((ids: string[]) => setVisibleIds(ids), []);
@@ -281,6 +292,10 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               conversation={selectedConversation}
               detailsOpen={detailsOpen}
               onToggleDetails={() => setDetailsOpen((open) => !open)}
+              onCreateOpportunity={() => {
+                setDetailsOpen(true);
+                setOpportunityOpen(true);
+              }}
             />
             <div className="min-h-0 flex-1 overflow-hidden">
               <ChatThread conversationId={selectedConversation.id} />
@@ -321,7 +336,11 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
             </Button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <CRMSidePanel conversation={selectedConversation} />
+            <CRMSidePanel
+              conversation={selectedConversation}
+              openOpportunity={opportunityOpen}
+              onOpenOpportunityChange={setOpportunityOpen}
+            />
           </div>
         </aside>
       ) : null}
@@ -339,8 +358,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         open={newContactOpen}
         onOpenChange={setNewContactOpen}
         onConversationStarted={(conversationId) => {
-          setSelectedId(conversationId);
-          router.push(`/app/inbox/${conversationId}`);
+          setSelectedConversation(conversationId);
         }}
       />
       <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />

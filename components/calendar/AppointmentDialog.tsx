@@ -25,6 +25,7 @@ import { StepDialogForm } from "@/components/ui/step-dialog-form";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
+import { shouldClearAppointmentContact } from "@/lib/calendar/contact-selection";
 
 interface ContactOption {
   id: string;
@@ -235,7 +236,15 @@ export function AppointmentDialog({
                 <Input
                   id="appointment-contact-search"
                   value={contactSearch}
-                  onChange={(event) => setContactSearch(event.target.value)}
+                  onChange={(event) => {
+                    const nextSearch = event.target.value;
+                    setContactSearch(nextSearch);
+                    if (shouldClearAppointmentContact(nextSearch, fixedContactId)) {
+                      setContactId("");
+                      setContacts([]);
+                      setAttendeeEmail("");
+                    }
+                  }}
                   placeholder="Busque por nome ou telefone"
                 />
                 {contacts.length ? (

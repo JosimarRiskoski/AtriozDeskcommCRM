@@ -1,6 +1,6 @@
 "use client";
 import { forwardRef, useImperativeHandle, useRef, useState, type KeyboardEvent } from "react";
-import { ChatText, PaperPlaneTilt, Plus } from "@/lib/ui/icons";
+import { ChatText, PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
@@ -71,7 +71,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         {
           onSuccess: () => {
             setText("");
-            requestAnimationFrame(() => autoresize());
+            requestAnimationFrame(() => {
+              autoresize();
+              taRef.current?.focus();
+            });
           },
         },
       );
@@ -88,7 +91,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         onSuccess: () => {
           setText("");
           setInteractivePoll(null);
-          requestAnimationFrame(() => autoresize());
+          requestAnimationFrame(() => {
+            autoresize();
+            taRef.current?.focus();
+          });
         },
       },
     );

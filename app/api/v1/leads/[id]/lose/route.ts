@@ -55,19 +55,21 @@ export async function POST(
     return ok(lead, { requestId });
   }
 
-  const { data: lostStage, error: stErr } = await supabase
+  let lostStageQuery = supabase
     .from("crm_stages")
     .select("id")
     .eq("pipeline_id", lead.pipeline_id)
-    .eq("is_lost", true)
-    .limit(1)
-    .maybeSingle();
+    .eq("is_lost", true);
+  if (input.stage_id) lostStageQuery = lostStageQuery.eq("id", input.stage_id);
+  const { data: lostStage, error: stErr } = await lostStageQuery.limit(1).maybeSingle();
 
   if (stErr) return fail("internal_error", stErr.message, 500, { requestId });
   if (!lostStage) {
     return fail(
       "pipeline_no_lost_stage",
-      "Pipeline não tem stage de fechamento como perda.",
+      input.stage_id
+        ? "A etapa escolhida não é uma etapa de perda deste funil."
+        : "Pipeline não tem stage de fechamento como perda.",
       422,
       { requestId },
     );

@@ -50,7 +50,11 @@ export function isChannelStatus(v: string): v is ChannelStatus {
   return (CHANNEL_STATUSES as readonly string[]).includes(v);
 }
 
-/** Sessões sem transporte ativo podem sair da operação com segurança. */
+/**
+ * Só uma sessão com transporte WhatsApp efetivamente ativo precisa ser
+ * protegida contra remoção. STARTING e SCAN_QR_CODE ainda não podem atender
+ * nem enviar; bloqueá-las prendia no CRM números que nem chegaram a conectar.
+ */
 export function canRemoveChannel(status: string): boolean {
-  return status === "SCAN_QR_CODE" || status === "STOPPED" || status === "FAILED";
+  return status !== "WORKING";
 }

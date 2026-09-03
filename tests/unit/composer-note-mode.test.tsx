@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -48,6 +48,17 @@ describe("Composer + modo nota interna", () => {
       expect.anything(),
     );
     expect(createNoteMock).not.toHaveBeenCalled();
+  });
+
+  it("devolve o foco para a caixa depois de enviar por Enter", async () => {
+    sendMock.mockImplementationOnce((_payload, options) => options.onSuccess());
+    renderComposer();
+    const message = screen.getByLabelText(/mensagem/i);
+    fireEvent.change(message, { target: { value: "oi cliente" } });
+    fireEvent.keyDown(message, { key: "Enter" });
+
+    await waitFor(() => expect(document.activeElement).toBe(message));
+    expect(message).toHaveValue("");
   });
 
   it("alterna pra modo nota interna: some anexo/rascunho/áudio, muda placeholder", () => {

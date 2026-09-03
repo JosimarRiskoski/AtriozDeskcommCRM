@@ -48,6 +48,15 @@ describe("loseLeadSchema", () => {
     const r = loseLeadSchema.safeParse({ lost_reason: "Sem orçamento" });
     expect(r.success).toBe(true);
   });
+
+  it("accepts the loss stage selected by drag and drop", () => {
+    const r = loseLeadSchema.safeParse({
+      lost_reason: "cancelled_by_customer",
+      stage_id: UUID,
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.stage_id).toBe(UUID);
+  });
 });
 
 describe("bulkLeadActionSchema", () => {

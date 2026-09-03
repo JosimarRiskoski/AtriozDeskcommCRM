@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Phone, ArrowRight, Pause, Play } from "@/lib/ui/icons";
+import { Phone, ArrowRight, Pause, Play, Briefcase } from "@/lib/ui/icons";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
@@ -32,6 +32,7 @@ interface Props {
   conversation: ConversationWithContact;
   detailsOpen?: boolean;
   onToggleDetails?: () => void;
+  onCreateOpportunity?: () => void;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -42,7 +43,12 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "Arquivada",
 };
 
-export function ConversationHeader({ conversation, detailsOpen = false, onToggleDetails }: Props) {
+export function ConversationHeader({
+  conversation,
+  detailsOpen = false,
+  onToggleDetails,
+  onCreateOpportunity,
+}: Props) {
   const [renderedAt] = useState(() => Date.now());
   const { user } = useAuth();
   const claim = useClaimConversation();
@@ -268,6 +274,12 @@ export function ConversationHeader({ conversation, detailsOpen = false, onToggle
             snoozeUntil={conversation.snooze_until ?? null}
           />
         )}
+        {status !== "closed" && status !== "archived" && onCreateOpportunity ? (
+          <Button size="sm" variant="outline" onClick={onCreateOpportunity}>
+            <Briefcase size={14} aria-hidden />
+            Criar oportunidade
+          </Button>
+        ) : null}
         {status !== "closed" && status !== "archived" && (
           <Button
             size="sm"

@@ -38,6 +38,8 @@ import { MetaConversionControl } from "@/components/kanban/MetaConversionControl
 
 interface Props {
   conversation: ConversationWithContact | null;
+  openOpportunity?: boolean;
+  onOpenOpportunityChange?: (open: boolean) => void;
 }
 
 interface LeadRow {
@@ -125,7 +127,11 @@ function SemLista({
   );
 }
 
-export function CRMSidePanel({ conversation }: Props) {
+export function CRMSidePanel({
+  conversation,
+  openOpportunity = false,
+  onOpenOpportunityChange,
+}: Props) {
   const contact = conversation?.contacts ?? null;
   const contactId = contact?.id ?? null;
 
@@ -586,8 +592,11 @@ export function CRMSidePanel({ conversation }: Props) {
         onOpenChange={setCaseDialogOpen}
       />
       <NewLeadDialog
-        open={opportunityOpen}
-        onOpenChange={setOpportunityOpen}
+        open={opportunityOpen || openOpportunity}
+        onOpenChange={(open) => {
+          setOpportunityOpen(open);
+          onOpenOpportunityChange?.(open);
+        }}
         pipelineId={pipelineId}
         stages={board.data?.stages ?? []}
         valueLabel={board.data?.pipeline.settings?.value_label as string | undefined}

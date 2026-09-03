@@ -9,6 +9,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { listConversationsQuerySchema } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
 
 import { listConversationsHandler } from "./_handler";
 
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
+  const startedAt = performance.now();
   const supabase = await createClient();
 
   const {
@@ -62,11 +64,32 @@ export async function GET(req: NextRequest): Promise<Response> {
       },
       qsParsed.data,
     );
-    return ok(conversations, { requestId, meta: { cursor, has_more } });
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    // O cabeçalho é deliberadamente só duração: facilita investigar lentidão no
+    // navegador sem expor texto de mensagens, telefones ou filtros buscados.
+    return ok(conversations, {
+      requestId,
+      meta: { cursor, has_more },
+      headers: { "Server-Timing": `inbox;dur=${elapsedMs}` },
+    });
   } catch (err) {
+    const elapsedMs = Math.round(performance.now() - startedAt);
     if (err instanceof ApiError) {
+      logger.warn("[inbox.list] request failed", {
+        request_id: requestId,
+        status: err.status,
+        code: err.code,
+        duration_ms: elapsedMs,
+        has_search: Boolean(qsParsed.data.search),
+        has_cursor: Boolean(qsParsed.data.cursor),
+      });
       return fail(err.code, err.message, err.status, { requestId });
     }
+    logger.error("[inbox.list] request crashed", {
+      request_id: requestId,
+      duration_ms: elapsedMs,
+      error_type: err instanceof Error ? err.name : typeof err,
+    });
     throw err;
   }
 }

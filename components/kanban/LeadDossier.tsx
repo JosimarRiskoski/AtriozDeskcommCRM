@@ -3,7 +3,9 @@ import { useRef, useState } from "react";
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLeadTimeline } from "@/hooks/leads/useLeadTimeline";
+import { useConversationNotes } from "@/hooks/inbox/useConversationNotes";
 import type { Lead } from "@/lib/types/leads";
+import { linkedConversationId } from "@/lib/leads/source-conversation";
 import { LeadFieldsForm } from "./LeadFieldsForm";
 import { ScoreSlot } from "./ScoreSlot";
 import { LeadTimeline } from "./LeadTimeline";
@@ -61,6 +63,8 @@ export function LeadDossier({
 }: Props) {
   const campos = useRef<HTMLDivElement | null>(null);
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
+  const conversationId = linkedConversationId(lead.source_metadata);
+  const conversationNotes = useConversationNotes(open ? conversationId : null);
   const owner = resolveLeadOwner(lead, ownerNames);
   const score = lead.score ?? null;
   const [appointmentOpen, setAppointmentOpen] = useState(false);
@@ -153,6 +157,24 @@ export function LeadDossier({
             isError={timeline.isError}
           />
         </section>
+
+        {conversationId && conversationNotes.length > 0 ? (
+          <section className="border-t border-border py-3">
+            <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              Notas internas da conversa
+            </h3>
+            <div className="space-y-2">
+              {conversationNotes.map((note) => (
+                <div key={note.id} className="rounded-md border border-warning/40 bg-warning-bg px-3 py-2 text-sm text-warning-fg">
+                  <p className="whitespace-pre-wrap break-words">{note.body}</p>
+                  <p className="mt-1 text-[11px] opacity-75">
+                    {note.created_by_name ?? "Equipe"} · {new Date(note.created_at).toLocaleString("pt-BR")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* ③ campos, por último */}
         <div ref={campos} className="border-t border-border pt-3">
