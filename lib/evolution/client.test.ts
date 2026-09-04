@@ -68,6 +68,36 @@ describe("EvolutionClient webhook configuration", () => {
       webhook: { base64: false, enabled: true, byEvents: false },
     });
   });
+
+  it("reads remote webhook configuration without exposing header values", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          webhook: {
+            enabled: true,
+            url: "https://crm.example.com/api/v1/webhooks/evolution/token",
+            byEvents: false,
+            events: ["MESSAGES_UPSERT"],
+            headers: { "x-atrios-evolution-secret": "webhook-secret" },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    const client = new EvolutionClient("http://evolution:8080", "secret");
+
+    await expect(client.getWebhook("crm-1")).resolves.toEqual({
+      enabled: true,
+      url: "https://crm.example.com/api/v1/webhooks/evolution/token",
+      byEvents: false,
+      events: ["MESSAGES_UPSERT"],
+      hasHeaders: true,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://evolution:8080/webhook/find/crm-1",
+      expect.objectContaining({ headers: expect.objectContaining({ apikey: "secret" }) }),
+    );
+  });
 });
 
 describe("Evolution helpers", () => {

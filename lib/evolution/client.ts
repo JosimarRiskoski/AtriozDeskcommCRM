@@ -64,6 +64,18 @@ export type EvolutionMediaResult = {
 
 export type EvolutionGroup = { chatId: string; name: string };
 
+/**
+ * Recorte seguro da configuracao persistida na Evolution. Nunca retorna o
+ * valor de headers: o diagnostico so precisa saber se eles existem.
+ */
+export type EvolutionWebhookConfig = {
+  enabled: boolean;
+  url: string | null;
+  events: string[];
+  byEvents: boolean;
+  hasHeaders: boolean;
+};
+
 function asObject(value: unknown): Json {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : {};
 }
@@ -277,6 +289,24 @@ export class EvolutionClient {
         },
       }),
     });
+  }
+
+  async getWebhook(instanceName: string): Promise<EvolutionWebhookConfig> {
+    const result = await this.request<unknown>(`/webhook/find/${encodeURIComponent(instanceName)}`);
+    const root = asObject(result);
+    const webhook = asObject(root.webhook ?? root);
+    const headers = asObject(webhook.headers);
+    const events = Array.isArray(webhook.events)
+      ? webhook.events.filter((event): event is string => typeof event === "string")
+      : [];
+
+    return {
+      enabled: webhook.enabled === true,
+      url: typeof webhook.url === "string" && webhook.url.trim() ? webhook.url : null,
+      events,
+      byEvents: webhook.byEvents === true,
+      hasHeaders: Object.keys(headers).length > 0,
+    };
   }
 
   async sendText(instanceName: string, number: string, text: string): Promise<unknown> {

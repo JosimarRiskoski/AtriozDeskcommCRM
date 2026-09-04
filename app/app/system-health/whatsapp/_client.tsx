@@ -19,6 +19,14 @@ function webhookLabel(status: string | null | undefined) {
   return { label: status === "received" ? "Recebido" : "Sem evento", variant: "warning" as const };
 }
 
+type RemoteWebhookStatus = NonNullable<WhatsAppDiagnosticsPayload["remote_webhook"]>["status"];
+
+function remoteWebhookLabel(status: RemoteWebhookStatus | undefined) {
+  if (status === "configured") return { label: "Correto", variant: "success" as const };
+  if (status === "mismatch") return { label: "Incorreto", variant: "error" as const };
+  return { label: "Indisponível", variant: "warning" as const };
+}
+
 export function WhatsAppDiagnosticsClient() {
   const query = useQuery({
     queryKey: ["whatsapp-diagnostics"],
@@ -31,7 +39,7 @@ export function WhatsAppDiagnosticsClient() {
 
   if (query.isLoading)
     return (
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Skeleton className="h-40" />
         <Skeleton className="h-40" />
         <Skeleton className="h-40" />
@@ -54,7 +62,7 @@ export function WhatsAppDiagnosticsClient() {
           Atualizar agora
         </Button>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Card className="space-y-2 p-4">
           <h2 className="text-sm font-semibold">1. Conexões</h2>
           {data.sessions.length === 0 ? (
@@ -79,8 +87,27 @@ export function WhatsAppDiagnosticsClient() {
           )}
         </Card>
         <Card className="space-y-2 p-4">
+          {(() => {
+            const remoteWebhook = remoteWebhookLabel(data.remote_webhook?.status);
+            return (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold">2. Configuração na Evolution</h2>
+                  <Badge variant={remoteWebhook.variant}>{remoteWebhook.label}</Badge>
+                </div>
+                <p className="text-sm">
+                  {data.remote_webhook?.detail ?? "Nenhuma conexão apta para conferência."}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Confere URL, evento de mensagem e cabeçalho sem exibir segredo.
+                </p>
+              </>
+            );
+          })()}
+        </Card>
+        <Card className="space-y-2 p-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">2. Webhook da Evolution</h2>
+            <h2 className="text-sm font-semibold">3. Webhook recebido pelo CRM</h2>
             <Badge variant={webhook.variant}>{webhook.label}</Badge>
           </div>
           <p className="text-sm">Último evento: {data.latest_webhook?.event_type ?? "nenhum"}</p>
@@ -92,7 +119,7 @@ export function WhatsAppDiagnosticsClient() {
           ) : null}
         </Card>
         <Card className="space-y-2 p-4">
-          <h2 className="text-sm font-semibold">3. Persistência no Inbox</h2>
+          <h2 className="text-sm font-semibold">4. Persistência no Inbox</h2>
           <p className="text-sm">
             Última mensagem recebida: {when(data.latest_inbound?.received_at)}
           </p>
