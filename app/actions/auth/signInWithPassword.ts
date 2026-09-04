@@ -36,10 +36,7 @@ function safeNextPath(next?: string): string {
  *
  * On failure: returns an error discriminator. Caller renders inline message.
  */
-export async function signInWithPassword(
-  input: LoginInput,
-  next?: string,
-): Promise<SignInResult> {
+export async function signInWithPassword(input: LoginInput, next?: string): Promise<SignInResult> {
   const parsed = loginSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -82,7 +79,10 @@ export async function signInWithPassword(
     return { ok: false, error: "mfa_required", challengeId: verifiedTotp.id };
   }
 
-  await audit({
+  // Auditoria e importante, mas nao pode atrasar a entrega do cookie de sessao
+  // nem prender a pessoa em "Entrando..." quando o banco estiver sob carga.
+  // `audit` trata a propria falha; nao ha dado de negocio a reverter aqui.
+  void audit({
     action: "auth.login_success",
     actorUserId: data.user.id,
     metadata: {},

@@ -4,7 +4,6 @@ import { useCallback } from "react";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { realtimeFallbackIntervalMs } from "@/hooks/realtime/fallback-policy";
 import { apiClient } from "@/lib/api/client";
-import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Message } from "@/lib/types/messaging";
 
 interface MessagesResponse {
@@ -49,14 +48,12 @@ export function useMessagesRealtime(conversationId: string | null) {
       const qs = new URLSearchParams();
       if (pageParam) qs.set("cursor", pageParam);
       qs.set("limit", "50");
-      try {
-        return await apiClient.get<MessagesResponse>(
-          `/api/v1/conversations/${conversationId}/messages?${qs.toString()}`,
-        );
-      } catch (err) {
-        showApiError(err);
-        throw err;
-      }
+      // Esta query tambem roda por recuperacao de Realtime, foco e reconexao.
+      // Um erro automatico deve manter o estado de erro acionavel da tela, mas
+      // nao disparar um toast a cada tentativa/retry (o que escondia o Inbox).
+      return apiClient.get<MessagesResponse>(
+        `/api/v1/conversations/${conversationId}/messages?${qs.toString()}`,
+      );
     },
     getNextPageParam: (last) =>
       last.meta?.has_more && last.meta.cursor ? last.meta.cursor : undefined,

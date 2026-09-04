@@ -62,6 +62,10 @@ export function useConversationsRealtime(filters: ConversationsFilters, orgId: s
     invalidateTimer.current = setTimeout(() => {
       invalidateTimer.current = null;
       void qc.invalidateQueries({ queryKey, exact: true, refetchType: "active" });
+      void qc.invalidateQueries({
+        queryKey: ["conversation-counts"],
+        refetchType: "active",
+      });
     }, 600);
   }, [qc, queryKey]);
 

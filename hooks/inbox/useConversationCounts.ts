@@ -17,7 +17,10 @@ export function useConversationCounts(orgId: string | null) {
   return useQuery({
     queryKey: ["conversation-counts", orgId],
     enabled: !!orgId,
-    refetchInterval: 30_000,
+    // O Realtime invalida esta chave quando uma conversa muda. A consulta
+    // periodica fica apenas como rede de seguranca para uma aba que perdeu o
+    // canal, sem recalcular os quatro totais a cada 30 segundos.
+    refetchInterval: 120_000,
     queryFn: () =>
       apiClient
         .get<{ data: ConversationCounts }>("/api/v1/conversations/counts")

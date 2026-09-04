@@ -15,6 +15,11 @@ export const EVOLUTION_WEBHOOK_EVENTS = [
   "CONNECTION_UPDATE",
 ] as const;
 
+// Chamadas de controle nao podem ficar presas indefinidamente quando a
+// Evolution/Redis esta degradada. Midias legitimamente podem levar mais tempo.
+export const EVOLUTION_REQUEST_TIMEOUT_MS = 15_000;
+export const EVOLUTION_MEDIA_REQUEST_TIMEOUT_MS = 30_000;
+
 type Json = Record<string, unknown>;
 
 export type EvolutionConnection = {
@@ -119,15 +124,29 @@ export class EvolutionClient {
   ) {}
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
-      ...init,
-      headers: {
-        apikey: this.apiKey,
-        ...(init?.body ? { "Content-Type": "application/json" } : {}),
-        ...(init?.headers ?? {}),
-      },
-      cache: "no-store",
-    });
+    const timeoutMs = path.includes("/chat/getBase64FromMediaMessage")
+      ? EVOLUTION_MEDIA_REQUEST_TIMEOUT_MS
+      : EVOLUTION_REQUEST_TIMEOUT_MS;
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const signal = init?.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
+        ...init,
+        signal,
+        headers: {
+          apikey: this.apiKey,
+          ...(init?.body ? { "Content-Type": "application/json" } : {}),
+          ...(init?.headers ?? {}),
+        },
+        cache: "no-store",
+      });
+    } catch (error) {
+      if (timeoutSignal.aborted) {
+        throw new Error(`evolution_timeout: ${timeoutMs}ms`);
+      }
+      throw error;
+    }
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(`evolution_${res.status}: ${body.slice(0, 500)}`);

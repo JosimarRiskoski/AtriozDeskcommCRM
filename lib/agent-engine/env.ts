@@ -128,7 +128,9 @@ const envSchema = z.object({
   // Flywheel agendado (4B): rodada judge→distiller sobre turnos reais a cada
   // intervalo. 0 = OFF (só o gatilho manual pnpm flywheel:judge). Gate humano
   // sempre: proposta nunca vira comportamento sem o dono publicar na tela.
-  FLYWHEEL_INTERVAL_MS: z.coerce.number().int().min(0).default(21_600_000),
+  // Analise de qualidade por IA nunca pode competir por CPU/DB com conversas.
+  // Fica desligada ate ser habilitada conscientemente no ambiente dedicado.
+  FLYWHEEL_INTERVAL_MS: z.coerce.number().int().min(0).default(0),
   FLYWHEEL_BATCH_LIMIT: z.coerce.number().int().positive().default(10),
   // Contenção de egress — hosts EXTRA além do Supabase/Evolution (CSV). Fail-closed.
   EGRESS_EXTRA_ALLOWED_HOSTS: z.string().optional(),

@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { EvolutionClient, evolutionRecipient, parseEvolutionMessageId } from "./client";
+import {
+  EVOLUTION_REQUEST_TIMEOUT_MS,
+  EvolutionClient,
+  evolutionRecipient,
+  parseEvolutionMessageId,
+} from "./client";
 
 describe("EvolutionClient webhook configuration", () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -94,6 +99,21 @@ describe("Evolution helpers", () => {
       "http://evolution:8080/instance/connect/crm-1",
       expect.anything(),
     );
+  });
+
+  it("always applies a bounded timeout to Evolution requests", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ instance: { state: "close" } }), { status: 200 }),
+      );
+    const client = new EvolutionClient("http://evolution:8080", "secret");
+
+    await client.connect("crm-1");
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(EVOLUTION_REQUEST_TIMEOUT_MS).toBe(15_000);
   });
 
   it("reads the nested QR returned during instance creation", async () => {

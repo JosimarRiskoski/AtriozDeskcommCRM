@@ -33,6 +33,8 @@ x-runtime-environment: &runtime-environment
   AGENT_DISPATCH_CONSUMER: ${AGENT_DISPATCH_CONSUMER:-engine}
   EVENT_LOG_WORKER_ENABLED: ${EVENT_LOG_WORKER_ENABLED:-false}
   INTERNAL_AGENT_RUN_STUB: ${INTERNAL_AGENT_RUN_STUB:-false}
+  # Analise interna por IA e opt-in: atendimento humano tem prioridade.
+  FLYWHEEL_INTERVAL_MS: ${FLYWHEEL_INTERVAL_MS:-0}
   SENTRY_DSN: ${SENTRY_DSN:-}
   NUVEMSHOP_ENABLED: ${NUVEMSHOP_ENABLED:-false}
   NUVEMSHOP_APP_ID: ${NUVEMSHOP_APP_ID:-}
@@ -186,14 +188,16 @@ services:
       - |
         apk add --no-cache curl tzdata >/dev/null 2>&1
         cat > /etc/crontabs/root <<EOF
+        # Nao iniciar toda manutencao no mesmo segundo: mensagens e lembretes
+        # continuam com cadencia de um minuto, mas a carga chega escalonada.
         * * * * * curl -fsS -m25 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/whatsapp-inbound-recovery >/dev/null 2>&1
-        * * * * * curl -fsS -m25 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/followup-flow-worker >/dev/null 2>&1
-        * * * * * curl -fsS -m25 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/calendar-reminders >/dev/null 2>&1
-        */5 * * * * curl -fsS -m120 -o /dev/null -w 'google-calendar-sync http=%{http_code} duration=%{time_total}s\n' -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/google-calendar-sync 2>&1
-        * * * * * curl -fsS -m45 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/campaign-worker >/dev/null 2>&1
-        * * * * * curl -fsS -m45 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/meta-capi-worker >/dev/null 2>&1
-        * * * * * curl -fsS -m45 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/notification-delivery >/dev/null 2>&1
-        * * * * * curl -fsS -m45 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/event-log-drain >/dev/null 2>&1
+        * * * * * sleep 7; curl -fsS -m25 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/followup-flow-worker >/dev/null 2>&1
+        * * * * * sleep 14; curl -fsS -m25 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/calendar-reminders >/dev/null 2>&1
+        */5 * * * * sleep 21; curl -fsS -m120 -o /dev/null -w 'google-calendar-sync http=%{http_code} duration=%{time_total}s\n' -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/google-calendar-sync 2>&1
+        * * * * * sleep 28; curl -fsS -m45 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/campaign-worker >/dev/null 2>&1
+        * * * * * sleep 35; curl -fsS -m45 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/meta-capi-worker >/dev/null 2>&1
+        * * * * * sleep 42; curl -fsS -m45 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/notification-delivery >/dev/null 2>&1
+        * * * * * sleep 49; curl -fsS -m45 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/event-log-drain >/dev/null 2>&1
         */5 * * * * curl -fsS -m25 -H "Authorization: Bearer $$INTERNAL_SECRET" "http://app:3000/api/v1/cron/storage-redaction?limit=50" >/dev/null 2>&1
         */5 * * * * curl -fsS -m25 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/snooze-watcher >/dev/null 2>&1
         0 12 * * * curl -fsS -m60 -H "Authorization: Bearer $$INTERNAL_SECRET" http://app:3000/api/v1/cron/lgpd-sla-watcher >/dev/null 2>&1
