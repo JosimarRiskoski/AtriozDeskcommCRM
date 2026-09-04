@@ -25,16 +25,16 @@ ARG NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder-anon-key
 ARG NEXT_PUBLIC_APP_URL=https://placeholder.invalid
 ARG NEXT_PUBLIC_ADMIN_URL=https://placeholder.invalid
-# O build do Next (webpack + Sentry) é faminto: o heap default do Node (~2GB)
-# estoura. NODE_OPTIONS eleva pra 4GB → requer VPS com >=4GB RAM (ou swap).
-# O install.sh checa RAM/swap antes de buildar.
+# O build usa Turbopack e foi validado com heap de 1,5 GB. O teto anterior de
+# 4 GB excedia a memória disponível neste EasyPanel e fazia o build morrer sem
+# uma mensagem útil depois de `pnpm build`.
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
     NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
     NEXT_PUBLIC_ADMIN_URL=$NEXT_PUBLIC_ADMIN_URL \
     NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    NODE_OPTIONS=--max-old-space-size=4096
+    NODE_OPTIONS=--max-old-space-size=1536
 
 # Turbopack (`pnpm build`): ~4min vs ~34min do webpack num VPS. O bloco `webpack:`
 # do Sentry (tree-shake + upload de sourcemap em build-time) é ignorado, mas o
