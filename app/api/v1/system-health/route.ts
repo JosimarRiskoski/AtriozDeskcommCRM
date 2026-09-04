@@ -208,8 +208,8 @@ export async function GET(_req: NextRequest): Promise<Response> {
         (connected.length > 0
           ? "Inbox, atendimento humano e IA podem usar os números conectados."
           : "Conecte ou reconecte um número antes de atender."),
-      action_label: "Abrir conexões",
-      action_url: "/app/connections",
+      action_label: "Diagnosticar WhatsApp",
+      action_url: "/app/system-health/whatsapp",
     },
     {
       id: "automation",

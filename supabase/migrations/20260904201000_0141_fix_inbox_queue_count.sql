@@ -1,0 +1,27 @@
+-- 0141_fix_inbox_queue_count
+--
+-- A aba Fila lista conversas cujo command armazenado e `waiting`. A revisao
+-- 0140 trocou a contagem por uma inferencia sobre o contato, o que permitia
+-- o badge informar conversas que a lista nao podia mostrar. Voltamos a mesma
+-- definicao da rota do Inbox, sem chamar a funcao row-by-row anterior.
+
+create or replace function public.fn_inbox_counts(p_org uuid)
+returns jsonb
+language sql
+stable
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'u', count(*) filter (where c.conversation_command = 'waiting'),
+    'a', count(*) filter (where c.conversation_command = 'automatic'),
+    'm', count(*) filter (
+      where c.assigned_to_user_id = auth.uid()
+        and c.status not in ('closed', 'archived')
+    ),
+    't', count(*)
+  )
+  from public.conversations c
+  inner join public.channel_sessions cs on cs.id = c.channel_session_id
+  where c.organization_id = p_org
+    and cs.archived_at is null;
+$$;
