@@ -16,9 +16,7 @@ import type { BoardData } from "@/lib/kanban/types";
  * uses the server-side cookie reader, identical to every other authed query.
  */
 async function fetchBoard(pipelineId: string): Promise<BoardData> {
-  const res = await apiClient.get<{ data: BoardData }>(
-    `/api/v1/pipelines/${pipelineId}/board`,
-  );
+  const res = await apiClient.get<{ data: BoardData }>(`/api/v1/pipelines/${pipelineId}/board`);
   // apiClient unwraps { data, meta } envelope already in some helpers;
   // ours returns the parsed JSON literally. Handle both shapes safely.
   if (res && typeof res === "object" && "data" in res) {
@@ -38,6 +36,15 @@ async function fetchBoard(pipelineId: string): Promise<BoardData> {
  * divergência" apaga a pista de acessibilidade.
  */
 const PULSE_MS = 1_200;
+
+/**
+ * Janela curta para reunir a cascata de escritas de uma única ação.
+ *
+ * Mover um card pode atualizar etapa, posição e atividade em sequência. O
+ * feedback local já é otimista; esta janela afeta somente a releitura de
+ * reconciliação do quadro inteiro, evitando duas ou mais leituras idênticas.
+ */
+const BOARD_REFETCH_COALESCE_MS = 250;
 
 /** O id do lead dentro do payload do postgres_changes (new, ou old no delete). */
 function idDoEvento(payload: unknown): string | null {
@@ -61,6 +68,7 @@ export function useBoard(pipelineId: string | null) {
    */
   const [pulses, setPulses] = useState<Map<string, number>>(new Map());
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const boardRefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const query = useQuery({
     queryKey,
@@ -70,10 +78,17 @@ export function useBoard(pipelineId: string | null) {
 
   const onChange = useCallback(
     (payload: unknown) => {
-      // Conservative: invalidate the board on any change. Optimistic patches
-      // arrive faster via useMoveCard's onMutate; this just reconciles
-      // cross-user changes within ~250ms.
-      qc.invalidateQueries({ queryKey });
+      // A ação local já move o card pelo cache otimista. Para eventos remotos,
+      // espere uma janela curta antes de buscar o board inteiro: uma única
+      // mudança pode produzir vários UPDATEs consecutivos (etapa, posição e
+      // atividade). Sem isso, a mesma tela baixava o quadro inteiro uma vez
+      // por UPDATE e disputava a renderização com o usuário.
+      if (!boardRefetchTimer.current) {
+        boardRefetchTimer.current = setTimeout(() => {
+          boardRefetchTimer.current = null;
+          void qc.invalidateQueries({ queryKey });
+        }, BOARD_REFETCH_COALESCE_MS);
+      }
 
       const leadId = idDoEvento(payload);
       // Janela, não marca gasta por evento: uma ação minha chega aqui em DUAS
@@ -141,6 +156,7 @@ export function useBoard(pipelineId: string | null) {
     return () => {
       for (const t of pendentes.values()) clearTimeout(t);
       pendentes.clear();
+      if (boardRefetchTimer.current) clearTimeout(boardRefetchTimer.current);
     };
   }, []);
 
