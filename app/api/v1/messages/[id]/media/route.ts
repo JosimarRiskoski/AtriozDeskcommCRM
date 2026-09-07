@@ -53,15 +53,11 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const requestId = randomUUID();
   const { id: messageId } = await ctx.params;
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) return fail("unauthenticated", "Autenticação necessária.", 401, { requestId });
-
   const authUser = await loadAuthUser();
-  const activeOrg = authUser ? await resolveActiveOrg(authUser) : null;
-  if (!activeOrg) return fail("no_active_org", "Organização ativa não encontrada.", 403, { requestId });
+  if (!authUser) return fail("unauthenticated", "Autenticação necessária.", 401, { requestId });
+  const activeOrg = await resolveActiveOrg(authUser);
+  if (!activeOrg)
+    return fail("no_active_org", "Organização ativa não encontrada.", 403, { requestId });
 
   const { data: msg, error } = await supabase
     .from("messages")
@@ -71,7 +67,10 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     .maybeSingle();
   if (error) return fail("internal_error", "Erro ao buscar mensagem.", 500, { requestId });
   const evolutionMessage = record(record(msg?.metadata).evolution_message);
-  if (!msg || (!msg.media_storage_path && !msg.media_url && !Object.keys(evolutionMessage).length)) {
+  if (
+    !msg ||
+    (!msg.media_storage_path && !msg.media_url && !Object.keys(evolutionMessage).length)
+  ) {
     return fail("not_found", "Mensagem sem mídia.", 404, { requestId });
   }
 
@@ -96,7 +95,9 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
       .eq("organization_id", activeOrg.orgId)
       .maybeSingle();
     if (!session || session.provider !== "evolution") {
-      return fail("unsupported_provider", "Mídia não pertence à Evolution API.", 409, { requestId });
+      return fail("unsupported_provider", "Mídia não pertence à Evolution API.", 409, {
+        requestId,
+      });
     }
     const media = await fetchEvolutionMessageMedia({
       mediaUrl: msg.media_url,

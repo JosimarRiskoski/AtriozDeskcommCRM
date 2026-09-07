@@ -24,13 +24,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const { id: conversationId } = await ctx.params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) return fail("unauthenticated", "Auth required.", 401, { requestId });
   const authUser = await loadAuthUser();
-  const activeOrg = authUser ? await resolveActiveOrg(authUser) : null;
+  if (!authUser) return fail("unauthenticated", "Auth required.", 401, { requestId });
+  const activeOrg = await resolveActiveOrg(authUser);
   if (!activeOrg) return fail("no_active_org", "No active organization.", 403, { requestId });
 
   // RLS + filtro explícito: a conversa precisa ser da org ativa.
@@ -60,7 +56,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const mime = file.type || "application/octet-stream";
   const verdict = validateOutboundMedia(mime, file.size);
   if (!verdict.ok) {
-    const status = verdict.code === "payload_too_large" ? 413 : verdict.code === "unsupported_media_type" ? 415 : 422;
+    const status =
+      verdict.code === "payload_too_large"
+        ? 413
+        : verdict.code === "unsupported_media_type"
+          ? 415
+          : 422;
     return fail(verdict.code, verdict.message, status, { requestId });
   }
 

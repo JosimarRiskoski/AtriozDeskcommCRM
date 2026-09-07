@@ -25,16 +25,12 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const { id } = await ctx.params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
+  const authUser = await loadAuthUser();
+  if (!authUser) {
     return fail("unauthenticated", "Auth required.", 401, { requestId });
   }
 
-  const authUser = await loadAuthUser();
-  const activeOrg = authUser ? await resolveActiveOrg(authUser) : null;
+  const activeOrg = await resolveActiveOrg(authUser);
   if (!activeOrg) {
     return fail("no_active_org", "No active organization.", 403, { requestId });
   }
@@ -44,7 +40,7 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
       supabase,
       {
         organization_id: activeOrg.orgId,
-        actor: { type: "user", id: user.id },
+        actor: { type: "user", id: authUser.id },
         requestId,
       },
       id,
