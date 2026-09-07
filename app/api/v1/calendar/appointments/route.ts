@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { NextRequest } from "next/server";
+import { after, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
@@ -47,8 +47,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   const supabase = (await createClient()) as unknown as SupabaseClient;
   const url = new URL(request.url);
   const from = url.searchParams.get("from") || new Date().toISOString();
-  const until =
-    url.searchParams.get("until") || new Date(Date.now() + 90 * 86400000).toISOString();
+  const until = url.searchParams.get("until") || new Date(Date.now() + 90 * 86400000).toISOString();
   const admin = createAdminClient() as unknown as SupabaseClient;
   const { data: integration } = await admin
     .from("calendar_integrations")
@@ -59,14 +58,6 @@ export async function GET(request: NextRequest): Promise<Response> {
   const stale =
     !integration?.last_sync_at ||
     Date.now() - new Date(integration.last_sync_at).getTime() > 60_000;
-  if (stale) {
-    await syncGoogleCalendar(admin, authz.org.orgId).catch(async (error) => {
-      await admin
-        .from("calendar_integrations")
-        .update({ last_error: error instanceof Error ? error.message.slice(0, 500) : "sync_failed" })
-        .eq("organization_id", authz.org.orgId);
-    });
-  }
   const { data, error } = await supabase
     .from("calendar_appointments")
     .select(
@@ -76,7 +67,26 @@ export async function GET(request: NextRequest): Promise<Response> {
     .gte("starts_at", from)
     .lte("starts_at", until)
     .order("starts_at", { ascending: true });
-  if (error) return fail("internal_error", "Não foi possível carregar a agenda.", 500, { requestId });
+  if (error)
+    return fail("internal_error", "Não foi possível carregar a agenda.", 500, { requestId });
+
+  // A listagem deve responder com a agenda local. Sincronizar o Google antes
+  // daqui fazia a primeira abertura da página esperar uma integração externa;
+  // a atualização continua sendo feita, mas depois que a resposta é entregue.
+  if (stale) {
+    after(async () => {
+      await syncGoogleCalendar(admin, authz.org.orgId).catch(async (syncError) => {
+        await admin
+          .from("calendar_integrations")
+          .update({
+            last_error:
+              syncError instanceof Error ? syncError.message.slice(0, 500) : "sync_failed",
+          })
+          .eq("organization_id", authz.org.orgId);
+      });
+    });
+  }
+
   return ok(data ?? [], { requestId });
 }
 
@@ -250,7 +260,9 @@ export async function POST(request: NextRequest): Promise<Response> {
       await admin.from("calendar_appointments").delete().eq("id", createdAppointmentId);
     }
     if (googleEvent && googleCalendarId && googleAccessToken) {
-      await deleteGoogleEvent(googleAccessToken, googleCalendarId, googleEvent.id).catch(() => undefined);
+      await deleteGoogleEvent(googleAccessToken, googleCalendarId, googleEvent.id).catch(
+        () => undefined,
+      );
     }
     const message = error instanceof Error ? error.message : "unknown";
     const notConnected = message === "google_calendar_not_connected";
