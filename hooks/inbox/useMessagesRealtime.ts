@@ -17,7 +17,14 @@ export function useMessagesRealtime(conversationId: string | null) {
 
   const onChange = useCallback(() => {
     if (conversationId) qc.invalidateQueries({ queryKey: ["messages", conversationId] });
-    qc.invalidateQueries({ queryKey: ["conversations"] });
+    // A persistência de uma mensagem também atualiza os agregados da conversa
+    // (preview, posição e não lidas) via fn_mark_conversation_message. Esse
+    // UPDATE já é recebido por useConversationsRealtime, que coalesce a
+    // atualização da lista e dos contadores. Invalidar a lista aqui causava
+    // uma segunda leitura completa para cada recibo da mesma mensagem
+    // (enviada/entregue/lida), concorrendo com o próprio histórico aberto.
+    // Eventos que alteram somente o status da mensagem não precisam recarregar
+    // a lista de conversas.
   }, [qc, conversationId]);
 
   const realtime = useRealtimeChannel({
