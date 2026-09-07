@@ -66,4 +66,27 @@ describe("MessageBubble com mídia", () => {
     render(<MessageBubble message={msg({ type: "text", body: "oi", media_url: null })} />);
     expect(screen.queryByAltText("Imagem recebida")).not.toBeInTheDocument();
   });
+
+  it.each([
+    ["queued", null, "Enviando"],
+    ["sent", 1, "Enviada"],
+    ["delivered", 2, "Entregue"],
+    ["read", 3, "Lida"],
+  ] as const)("mostra o recibo visual %s na mensagem enviada", (status, ack, label) => {
+    render(
+      <MessageBubble
+        message={msg({ direction: "outbound", status, ack, media_url: null, body: "teste" })}
+      />,
+    );
+    expect(screen.getByLabelText(label)).toBeInTheDocument();
+  });
+
+  it("usa verde somente quando a mensagem foi lida", () => {
+    render(
+      <MessageBubble
+        message={msg({ direction: "outbound", status: "read", ack: 3, media_url: null })}
+      />,
+    );
+    expect(screen.getByLabelText("Lida")).toHaveClass("text-emerald-400");
+  });
 });

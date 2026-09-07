@@ -213,6 +213,10 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       if (requestedReadIds.current.has(conversation.id)) return;
       requestedReadIds.current.add(conversation.id);
       markRead.mutate(conversation.id, {
+        // A trava é só para evitar várias chamadas enquanto esta leitura está
+        // em trânsito. Mantê-la após sucesso bloqueava leituras futuras da
+        // mesma conversa quando chegava uma nova mensagem.
+        onSuccess: () => requestedReadIds.current.delete(conversation.id),
         onError: () => requestedReadIds.current.delete(conversation.id),
       });
     },
