@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   Kanban,
   Users,
@@ -75,12 +75,19 @@ const NAV_ITEMS: NavItem[] = [
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const canLgpd = usePermission("lgpd.execute_redact");
   const canAiAgents = usePermission("ai.agents.view");
   const canAiMemory = usePermission("ai.memory.view");
   const canWebhooks = usePermission("webhooks.manage");
 
   const brand = branding();
+
+  // A rota pode levar alguns segundos para montar seus dados. Limpa o feedback
+  // assim que ela muda, para que o clique no menu nunca pareça ignorado.
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
 
   return (
     <aside
@@ -137,6 +144,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
             (item.href === "/app/settings" &&
               settingsAliases.some((route) => pathname.startsWith(route))) ||
             (item.href === "/app/ai/agents" && isAiSettingsRoute);
+          const isNavigatingToItem = pendingHref === item.href && !isActive;
           const Icon = item.icon;
           return (
             <Link
@@ -144,16 +152,44 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
               href={item.href}
               title={collapsed ? item.label : undefined}
               aria-current={isActive ? "page" : undefined}
+              aria-busy={isNavigatingToItem || undefined}
+              onClick={(event) => {
+                // Não interfere em abrir em outra aba, nem mantém o estado preso
+                // quando a pessoa clica na página que já está aberta.
+                if (
+                  isActive ||
+                  event.defaultPrevented ||
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                ) {
+                  return;
+                }
+                setPendingHref(item.href);
+              }}
               className={cn(
                 "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                 isActive
                   ? "bg-accent text-accent-foreground"
-                  : "hover:bg-accent/50 text-muted-foreground hover:text-foreground",
+                  : isNavigatingToItem
+                    ? "bg-accent/70 text-foreground"
+                    : "hover:bg-accent/50 text-muted-foreground hover:text-foreground",
                 collapsed && "justify-center px-2",
               )}
             >
               <Icon size={18} weight={isActive ? "fill" : "regular"} aria-hidden />
               {!collapsed && <span className="truncate">{item.label}</span>}
+              {isNavigatingToItem ? (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-2 w-2 animate-pulse rounded-full bg-primary",
+                    collapsed ? "absolute right-1.5 top-1.5" : "ml-auto",
+                  )}
+                />
+              ) : null}
               {item.healthDot && (
                 <ConnectionHealthDot
                   className={cn(collapsed ? "absolute right-1.5 top-1.5" : "ml-auto")}
