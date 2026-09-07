@@ -8,6 +8,7 @@
  */
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { AuthUser, Role, UserOrgMembership, ActiveOrg } from "./types";
 
@@ -28,7 +29,7 @@ interface RawMembershipRow {
  * - organizations: id IN fn_user_org_ids()  (orgs_select)
  * - platform_admins: only platform admins read (so non-admins get null — correct)
  */
-export async function loadAuthUser(): Promise<AuthUser | null> {
+export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -72,14 +73,14 @@ export async function loadAuthUser(): Promise<AuthUser | null> {
     is_platform_admin: !!paRow,
     organizations: memberships,
   };
-}
+});
 
 /**
  * Resolves the active organization for the current request.
  * Priority: cookie `active_org` (if member of) → first membership.
  * Returns null if user has zero memberships.
  */
-export async function resolveActiveOrg(authUser: AuthUser): Promise<ActiveOrg | null> {
+export const resolveActiveOrg = cache(async (authUser: AuthUser): Promise<ActiveOrg | null> => {
   if (authUser.organizations.length === 0) return null;
   const store = await cookies();
   const cookieOrg = store.get(ACTIVE_ORG_COOKIE)?.value;
@@ -92,7 +93,7 @@ export async function resolveActiveOrg(authUser: AuthUser): Promise<ActiveOrg | 
   const first = authUser.organizations[0];
   if (!first) return null;
   return { orgId: first.organization_id, name: first.organization_name, role: first.role };
-}
+});
 
 /**
  * For Server Components / Server Actions in /app/(app)/* routes — guarantees
@@ -108,11 +109,11 @@ export async function requireAuth(): Promise<AuthUser> {
  * Returns true if the current session has at least one verified TOTP factor.
  * Use only in Server Components / Server Actions (cookie session).
  */
-export async function isMfaEnrolled(): Promise<boolean> {
+export const isMfaEnrolled = cache(async (): Promise<boolean> => {
   const supabase = await createClient();
   const { data } = await supabase.auth.mfa.listFactors();
   return !!data?.totp?.some((f) => f.status === "verified");
-}
+});
 
 /**
  * MFA enforcement policy: platform admins and tenant `admin` role MUST enroll.
