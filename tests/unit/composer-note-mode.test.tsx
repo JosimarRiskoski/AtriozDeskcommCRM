@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sendMock = vi.fn();
 const createNoteMock = vi.fn();
+let sendPending = false;
 
 vi.mock("@/hooks/inbox/useSendMessage", () => ({
-  useSendMessage: () => ({ mutate: sendMock, isPending: false }),
+  useSendMessage: () => ({ mutate: sendMock, isPending: sendPending }),
 }));
 vi.mock("@/hooks/inbox/useCreateNote", () => ({
   useCreateNote: () => ({ mutate: createNoteMock, isPending: false }),
@@ -36,6 +37,7 @@ describe("Composer + modo nota interna", () => {
   beforeEach(() => {
     sendMock.mockClear();
     createNoteMock.mockClear();
+    sendPending = false;
   });
 
   it("modo reply (default): envia normal via useSendMessage", () => {
@@ -50,15 +52,28 @@ describe("Composer + modo nota interna", () => {
     expect(createNoteMock).not.toHaveBeenCalled();
   });
 
-  it("devolve o foco para a caixa depois de enviar por Enter", async () => {
-    sendMock.mockImplementationOnce((_payload, options) => options.onSuccess());
+  it("limpa e mantém o foco antes da confirmação de envio", async () => {
+    sendPending = true;
     renderComposer();
     const message = screen.getByLabelText(/mensagem/i);
+    message.focus();
     fireEvent.change(message, { target: { value: "oi cliente" } });
     fireEvent.keyDown(message, { key: "Enter" });
 
     await waitFor(() => expect(document.activeElement).toBe(message));
     expect(message).toHaveValue("");
+    expect(message).not.toBeDisabled();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("restaura a mensagem se o envio falhar antes de uma nova digitação", async () => {
+    sendMock.mockImplementationOnce((_payload, options) => options.onError());
+    renderComposer();
+    const message = screen.getByLabelText(/mensagem/i);
+    fireEvent.change(message, { target: { value: "oi cliente" } });
+    fireEvent.keyDown(message, { key: "Enter" });
+
+    await waitFor(() => expect(message).toHaveValue("oi cliente"));
   });
 
   it("alterna pra modo nota interna: some anexo/rascunho/áudio, muda placeholder", () => {
@@ -78,7 +93,9 @@ describe("Composer + modo nota interna", () => {
     renderComposer();
     fireEvent.click(screen.getByRole("button", { name: /nota interna/i }));
 
-    fireEvent.change(screen.getByPlaceholderText(/nota interna/i), { target: { value: "cliente ligou reclamando" } });
+    fireEvent.change(screen.getByPlaceholderText(/nota interna/i), {
+      target: { value: "cliente ligou reclamando" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /^enviar$/i }));
 
     expect(createNoteMock).toHaveBeenCalledWith(

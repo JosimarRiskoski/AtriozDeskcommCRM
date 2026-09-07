@@ -53,7 +53,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   }));
 
   const isDisabled =
-    disabled || !!blockedReason || send.isPending || upload.isPending || createNote.isPending;
+    disabled || !!blockedReason || upload.isPending || (mode === "note" && createNote.isPending);
 
   function autoresize() {
     const ta = taRef.current;
@@ -80,6 +80,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       );
       return;
     }
+    // A entrega ao WhatsApp continua em segundo plano. Limpar e manter o foco
+    // antes da mutation permite escrever a próxima resposta sem esperar a API.
+    setText("");
+    setInteractivePoll(null);
+    requestAnimationFrame(() => {
+      autoresize();
+      taRef.current?.focus();
+    });
     send.mutate(
       {
         conversation_id: conversationId,
@@ -88,9 +96,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         ...(interactivePoll ? { interactive_poll: interactivePoll } : {}),
       },
       {
-        onSuccess: () => {
-          setText("");
-          setInteractivePoll(null);
+        onError: () => {
+          // Não sobrescreve uma nova mensagem que a pessoa já começou a digitar.
+          // Se o campo ainda está vazio, devolve o texto falho para nova tentativa.
+          setText((current) => current || body);
           requestAnimationFrame(() => {
             autoresize();
             taRef.current?.focus();
