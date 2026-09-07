@@ -13,7 +13,7 @@
  * runs, same as every other authed query.
  */
 import { randomUUID } from "node:crypto";
-import { type NextRequest } from "next/server";
+import { after, type NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import {
@@ -276,9 +276,9 @@ async function withNextActions(
   organizationId: string,
   leads: Lead[],
   defaultPipelineId: string | null,
-): Promise<{ leads: Lead[]; error: string | null }> {
+): Promise<{ leads: Lead[]; error: string | null; ambiguas: PropostaAmbigua[] }> {
   const contactIds = [...new Set(leads.map((l) => l.contact_id).filter((c): c is string => !!c))];
-  if (contactIds.length === 0) return { leads, error: null };
+  if (contactIds.length === 0) return { leads, error: null, ambiguas: [] };
 
   const [{ data: estados, error: estadosErr }, { data: candidatos, error: candErr }] =
     await Promise.all([
@@ -297,9 +297,9 @@ async function withNextActions(
         .eq("status", "open")
         .in("contact_id", contactIds),
     ]);
-  if (estadosErr) return { leads, error: estadosErr.message };
-  if (candErr) return { leads, error: candErr.message };
-  if (!estados || estados.length === 0) return { leads, error: null };
+  if (estadosErr) return { leads, error: estadosErr.message, ambiguas: [] };
+  if (candErr) return { leads, error: candErr.message, ambiguas: [] };
+  if (!estados || estados.length === 0) return { leads, error: null, ambiguas: [] };
 
   const { porLead, ambiguas } = roteiaProximasAcoes(
     estados as EstadoDoContato[],
@@ -307,15 +307,7 @@ async function withNextActions(
     { defaultPipelineId },
   );
 
-  // Recusar o palpite não pode virar silêncio: a proposta que não achou dono vai
-  // para a caixa, onde um humano desambigua. Escrever a partir de um GET não é
-  // bonito, e é deliberado — a ambiguidade só EXISTE quando se olha o conjunto
-  // de negócios abertos AGORA, e é aqui que esse olhar acontece. Fazer no
-  // momento da escrita da proposta perderia o caso em que o segundo negócio
-  // nasce depois dela.
-  await avisaAmbiguas(supabase, organizationId, ambiguas);
-
-  if (porLead.size === 0) return { leads, error: null };
+  if (porLead.size === 0) return { leads, error: null, ambiguas };
 
   return {
     leads: leads.map((lead) => {
@@ -323,6 +315,7 @@ async function withNextActions(
       return acao ? { ...lead, next_action: acao } : lead;
     }),
     error: null,
+    ambiguas,
   };
 }
 
@@ -391,6 +384,15 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   );
   if (leadsComAcao.error) {
     return fail("internal_error", leadsComAcao.error, 500, { requestId });
+  }
+
+  // A pendência de desambiguação é importante, mas não pode atrasar a resposta
+  // que desenha o Kanban. A decisão foi calculada com o mesmo snapshot acima;
+  // apenas a persistência sai do caminho crítico da leitura.
+  if (leadsComAcao.ambiguas.length > 0) {
+    after(async () => {
+      await avisaAmbiguas(supabase, organizationId, leadsComAcao.ambiguas);
+    });
   }
 
   const leadsComScore = await withScores(
