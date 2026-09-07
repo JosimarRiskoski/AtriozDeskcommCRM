@@ -36,20 +36,23 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Platform admin? (active = no revoked_at). RLS returns null for non-admins.
-  const { data: paRow } = await supabase
-    .from("platform_admins")
-    .select("user_id, revoked_at")
-    .eq("user_id", user.id)
-    .is("revoked_at", null)
-    .maybeSingle();
-
-  // Org memberships (only active = not revoked, accepted)
-  const { data: rawMemberships } = await supabase
-    .from("user_organizations")
-    .select("organization_id, role, organizations(display_name)")
-    .eq("user_id", user.id)
-    .is("revoked_at", null);
+  // A checagem de administrador e a lista de organizações usam o mesmo
+  // usuário já autenticado, mas não dependem uma da outra. Rodar em paralelo
+  // remove uma ida serial ao banco de todo carregamento de /app/* sem mudar a
+  // autorização, que continua sendo resolvida somente após getUser().
+  const [{ data: paRow }, { data: rawMemberships }] = await Promise.all([
+    supabase
+      .from("platform_admins")
+      .select("user_id, revoked_at")
+      .eq("user_id", user.id)
+      .is("revoked_at", null)
+      .maybeSingle(),
+    supabase
+      .from("user_organizations")
+      .select("organization_id, role, organizations(display_name)")
+      .eq("user_id", user.id)
+      .is("revoked_at", null),
+  ]);
 
   const rows = (rawMemberships ?? []) as RawMembershipRow[];
   const memberships: UserOrgMembership[] = rows.map((row) => {
