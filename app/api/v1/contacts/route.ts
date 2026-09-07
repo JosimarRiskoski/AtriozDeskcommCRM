@@ -26,11 +26,10 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
+  // loadAuthUser já valida a sessão e monta a identidade usada para encontrar
+  // a organização ativa. Não repita auth.getUser antes dela nesta rota.
+  const authUser = await loadAuthUser();
+  if (!authUser) {
     return fail("unauthenticated", "Auth required.", 401, { requestId });
   }
 
@@ -50,7 +49,6 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
   }
 
-  const authUser = await loadAuthUser();
   const orgId = authUser ? (await resolveActiveOrg(authUser))?.orgId : undefined;
 
   try {
@@ -58,7 +56,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       supabase,
       {
         organization_id: orgId ?? "",
-        actor: { type: "user", id: user.id },
+        actor: { type: "user", id: authUser.id },
         requestId,
       },
       qsParsed.data,
