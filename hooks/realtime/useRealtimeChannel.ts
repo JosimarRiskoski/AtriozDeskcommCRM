@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
-import { createClient } from "@/lib/supabase/browser";
+import { authenticateRealtime, createClient } from "@/lib/supabase/browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export type RealtimeStatus = "connecting" | "subscribed" | "channel_error" | "timed_out" | "closed";
@@ -94,8 +94,30 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
     let retomada: ReturnType<typeof setTimeout> | null = null;
     setStatus("connecting");
 
-    const montar = () => {
+    const reagendar = () => {
+      const espera = Math.min(30_000, 1_000 * 2 ** tentativas);
+      tentativas++;
+      if (retomada) clearTimeout(retomada);
+      retomada = setTimeout(() => {
+        if (cancelado) return;
+        if (active) supabase.removeChannel(active);
+        montar();
+      }, espera);
+    };
+
+    const montar = async () => {
       if (cancelado) return;
+
+      // Não abra o canal enquanto o socket ainda é anônimo. A RLS deixa a
+      // assinatura aparentemente saudável, mas filtra todos os eventos; o
+      // sintoma é a mensagem só aparecer depois do F5.
+      const authenticated = await authenticateRealtime(supabase);
+      if (cancelado) return;
+      if (!authenticated) {
+        setStatus("timed_out");
+        reagendar();
+        return;
+      }
 
       let novo: RealtimeChannel = supabase.channel(`${channelName}#${tentativas}`);
       if (postgresChanges) {
@@ -114,9 +136,6 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
       if (broadcast) novo = novo.on("broadcast", { event: broadcast.event }, handler);
       active = novo;
 
-      // A callback `realtime.accessToken` do cliente fornece e renova o token
-      // antes de cada join. Este hook fica responsável apenas pela topologia e
-      // recuperação do canal.
       novo.subscribe((s) => {
         if (cancelado || active !== novo) return;
         const map: Record<string, RealtimeStatus> = {
@@ -139,14 +158,7 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
         }
 
         if (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") {
-          const espera = Math.min(30_000, 1_000 * 2 ** tentativas);
-          tentativas++;
-          if (retomada) clearTimeout(retomada);
-          retomada = setTimeout(() => {
-            if (cancelado) return;
-            if (active) supabase.removeChannel(active);
-            montar();
-          }, espera);
+          reagendar();
         }
       });
     };

@@ -57,6 +57,23 @@ async function getRealtimeToken(): Promise<string | null> {
   return realtimeTokenRequest;
 }
 
+/**
+ * Aplica o JWT de sessão no socket ANTES de qualquer canal se inscrever.
+ *
+ * O `accessToken` nas opções do cliente também ajuda em reconexões internas,
+ * mas a biblioteca o resolve de forma assíncrona e não bloqueia a primeira
+ * inscrição do canal. Com cookies httpOnly, essa janela faz o canal nascer
+ * anônimo: ele pode responder SUBSCRIBED e, por RLS, nunca receber evento.
+ */
+export async function authenticateRealtime(
+  client: ReturnType<typeof createBrowserClient>,
+): Promise<boolean> {
+  const token = await getRealtimeToken();
+  if (!token) return false;
+  await client.realtime.setAuth(token);
+  return true;
+}
+
 export function createClient() {
   // Singleton no browser pra reaproveitar canais Realtime e auth state.
   if (_client) return _client;
@@ -65,11 +82,9 @@ export function createClient() {
   // <PublicEnvScript/>. Vercel/dev: fallback pro process.env.NEXT_PUBLIC_*
   // (baked em build). Ler a URL do Supabase daqui é o que permite uma única
   // imagem servir qualquer projeto Supabase sem rebuild.
-  const runtime =
-    typeof window !== "undefined" ? window.__PUBLIC_ENV__ : undefined;
+  const runtime = typeof window !== "undefined" ? window.__PUBLIC_ENV__ : undefined;
   const url = runtime?.NEXT_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key =
-    runtime?.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = runtime?.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
     throw new Error(
