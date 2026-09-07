@@ -364,25 +364,28 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (leadsErr) return fail("internal_error", leadsErr.message, 500, { requestId });
   if (!pipeline) return fail("resource_not_found", "Pipeline não encontrado.", 404, { requestId });
 
-  const leadsWithOwner = await withOwnerAgents(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    (leads ?? []) as Lead[],
-  );
+  const organizationId = (pipeline as Pipeline).organization_id;
+  const initialLeads = (leads ?? []) as Lead[];
+
+  // Both reads depend only on the board snapshot already loaded above. Run
+  // them together so the default-pipeline lookup does not extend the board's
+  // critical path behind owner enrichment.
+  const [leadsWithOwner, { data: pipelinePadrao }] = await Promise.all([
+    withOwnerAgents(supabase, organizationId, initialLeads),
+    supabase
+      .from("crm_pipelines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("is_default", true)
+      .maybeSingle(),
+  ]);
   if (leadsWithOwner.error) {
     return fail("internal_error", leadsWithOwner.error, 500, { requestId });
   }
 
-  const { data: pipelinePadrao } = await supabase
-    .from("crm_pipelines")
-    .select("id")
-    .eq("organization_id", (pipeline as Pipeline).organization_id)
-    .eq("is_default", true)
-    .maybeSingle();
-
   const leadsComAcao = await withNextActions(
     supabase,
-    (pipeline as Pipeline).organization_id,
+    organizationId,
     leadsWithOwner.leads,
     (pipelinePadrao as { id: string } | null)?.id ?? null,
   );
