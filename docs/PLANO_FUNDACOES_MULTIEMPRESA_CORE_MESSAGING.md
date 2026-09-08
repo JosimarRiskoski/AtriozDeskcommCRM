@@ -65,6 +65,7 @@ CORE          MESSAGING
 
 - Consolidar `organization_id` como chave de isolamento em cada rota, tabela e evento que pertença a um cliente.
 - Revisar RLS, membership, troca de organização ativa e auditoria de ações administrativas.
+- Manter 2 fatores obrigatório para administradores, recomendado para gerentes e opcional para atendentes. O código só pode ser pedido ao iniciar uma nova sessão, nunca durante a navegação no CRM.
 - Definir o provisionamento de um novo cliente: organização, primeiro administrador, domínio, segredo, conexão exclusiva, Redis/worker/volumes e backup.
 - Criar testes automatizados de isolamento: um usuário/organização jamais lê ou altera dados de outro.
 
