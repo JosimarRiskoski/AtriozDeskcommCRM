@@ -80,6 +80,7 @@ export async function POST(
     .update({
       stage_id: lostStage.id,
       lost_reason: input.lost_reason,
+      lost_reason_detail: input.lost_reason_detail ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", leadId);

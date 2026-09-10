@@ -41,6 +41,7 @@ export interface Lead {
   description: string | null;
   status: LeadStatus;
   lost_reason: string | null;
+  lost_reason_detail?: string | null;
   position_in_stage: number;
   value_cents: number | null;
   currency: string | null;

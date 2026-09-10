@@ -191,7 +191,13 @@ async function request<T>(
         await sleep(backoffMs(attempt), opts.signal);
         continue;
       }
-      throw err;
+      throw new ApiError(
+        503,
+        "service_unavailable",
+        undefined,
+        requestId,
+        "A conexão com o CRM falhou após novas tentativas.",
+      );
     } finally {
       clearTimeout(timer);
     }

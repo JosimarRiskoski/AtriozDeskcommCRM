@@ -250,6 +250,7 @@ export function KanbanBoard({
     <DragDropContext onDragEnd={handleDragEnd}>
       <div
         className="h-full min-h-0 min-w-0 overflow-x-auto overflow-y-auto overscroll-x-contain pb-2"
+        data-kanban-board-scroll
         role="region"
         aria-label="Etapas do funil. Role horizontalmente para ver todas."
         tabIndex={0}

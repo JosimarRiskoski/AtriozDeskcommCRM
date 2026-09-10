@@ -56,6 +56,8 @@ import {
 } from "@/lib/agent-engine/queue/queue";
 import { runQueueLoop } from "@/lib/agent-engine/queue/loop";
 import { cleanupProcessedWebhookLogs } from "@/lib/maintenance/webhook-log-retention";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { runEventLogWorkerLoop } from "@/lib/event-log/worker-loop";
 
 export interface JobHandlerContext {
   workerId: string;
@@ -226,6 +228,19 @@ export async function startWorker(
     loopsAbort.signal,
   );
 
+  // O event_log genérico também pode acionar IA, mídia e automações. Ele roda
+  // neste worker, e não no Next.js, para que uma fila lenta nunca congele o CRM.
+  const eventLogWorkerLoop = runEventLogWorkerLoop(
+    createAdminClient(),
+    {
+      batchSize: 10,
+      busyIntervalMs: 1_000,
+      idleIntervalMs: 15_000,
+    },
+    log,
+    loopsAbort.signal,
+  );
+
   // Watchdog de sessão: reconcilia channel_sessions × Evolution.
   const sessionWatchdogLoop =
     env.EVOLUTION_API_BASE_URL !== undefined && env.EVOLUTION_API_KEY !== undefined
@@ -350,7 +365,14 @@ export async function startWorker(
     server.close();
     server.closeIdleConnections();
     loopsAbort.abort();
-    await Promise.all([drainLoop, healthLoop, cronLoop, sessionWatchdogLoop, flywheelLoop]);
+    await Promise.all([
+      drainLoop,
+      eventLogWorkerLoop,
+      healthLoop,
+      cronLoop,
+      sessionWatchdogLoop,
+      flywheelLoop,
+    ]);
     await workerLoop;
     let graceTimer: NodeJS.Timeout | undefined;
     const grace = new Promise<"grace">((resolve) => {

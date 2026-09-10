@@ -2611,6 +2611,7 @@ export type Database = {
           id: string;
           last_activity_at: string | null;
           lost_reason: string | null;
+          lost_reason_detail: string | null;
           organization_id: string;
           owner_agent_id: string | null;
           owner_kind: string | null;
@@ -2641,6 +2642,7 @@ export type Database = {
           id?: string;
           last_activity_at?: string | null;
           lost_reason?: string | null;
+          lost_reason_detail?: string | null;
           organization_id: string;
           owner_agent_id?: string | null;
           owner_kind?: string | null;
@@ -2671,6 +2673,7 @@ export type Database = {
           id?: string;
           last_activity_at?: string | null;
           lost_reason?: string | null;
+          lost_reason_detail?: string | null;
           organization_id?: string;
           owner_agent_id?: string | null;
           owner_kind?: string | null;

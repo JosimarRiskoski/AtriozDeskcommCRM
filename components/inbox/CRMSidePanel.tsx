@@ -149,6 +149,7 @@ export function CRMSidePanel({
   const [tentativa, setTentativa] = useState(0);
   const [caseDialogOpen, setCaseDialogOpen] = useState(false);
   const [opportunityOpen, setOpportunityOpen] = useState(false);
+  const isOpportunityOpen = opportunityOpen || openOpportunity;
   const [appointmentOpen, setAppointmentOpen] = useState(false);
   const [opportunityPipelineId, setOpportunityPipelineId] = useState("");
   const channels = useChannelSessions({ includeArchived: true });
@@ -162,7 +163,7 @@ export function CRMSidePanel({
   });
   const pipelines = useQuery({
     queryKey: ["pipelines", "inbox-opportunity"],
-    enabled: opportunityOpen,
+    enabled: isOpportunityOpen,
     queryFn: async () => (await apiClient.get<{ data: PipelineRow[] }>("/api/v1/pipelines")).data,
   });
   const pipelineId =
@@ -172,7 +173,7 @@ export function CRMSidePanel({
     "";
   const board = useQuery({
     queryKey: ["board", pipelineId, "inbox-opportunity"],
-    enabled: opportunityOpen && !!pipelineId,
+    enabled: isOpportunityOpen && !!pipelineId,
     queryFn: async () =>
       (await apiClient.get<{ data: BoardData }>(`/api/v1/pipelines/${pipelineId}/board`)).data,
   });
@@ -592,13 +593,15 @@ export function CRMSidePanel({
         onOpenChange={setCaseDialogOpen}
       />
       <NewLeadDialog
-        open={opportunityOpen || openOpportunity}
+        open={isOpportunityOpen}
         onOpenChange={(open) => {
           setOpportunityOpen(open);
           onOpenOpportunityChange?.(open);
         }}
         pipelineId={pipelineId}
         stages={board.data?.stages ?? []}
+        stagesLoading={board.isLoading}
+        stagesError={board.isError}
         valueLabel={board.data?.pipeline.settings?.value_label as string | undefined}
         contactId={contactId}
         conversationId={conversation.id}

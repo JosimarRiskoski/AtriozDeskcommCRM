@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLeadTimeline } from "@/hooks/leads/useLeadTimeline";
@@ -15,6 +16,7 @@ import { AppointmentDialog } from "@/components/calendar/AppointmentDialog";
 import { Button } from "@/components/ui/button";
 import { CalendarBlank } from "@/lib/ui/icons";
 import { MetaConversionControl } from "./MetaConversionControl";
+import { apiClient } from "@/lib/api/client";
 
 interface Props {
   open: boolean;
@@ -68,6 +70,14 @@ export function LeadDossier({
   const owner = resolveLeadOwner(lead, ownerNames);
   const score = lead.score ?? null;
   const [appointmentOpen, setAppointmentOpen] = useState(false);
+  const contact = useQuery({
+    queryKey: ["contact-phone", lead.contact_id],
+    enabled: open && !!lead.contact_id,
+    queryFn: async () =>
+      (await apiClient.get<{ data: { phone_number: string | null } }>(
+        `/api/v1/contacts/${lead.contact_id}`,
+      )).data,
+  });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -84,6 +94,9 @@ export function LeadDossier({
       >
         <SheetHeader className="pb-3">
           <SheetTitle className="text-base leading-6">{lead.title}</SheetTitle>
+          {contact.data?.phone_number ? (
+            <p className="mt-1 text-sm font-normal text-text-muted">{contact.data.phone_number}</p>
+          ) : null}
         </SheetHeader>
 
         {/* ① cabeçalho vivo */}

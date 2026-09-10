@@ -58,6 +58,10 @@ const COPY: Record<string, { variant: Variant; msg: string }> = {
     variant: "error",
     msg: "Erro interno. Tente de novo em instantes.",
   },
+  service_unavailable: {
+    variant: "warning",
+    msg: "O CRM está temporariamente indisponível. Sua ação não foi confirmada; tente novamente em instantes.",
+  },
 };
 
 export function showApiError(err: unknown): void {

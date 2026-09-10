@@ -315,6 +315,18 @@
     background-clip: padding-box;
     border: 2px solid transparent;
   }
+
+  /* O funil pode ter muitas colunas: esta barra é propositalmente maior para
+     arrastar com o mouse sem disputar precisão com os cards. */
+  [data-kanban-board-scroll] {
+    scrollbar-width: auto;
+  }
+  [data-kanban-board-scroll]::-webkit-scrollbar {
+    height: 18px;
+  }
+  [data-kanban-board-scroll]::-webkit-scrollbar-thumb {
+    border-width: 3px;
+  }
 }
 
 /* ---- Pulso de chegada no card do Kanban (CRM Vivo, Wave 3) --------------

@@ -28,6 +28,7 @@ import { createLeadSchema, type CreateLeadInput } from "@/lib/schemas/leads";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { StepDialogForm } from "@/components/ui/step-dialog-form";
 import { ApiError } from "@/lib/api/types";
+import { brlInputToCents, formatBrlInput } from "@/lib/formatters/brl-input";
 
 interface FormShape {
   title: string;
@@ -54,6 +55,8 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   pipelineId: string;
   stages: Stage[];
+  stagesLoading?: boolean;
+  stagesError?: boolean;
   valueLabel?: string;
   contactId?: string | null;
   conversationId?: string | null;
@@ -79,6 +82,8 @@ export function NewLeadDialog({
   onOpenChange,
   pipelineId,
   stages,
+  stagesLoading = false,
+  stagesError = false,
   valueLabel = "Valor previsto",
   contactId = null,
   conversationId = null,
@@ -213,13 +218,12 @@ export function NewLeadDialog({
     const reais = values.valueReais.trim();
     let valueCents: number | null = null;
     if (reais.length > 0) {
-      const normalized = reais.replace(/\./g, "").replace(",", ".");
-      const n = Number(normalized);
-      if (!Number.isFinite(n) || n < 0) {
+      const parsedValue = brlInputToCents(reais);
+      if (parsedValue === null) {
         form.setError("valueReais", { message: "Valor inválido" });
         return;
       }
-      valueCents = Math.round(n * 100);
+      valueCents = parsedValue;
     }
 
     const payload: Record<string, unknown> = {
@@ -561,8 +565,10 @@ export function NewLeadDialog({
 
           <div className={step === 1 ? "space-y-2" : "hidden"}>
             <Label>Etapa</Label>
+            {stagesLoading ? <p className="text-xs text-text-muted">Carregando etapas do funil...</p> : null}
+            {stagesError ? <p className="text-xs text-error-fg">Não foi possível carregar as etapas. Feche e tente novamente.</p> : null}
             <Select value={stageId} onValueChange={(v) => form.setValue("stage_id", v)}>
-              <SelectTrigger>
+              <SelectTrigger disabled={stagesLoading || stagesError}>
                 <SelectValue placeholder="Selecione a etapa" />
               </SelectTrigger>
               <SelectContent>
@@ -584,7 +590,9 @@ export function NewLeadDialog({
                 id="valueReais"
                 inputMode="decimal"
                 placeholder="0,00"
-                {...form.register("valueReais")}
+                {...form.register("valueReais", {
+                  onChange: (event) => form.setValue("valueReais", formatBrlInput(event.target.value)),
+                })}
               />
               {form.formState.errors.valueReais && (
                 <p className="text-xs text-error-fg">{form.formState.errors.valueReais.message}</p>

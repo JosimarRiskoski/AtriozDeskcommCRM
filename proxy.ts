@@ -76,7 +76,39 @@ export async function proxy(request: NextRequest) {
   // Validate JWT server-side (NEVER use getSession on backend per CLAUDE.md).
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+
+  // Uma indisponibilidade transitória do Auth não significa que a sessão foi
+  // encerrada. Redirecionar para /login nesse caso apaga a navegação do usuário
+  // e mascara a causa real. Só 401/403 seguem como sessão inválida.
+  const authTemporarilyUnavailable =
+    !user &&
+    !!authError &&
+    authError.status !== 401 &&
+    authError.status !== 403;
+
+  if (authTemporarilyUnavailable) {
+    if (pathname.startsWith("/api/")) {
+      return new NextResponse(
+        JSON.stringify({
+          error: {
+            code: "service_unavailable",
+            message: "A validação da sessão está temporariamente indisponível. Tente novamente em instantes.",
+            request_id: requestId,
+          },
+        }),
+        {
+          status: 503,
+          headers: { "content-type": "application/json", "x-request-id": requestId },
+        },
+      );
+    }
+    return new NextResponse(
+      "O CRM está temporariamente indisponível. Aguarde alguns instantes e atualize a página; sua sessão não foi encerrada.",
+      { status: 503, headers: { "content-type": "text/plain; charset=utf-8", "x-request-id": requestId } },
+    );
+  }
 
   if (!user) {
     // API routes must respond with JSON envelope (contract: {error:{code,message}})
