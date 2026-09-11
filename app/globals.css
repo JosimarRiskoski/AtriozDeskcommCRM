@@ -327,6 +327,47 @@
   [data-kanban-board-scroll]::-webkit-scrollbar-thumb {
     border-width: 3px;
   }
+
+  /* O Chrome no Windows pode ignorar a espessura da scrollbar nativa em modo
+     sobreposto. O controle abaixo é do CRM, sempre grande e clicável. */
+  [data-kanban-horizontal-control] {
+    appearance: none;
+    width: 100%;
+    height: 22px;
+    cursor: grab;
+    background: transparent;
+  }
+  [data-kanban-horizontal-control]:active {
+    cursor: grabbing;
+  }
+  [data-kanban-horizontal-control]::-webkit-slider-runnable-track {
+    height: 14px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-full);
+    background: var(--color-surface-elevated);
+  }
+  [data-kanban-horizontal-control]::-webkit-slider-thumb {
+    appearance: none;
+    width: 52px;
+    height: 22px;
+    margin-top: -5px;
+    border: 1px solid var(--color-accent-600);
+    border-radius: var(--radius-full);
+    background: var(--color-accent-500);
+  }
+  [data-kanban-horizontal-control]::-moz-range-track {
+    height: 14px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-full);
+    background: var(--color-surface-elevated);
+  }
+  [data-kanban-horizontal-control]::-moz-range-thumb {
+    width: 52px;
+    height: 22px;
+    border: 1px solid var(--color-accent-600);
+    border-radius: var(--radius-full);
+    background: var(--color-accent-500);
+  }
 }
 
 /* ---- Pulso de chegada no card do Kanban (CRM Vivo, Wave 3) --------------

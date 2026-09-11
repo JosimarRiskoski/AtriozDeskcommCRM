@@ -12,7 +12,8 @@ import {
 import { useConversation, isNotFound } from "@/hooks/inbox/useConversation";
 import { useMarkConversationRead } from "@/hooks/inbox/useMarkConversationRead";
 import { ConversationList } from "./ConversationList";
-import { InboxFilters, type InboxFiltersValue, type InboxTab } from "./InboxFilters";
+import { InboxFilters, type InboxFiltersValue } from "./InboxFilters";
+import { inboxTabToFilter, type InboxTab } from "@/lib/inbox/tab-filter";
 import { ChatThread } from "./ChatThread";
 import { Composer, type ComposerHandle } from "./Composer";
 import { ConversationHeader } from "./ConversationHeader";
@@ -29,22 +30,6 @@ import {
   InboxResizeHandle,
   INBOX_LIST_DEFAULT_WIDTH,
 } from "./InboxResizeHandle";
-
-function tabToFilter(tab: InboxFiltersValue["tab"]): Partial<ConversationsFilters> {
-  switch (tab) {
-    case "unassigned":
-      return { command: "waiting" };
-    case "mine":
-      return { assigned_to: "me", exclude_finished: true };
-    case "closed":
-      return { status: "closed" };
-    case "ai":
-      return { command: "automatic" };
-    case "all":
-    default:
-      return {};
-  }
-}
 
 const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "ai"];
 
@@ -130,7 +115,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
 
   const filters: ConversationsFilters = useMemo(
     () => ({
-      ...tabToFilter(filterValue.tab),
+      ...inboxTabToFilter(filterValue.tab),
       search: filterValue.search || undefined,
       channel_session_id: filterValue.channel_session_id,
       include_archived_connections: filterValue.includeArchivedConnections,

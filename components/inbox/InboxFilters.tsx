@@ -17,8 +17,9 @@ import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
+import type { InboxTab } from "@/lib/inbox/tab-filter";
 
-export type InboxTab = "unassigned" | "mine" | "all" | "closed" | "ai";
+export type { InboxTab } from "@/lib/inbox/tab-filter";
 
 const INBOX_TABS: { value: InboxTab; label: string }[] = [
   { value: "unassigned", label: "Fila" },

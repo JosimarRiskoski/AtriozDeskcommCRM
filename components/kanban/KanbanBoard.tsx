@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,6 +9,7 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAtRiskLeads } from "@/hooks/leads/useAtRiskLeads";
 import { useReactivations } from "@/hooks/leads/useReactivations";
 import { midpoint } from "@/lib/kanban/fractional-indexing";
+import { getKanbanHorizontalScrollMax } from "@/lib/kanban/horizontal-scroll";
 import { shouldRequestLostReason } from "@/lib/kanban/drop-policy";
 import type { Lead } from "@/lib/types/leads";
 import type { Pipeline, Stage } from "@/lib/kanban/types";
@@ -72,6 +73,39 @@ function BoardSkeleton() {
   );
 }
 
+function useKanbanHorizontalControl(stageCount: number) {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 0, max: 0 });
+
+  const measure = useCallback(() => {
+    const element = boardRef.current;
+    if (!element) return;
+    const max = getKanbanHorizontalScrollMax(element.scrollWidth, element.clientWidth);
+    const left = Math.min(Math.round(element.scrollLeft), max);
+    setPosition((current) => (current.left === left && current.max === max ? current : { left, max }));
+  }, []);
+
+  useEffect(() => {
+    const element = boardRef.current;
+    if (!element) return;
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    return () => observer.disconnect();
+  }, [measure, stageCount]);
+
+  const setLeft = useCallback((left: number) => {
+    const element = boardRef.current;
+    if (!element) return;
+    element.scrollLeft = left;
+    measure();
+  }, [measure]);
+
+  return [boardRef, position.left, position.max, measure, setLeft] as const;
+}
+
 export function KanbanBoard({
   pipelineId,
   stages: stagesProp,
@@ -122,6 +156,8 @@ export function KanbanBoard({
     const value = (pipelineProp ?? queryResult.data?.pipeline)?.settings?.value_label;
     return typeof value === "string" && value.trim() ? value : "Valor previsto";
   }, [pipelineProp, queryResult.data?.pipeline]);
+  const [boardRef, horizontalScrollLeft, horizontalScrollMax, measureHorizontalScroll, setHorizontalScrollLeft] =
+    useKanbanHorizontalControl((stagesProp ?? queryResult.data?.stages ?? []).length);
 
   // O dossiê é do BOARD e não da página: ele precisa do lead inteiro e do nome
   // do estágio, que só existem aqui depois do agrupamento.
@@ -248,34 +284,52 @@ export function KanbanBoard({
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div
-        className="h-full min-h-0 min-w-0 overflow-x-auto overflow-y-auto overscroll-x-contain pb-2"
-        data-kanban-board-scroll
-        role="region"
-        aria-label="Etapas do funil. Role horizontalmente para ver todas."
-        tabIndex={0}
-      >
-        <div className="flex min-h-full min-w-max items-start gap-3 pr-1">
-          {data.stages.map((stage, stageIndex) => (
-            <StageColumn
-              key={stage.id}
-              stage={stage}
-              leads={grouped.get(stage.id) ?? []}
-              pipelineId={pipelineId}
-              ownerNames={ownerNames}
-              coolingIds={coolingIds}
-              reactivations={reactivations}
-              pulses={pulsesProp ?? queryResult.pulses}
-              canonicalTags={canonicalTags}
-              valueLabel={valueLabel}
-              selectedLeadIds={selectedLeadIds}
-              onSelect={handleSelect}
-              onOpen={setDossieId}
-              stageIndex={stageIndex}
-              stageCount={data.stages.length}
-            />
-          ))}
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
+        <div
+          ref={boardRef}
+          className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          data-kanban-board-scroll
+          role="region"
+          aria-label="Etapas do funil. Role horizontalmente para ver todas."
+          tabIndex={0}
+          onScroll={measureHorizontalScroll}
+        >
+          <div className="flex min-h-full min-w-max items-start gap-3 pr-1">
+            {data.stages.map((stage, stageIndex) => (
+              <StageColumn
+                key={stage.id}
+                stage={stage}
+                leads={grouped.get(stage.id) ?? []}
+                pipelineId={pipelineId}
+                ownerNames={ownerNames}
+                coolingIds={coolingIds}
+                reactivations={reactivations}
+                pulses={pulsesProp ?? queryResult.pulses}
+                canonicalTags={canonicalTags}
+                valueLabel={valueLabel}
+                selectedLeadIds={selectedLeadIds}
+                onSelect={handleSelect}
+                onOpen={setDossieId}
+                stageIndex={stageIndex}
+                stageCount={data.stages.length}
+              />
+            ))}
+          </div>
         </div>
+        {horizontalScrollMax > 0 ? (
+          <div className="flex h-9 shrink-0 items-center border-t border-border bg-surface px-3">
+            <input
+              aria-label="Deslizar etapas horizontalmente"
+              data-kanban-horizontal-control
+              max={horizontalScrollMax}
+              min={0}
+              onChange={(event) => setHorizontalScrollLeft(Number(event.target.value))}
+              step={1}
+              type="range"
+              value={horizontalScrollLeft}
+            />
+          </div>
+        ) : null}
       </div>
       {leadDoDossie && (
         <LeadDossier
