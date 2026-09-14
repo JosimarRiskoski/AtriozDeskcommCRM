@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   mapInboundPayload,
+  mergeInboundSourceMetadata,
   normalizePhoneBR,
   verifyInboundSignature,
   isExternalAutomationActive,
@@ -83,6 +84,20 @@ describe("mapInboundPayload", () => {
       fbp: "fb.1.456.BROWSER-789",
     });
     expect(mapped.custom_fields).toEqual({});
+  });
+
+  it("atualiza a origem de um negócio reutilizado sem apagar a origem já registrada", () => {
+    expect(
+      mergeInboundSourceMetadata(
+        { webhook_source_id: "fonte-antiga", internal_note: "preservar" },
+        { utm_source: "instagram", fbc: "fb.1.123.click" },
+      ),
+    ).toEqual({
+      webhook_source_id: "fonte-antiga",
+      internal_note: "preservar",
+      utm_source: "instagram",
+      fbc: "fb.1.123.click",
+    });
   });
 });
 

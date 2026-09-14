@@ -41,6 +41,17 @@ export interface MappedLead {
   source_metadata: Record<string, string>;
 }
 
+/**
+ * Acrescenta a atribuicao recebida sem apagar dados de origem já conhecidos.
+ * Serve tanto para contatos quanto para oportunidades que o webhook reutiliza.
+ */
+export function mergeInboundSourceMetadata(
+  existing: Record<string, unknown> | null | undefined,
+  inbound: Record<string, unknown>,
+): Record<string, unknown> {
+  return { ...(existing ?? {}), ...inbound };
+}
+
 function firstMatch(
   payload: Record<string, unknown>,
   aliases: string[],

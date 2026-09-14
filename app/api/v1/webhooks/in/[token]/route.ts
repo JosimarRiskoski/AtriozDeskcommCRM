@@ -20,6 +20,7 @@ import type { CreateLeadInput } from "@/lib/schemas";
 import {
   isExternalAutomationActive,
   mapInboundPayload,
+  mergeInboundSourceMetadata,
   verifyInboundSignature,
   type FieldMap,
 } from "@/lib/webhooks/inbound";
@@ -425,7 +426,39 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("status", "open")
         .limit(1)
         .maybeSingle();
-      if (existingOpportunity) lead = existingOpportunity as Record<string, unknown>;
+      if (existingOpportunity) {
+        const existingLead = existingOpportunity as Record<string, unknown>;
+        const { error: metadataError } = await admin
+          .from("crm_leads")
+          .update({
+            source_metadata: mergeInboundSourceMetadata(
+              (existingLead.source_metadata as Record<string, unknown> | null) ?? {},
+              leadInput.source_metadata ?? {},
+            ),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingLead.id as string)
+          .eq("organization_id", source.organization_id);
+        if (metadataError) {
+          logger.error("[webhooks.inbound] existing opportunity metadata update failed", {
+            webhookSourceId: source.id,
+            organizationId: source.organization_id,
+            leadId: existingLead.id,
+            errorCode: metadataError.code,
+            errorMessage: metadataError.message,
+          });
+          return fail("internal_error", "Não foi possível atualizar a origem da oportunidade.", 500, {
+            requestId,
+          });
+        }
+        lead = {
+          ...existingLead,
+          source_metadata: mergeInboundSourceMetadata(
+            (existingLead.source_metadata as Record<string, unknown> | null) ?? {},
+            leadInput.source_metadata ?? {},
+          ),
+        };
+      }
     }
     if (!lead)
       try {
