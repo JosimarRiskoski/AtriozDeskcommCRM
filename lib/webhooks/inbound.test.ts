@@ -70,6 +70,20 @@ describe("mapInboundPayload", () => {
     });
     expect(mapped.custom_fields).toEqual({});
   });
+  it("preserva identificadores reais da Meta nos metadados de origem", () => {
+    const mapped = mapInboundPayload({
+      telefone: "11998765432",
+      fbclid: "CLICK-123",
+      fbc: "fb.1.123.CLICK-123",
+      fbp: "fb.1.456.BROWSER-789",
+    });
+    expect(mapped.source_metadata).toEqual({
+      fbclid: "CLICK-123",
+      fbc: "fb.1.123.CLICK-123",
+      fbp: "fb.1.456.BROWSER-789",
+    });
+    expect(mapped.custom_fields).toEqual({});
+  });
 });
 
 describe("verifyInboundSignature", () => {

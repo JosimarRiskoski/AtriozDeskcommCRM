@@ -28,6 +28,9 @@ const SOURCE_TRACKING_FIELDS = new Set([
   "adset_name",
   "form_id",
   "platform",
+  "fbclid",
+  "fbc",
+  "fbp",
 ]);
 
 export interface MappedLead {
