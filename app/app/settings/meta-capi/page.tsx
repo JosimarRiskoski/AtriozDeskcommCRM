@@ -1,4 +1,5 @@
 import { MetaCapiForm } from "./MetaCapiForm";
+import { MetaCapiRules } from "./MetaCapiRules";
 import { BackNavigation } from "@/components/shell/BackNavigation";
 export const dynamic = "force-dynamic";
 export default function MetaCapiPage() {
@@ -8,11 +9,12 @@ export default function MetaCapiPage() {
       <header>
         <h1 className="text-2xl font-semibold">Conversões da Meta</h1>
         <p className="text-sm text-muted-foreground">
-          Configure o marco comercial. O envio só acontece quando um usuário confirma manualmente na
-          oportunidade.
+          Configure a conexão e os marcos por etapa. Os marcos automáticos só entram na fila depois
+          que forem explicitamente ativados.
         </p>
       </header>
       <MetaCapiForm />
+      <MetaCapiRules />
     </div>
   );
 }

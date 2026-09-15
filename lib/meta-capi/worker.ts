@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { normalizedMetaUserData } from "./user-data";
+import { metaConversionHasDeliveryAuthorization } from "./manual";
 
 type Admin = SupabaseClient;
 export async function runMetaCapiTick(
@@ -31,7 +32,7 @@ export async function runMetaCapiTick(
     consent?: Record<string, unknown> | null;
     source_metadata?: Record<string, unknown> | null;
   } | null;
-  if (!event.requested_by_user_id || !event.requested_at) {
+  if (!metaConversionHasDeliveryAuthorization(event)) {
     await admin
       .from("meta_conversion_events")
       .update({

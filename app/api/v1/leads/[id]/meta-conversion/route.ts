@@ -171,7 +171,7 @@ export async function POST(
   }
 
   const now = new Date().toISOString();
-  const eventId = metaConversionEventId(lead.id);
+  const eventId = metaConversionEventId(lead.id, setting.event_name);
   const conversionLabel = setting.conversion_label || setting.event_name;
   const requestSummary = {
     opportunity_id: lead.id,
@@ -194,6 +194,7 @@ export async function POST(
       .update({
         event_name: setting.event_name,
         event_id: eventId,
+        event_origin: "manual",
         status: "pending",
         attempts: 0,
         next_attempt_at: now,
@@ -222,6 +223,7 @@ export async function POST(
         lead_id: lead.id,
         event_name: setting.event_name,
         event_id: eventId,
+        event_origin: "manual",
         status: "pending",
         requested_by_user_id: authz.user.id,
         requested_at: now,
