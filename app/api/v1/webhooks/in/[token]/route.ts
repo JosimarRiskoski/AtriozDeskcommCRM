@@ -428,15 +428,43 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .maybeSingle();
       if (existingOpportunity) {
         const existingLead = existingOpportunity as Record<string, unknown>;
+
+        // Verifica se há transição de estágio solicitada no payload (ex.: stage_name, etapa ou evento 'solicitou_contato')
+        let targetStageId: string | null = null;
+        const requestedStageName =
+          (payload.stage_name as string) ||
+          (payload.stage as string) ||
+          (payload.etapa as string) ||
+          (payload.target_stage as string) ||
+          (payload.evento === "solicitou_contato" ? "Receber Contato" : null);
+
+        if (requestedStageName && typeof requestedStageName === "string") {
+          const { data: matchedStage } = await admin
+            .from("crm_stages")
+            .select("id")
+            .eq("pipeline_id", source.default_pipeline_id)
+            .ilike("name", requestedStageName.trim())
+            .maybeSingle();
+          if (matchedStage?.id) {
+            targetStageId = matchedStage.id as string;
+          }
+        }
+
+        const updateData: Record<string, unknown> = {
+          source_metadata: mergeInboundSourceMetadata(
+            (existingLead.source_metadata as Record<string, unknown> | null) ?? {},
+            leadInput.source_metadata ?? {},
+          ),
+          updated_at: new Date().toISOString(),
+        };
+
+        if (targetStageId && targetStageId !== existingLead.stage_id) {
+          updateData.stage_id = targetStageId;
+        }
+
         const { error: metadataError } = await admin
           .from("crm_leads")
-          .update({
-            source_metadata: mergeInboundSourceMetadata(
-              (existingLead.source_metadata as Record<string, unknown> | null) ?? {},
-              leadInput.source_metadata ?? {},
-            ),
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq("id", existingLead.id as string)
           .eq("organization_id", source.organization_id);
         if (metadataError) {
