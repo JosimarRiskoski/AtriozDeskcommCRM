@@ -203,6 +203,7 @@ export type AuditAction =
   | "auth.signup_failed"
   | "auth.signup_confirmed"
   | "auth.signup_provision_failed"
+  | "auth.signup_provision_resumed"
   | "auth.email_link_rejected"
   | "auth.password_reset_requested"
   | "auth.password_reset_request_failed"
@@ -216,4 +217,5 @@ export type AuditAction =
   | "conversation.note_deleted"
   | "conversation.agent_selected"
   | "conversation.continued_on_connection"
-  | "ai.case_replied";
+  | "ai.case_replied"
+  | "pipeline.stage_leads_cleared";

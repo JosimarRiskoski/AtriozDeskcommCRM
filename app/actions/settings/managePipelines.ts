@@ -563,3 +563,82 @@ export async function archivePipeline(pipelineId: string): Promise<Result> {
   revalidatePath("/app/settings/tenant/pipelines");
   return { ok: true };
 }
+
+export async function clearPipelineStageLeads(
+  pipelineId: string,
+  stageId: string,
+  confirmedStageName: string,
+): Promise<Result<{ deletedCount: number }>> {
+  const auth = await requireAdmin();
+  if (!auth) return { ok: false, error: "Apenas administradores podem limpar esta coluna." };
+  const { user, org, supabase } = auth;
+
+  // 1. Obter a etapa para validar pertencimento e nome exato
+  const { data: stage, error: stageErr } = await supabase
+    .from("crm_stages")
+    .select("id, name, pipeline_id, organization_id")
+    .eq("id", stageId)
+    .eq("pipeline_id", pipelineId)
+    .eq("organization_id", org.orgId)
+    .maybeSingle();
+
+  if (stageErr || !stage) {
+    return { ok: false, error: "Etapa não encontrada neste funil." };
+  }
+
+  // 2. Validar digitação de confirmação (case-insensitive, trimmed)
+  const normalizedTyped = (confirmedStageName ?? "").trim().toLowerCase();
+  const normalizedStage = (stage.name ?? "").trim().toLowerCase();
+
+  if (normalizedTyped !== normalizedStage) {
+    return {
+      ok: false,
+      error: `Confirmação incorreta. Digite exatamente "${stage.name}" para confirmar a exclusão.`,
+    };
+  }
+
+  // 3. Contar quantos leads serão deletados
+  const { count } = await supabase
+    .from("crm_leads")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", org.orgId)
+    .eq("pipeline_id", pipelineId)
+    .eq("stage_id", stageId);
+
+  const leadsToDeleteCount = count ?? 0;
+  if (leadsToDeleteCount === 0) {
+    return { ok: true, data: { deletedCount: 0 } };
+  }
+
+  // 4. Excluir leads desta etapa
+  const { error: delErr } = await supabase
+    .from("crm_leads")
+    .delete()
+    .eq("organization_id", org.orgId)
+    .eq("pipeline_id", pipelineId)
+    .eq("stage_id", stageId);
+
+  if (delErr) {
+    return { ok: false, error: `Falha ao excluir os negócios: ${delErr.message}` };
+  }
+
+  // 5. Registrar no log de auditoria
+  await audit({
+    action: "pipeline.stage_leads_cleared",
+    actorUserId: user.id,
+    organizationId: org.orgId,
+    resourceType: "pipeline_stage",
+    resourceId: stageId,
+    metadata: {
+      pipeline_id: pipelineId,
+      stage_name: stage.name,
+      deleted_count: leadsToDeleteCount,
+    },
+  });
+
+  // 6. Revalidar caminhos
+  revalidatePath(`/app/pipelines/${pipelineId}`);
+  revalidatePath("/app/settings/tenant/pipelines");
+
+  return { ok: true, data: { deletedCount: leadsToDeleteCount } };
+}

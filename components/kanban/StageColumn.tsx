@@ -11,13 +11,14 @@ import {
 } from "@/app/actions/settings/managePipelines";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { CaretLeft, CaretRight, Trash } from "@/lib/ui/icons";
+import { Archive, CaretLeft, CaretRight, Trash } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
 import type { Stage } from "@/lib/kanban/types";
 import { buildCardInput } from "@/lib/kanban/card-state";
 import { getVisibleKanbanCards } from "@/lib/kanban/visible-cards";
 import { KanbanCard } from "./KanbanCard";
+import { ClearStageDialog } from "./ClearStageDialog";
 
 interface StageColumnProps {
   stage: Stage;
@@ -72,6 +73,7 @@ export function StageColumn({
 }: StageColumnProps) {
   const [cardsExpanded, setCardsExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(stage.name);
   const [stageColor, setStageColor] = useState(stage.color ?? "#3b82f6");
   const [savingName, startSavingName] = useTransition();
@@ -210,10 +212,33 @@ export function StageColumn({
             type="button"
             size="icon"
             variant="ghost"
+            className={cn(
+              "h-7 w-7",
+              leads.length > 0
+                ? "cursor-pointer text-text-muted hover:bg-destructive/10 hover:text-destructive"
+                : "cursor-not-allowed text-text-muted opacity-40",
+            )}
+            disabled={savingName || leads.length === 0}
+            title={
+              leads.length > 0
+                ? `Limpar todos os ${leads.length} negócio(s) desta coluna`
+                : "Nenhum negócio para limpar"
+            }
+            onClick={() => setClearDialogOpen(true)}
+            aria-label={`Limpar negócios da etapa ${stage.name}`}
+          >
+            <Trash size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
             className="h-7 w-7"
             disabled={savingName || leads.length > 0 || stageCount <= 1}
             title={
-              leads.length > 0 ? "Mova os negócios antes de arquivar esta etapa" : "Arquivar etapa"
+              leads.length > 0
+                ? "Mova ou limpe os negócios antes de arquivar esta etapa"
+                : "Arquivar etapa vazia"
             }
             onClick={() => {
               if (window.confirm(`Arquivar a etapa “${stage.name}”?`))
@@ -224,7 +249,7 @@ export function StageColumn({
             }}
             aria-label="Arquivar etapa"
           >
-            <Trash size={14} />
+            <Archive size={14} />
           </Button>
         </div>
       </div>
@@ -300,6 +325,17 @@ export function StageColumn({
           )}
         </Droppable>
       </div>
+
+      {clearDialogOpen && (
+        <ClearStageDialog
+          open={clearDialogOpen}
+          onOpenChange={setClearDialogOpen}
+          stageId={stage.id}
+          stageName={stage.name}
+          leadCount={leads.length}
+          pipelineId={pipelineId}
+        />
+      )}
     </section>
   );
 }
