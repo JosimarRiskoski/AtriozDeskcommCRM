@@ -13,7 +13,7 @@ export async function POST(): Promise<Response> {
   const admin = createAdminClient() as unknown as SupabaseClient;
   const { data: setting, error } = await admin
     .from("meta_capi_settings")
-    .select("dataset_id,graph_api_version,access_token_encrypted")
+    .select("dataset_id,graph_api_version,access_token_encrypted,test_event_code")
     .eq("organization_id", authz.org.orgId)
     .maybeSingle();
   if (error || !setting)
@@ -23,18 +23,38 @@ export async function POST(): Promise<Response> {
     return fail("credential_unavailable", "Nao foi possivel ler o token salvo.", 409, {
       requestId,
     });
+  if (!setting.test_event_code)
+    return fail(
+      "test_code_required",
+      "Informe e salve o código de evento de teste da Meta antes de validar.",
+      409,
+      { requestId },
+    );
 
   try {
     const response = await fetch(
-      `https://graph.facebook.com/${setting.graph_api_version}/${encodeURIComponent(setting.dataset_id)}?fields=id,name`,
-      { headers: { authorization: `Bearer ${token}` }, cache: "no-store" },
+      `https://graph.facebook.com/${setting.graph_api_version}/${encodeURIComponent(setting.dataset_id)}/events`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          test_event_code: setting.test_event_code,
+          data: [
+            {
+              event_name: "TestEvent",
+              event_time: Math.floor(Date.now() / 1000),
+              event_id: `crm-meta-validation:${randomUUID()}`,
+              action_source: "system_generated",
+            },
+          ],
+        }),
+      },
     );
     const payload = (await response.json().catch(() => ({}))) as {
-      id?: string;
-      name?: string;
+      events_received?: number;
       error?: { message?: string; code?: number };
     };
-    if (!response.ok || payload.error) {
+    if (!response.ok || payload.error || !payload.events_received) {
       const code = payload.error?.code ?? response.status;
       const message =
         code === 190 || response.status === 401
@@ -47,8 +67,9 @@ export async function POST(): Promise<Response> {
     return ok(
       {
         valid: true,
-        dataset_id: payload.id ?? setting.dataset_id,
-        dataset_name: payload.name ?? null,
+        dataset_id: setting.dataset_id,
+        dataset_name: null,
+        test_event_sent: true,
       },
       { requestId },
     );
