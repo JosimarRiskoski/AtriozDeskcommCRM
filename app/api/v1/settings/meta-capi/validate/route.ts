@@ -5,6 +5,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
+import { normalizedMetaUserData } from "@/lib/meta-capi/user-data";
 
 export async function POST(): Promise<Response> {
   const requestId = randomUUID();
@@ -45,6 +46,11 @@ export async function POST(): Promise<Response> {
               event_time: Math.floor(Date.now() / 1000),
               event_id: `crm-meta-validation:${randomUUID()}`,
               action_source: "system_generated",
+              user_data: normalizedMetaUserData(
+                undefined,
+                undefined,
+                `meta-validation:${setting.dataset_id}`,
+              ),
             },
           ],
         }),

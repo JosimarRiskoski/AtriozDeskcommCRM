@@ -73,7 +73,7 @@ describe("POST /api/v1/settings/meta-capi/validate", () => {
       event_name: "TestEvent",
       action_source: "system_generated",
     });
-    expect(payload.data[0]).not.toHaveProperty("user_data");
+    expect(payload.data[0]).toHaveProperty("user_data.external_id");
   });
 
   it("mostra o motivo seguro devolvido pela Meta quando o evento de teste é recusado", async () => {
