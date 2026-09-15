@@ -75,4 +75,34 @@ describe("POST /api/v1/settings/meta-capi/validate", () => {
     });
     expect(payload.data[0]).not.toHaveProperty("user_data");
   });
+
+  it("mostra o motivo seguro devolvido pela Meta quando o evento de teste é recusado", async () => {
+    mockAuthorizedAdmin();
+    vi.mocked(createAdminClient).mockReturnValue(
+      makeAdminStub({
+        dataset_id: "1063522036317010",
+        graph_api_version: "v25.0",
+        access_token_encrypted: "encrypted",
+        test_event_code: "TEST25273",
+      }) as never,
+    );
+    vi.mocked(decryptWebhookSecret).mockResolvedValue("token-test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { code: 100, message: "Parâmetro user_data é obrigatório." } }),
+          { status: 400 },
+        ),
+      ),
+    );
+
+    const { POST } = await import("./route");
+    const response = await POST();
+
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as { error: { message: string; details: unknown } };
+    expect(body.error.message).toContain("Parâmetro user_data é obrigatório.");
+    expect(body.error.details).toEqual({ meta_error_code: 100 });
+  });
 });

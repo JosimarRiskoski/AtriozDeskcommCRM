@@ -56,13 +56,19 @@ export async function POST(): Promise<Response> {
     };
     if (!response.ok || payload.error || !payload.events_received) {
       const code = payload.error?.code ?? response.status;
+      const metaMessage = payload.error?.message?.replace(/\s+/g, " ").trim().slice(0, 500);
       const message =
         code === 190 || response.status === 401
           ? "O token da Meta e invalido ou expirou."
           : response.status === 403
             ? "O token nao possui acesso a este Dataset."
-            : "A Meta nao confirmou este Dataset. Revise o ID e as permissoes do token.";
-      return fail("meta_validation_failed", message, 422, { requestId });
+            : metaMessage
+              ? `A Meta recusou o evento de teste: ${metaMessage}`
+              : "A Meta nao confirmou este Dataset. Revise o ID e as permissoes do token.";
+      return fail("meta_validation_failed", message, 422, {
+        requestId,
+        details: { meta_error_code: code },
+      });
     }
     return ok(
       {
