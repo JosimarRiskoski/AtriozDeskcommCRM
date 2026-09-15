@@ -26,6 +26,7 @@ import {
 } from "@/lib/webhooks/inbound";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { ApiError } from "@/lib/api/types";
+import { sendEmail } from "@/lib/email/resend";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -63,6 +64,138 @@ function findRawPhoneIfUnnormalized(
     }
   }
   return null;
+}
+
+async function notifyReceberContatoByEmail(params: {
+  leadTitle: string;
+  contactName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  payload: Record<string, unknown>;
+  leadId: string;
+  pipelineId: string;
+}) {
+  try {
+    const toEmail = process.env.LEAD_NOTIFICATION_EMAIL || "josimar.riskoski@gmail.com";
+
+    const rawPhone = String(
+      params.phone ||
+        params.payload.telefone ||
+        params.payload.phone ||
+        params.payload.whatsapp ||
+        "",
+    ).replace(/\D/g, "");
+
+    const waLink = rawPhone
+      ? `https://wa.me/${rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`}`
+      : null;
+
+    const areaTotal = String(
+      params.payload.area_total || params.payload.area || "Não informada",
+    );
+    const economia = String(
+      params.payload.economia_estimada || params.payload.economia || "Não calculada",
+    );
+    const honorarios = String(
+      params.payload.honorarios_estimados || "Sob consulta (30%)",
+    );
+    const economiaLiquida = String(
+      params.payload.economia_liquida || "Sob consulta (70%)",
+    );
+    const estado = String(params.payload.estado || params.payload.uf || "");
+    const destinacao = String(params.payload.destinacao || "Construção civil");
+    const nome = String(params.contactName || params.leadTitle || "Lead ObraFisco");
+    const emailContato = String(
+      params.email || params.payload.email || "Não informado",
+    );
+    const protocolo = String(
+      params.payload.protocolo || params.payload.meta_event_id || "",
+    );
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://crm.deskcomm.app";
+    const leadUrl = `${appUrl}/app/pipelines/${params.pipelineId}`;
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #0f172a; border-radius: 12px; color: #f8fafc;">
+        <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px; border-radius: 10px; border: 1px solid #334155; text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #38bdf8; margin: 0 0 6px 0; font-size: 20px; font-weight: 700;">🚨 Novo Lead: Quero Receber Contato!</h2>
+          <p style="color: #94a3b8; font-size: 13px; margin: 0;">O visitante concluiu a simulação da obra e solicitou contato da equipe.</p>
+        </div>
+
+        <div style="background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #334155; margin-bottom: 16px;">
+          <h3 style="color: #f1f5f9; margin: 0 0 14px 0; font-size: 15px; border-bottom: 1px solid #334155; padding-bottom: 8px;">
+            👤 Dados do Contato
+          </h3>
+          <p style="margin: 6px 0; font-size: 14px; color: #cbd5e1;"><strong>Nome:</strong> ${nome}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #cbd5e1;"><strong>WhatsApp / Telefone:</strong> ${params.phone || rawPhone || "Não informado"}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #cbd5e1;"><strong>E-mail:</strong> ${emailContato}</p>
+          ${estado ? `<p style="margin: 6px 0; font-size: 14px; color: #cbd5e1;"><strong>Estado (UF):</strong> ${estado}</p>` : ""}
+          ${protocolo ? `<p style="margin: 6px 0; font-size: 12px; color: #64748b;"><strong>Protocolo:</strong> ${protocolo}</p>` : ""}
+        </div>
+
+        <div style="background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #334155; margin-bottom: 24px;">
+          <h3 style="color: #f1f5f9; margin: 0 0 14px 0; font-size: 15px; border-bottom: 1px solid #334155; padding-bottom: 8px;">
+            🏗️ Resumo da Simulação (SERO / INSS)
+          </h3>
+          <p style="margin: 6px 0; font-size: 14px; color: #cbd5e1;"><strong>Destinação:</strong> ${destinacao}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #cbd5e1;"><strong>Área da Obra:</strong> ${areaTotal} m²</p>
+          <p style="margin: 8px 0; font-size: 15px; color: #4ade80;"><strong>Redução Estimada (Bruta):</strong> ${economia}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #38bdf8;"><strong>Honorários Previstos (30%):</strong> ${honorarios}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #94a3b8;"><strong>Economia Líquida do Cliente (70%):</strong> ${economiaLiquida}</p>
+        </div>
+
+        <div style="text-align: center; margin-bottom: 20px;">
+          ${
+            waLink
+              ? `<a href="${waLink}" style="background-color: #22c55e; color: #ffffff; text-decoration: none; padding: 12px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; margin-right: 10px;">Abrir no WhatsApp</a>`
+              : ""
+          }
+          <a href="${leadUrl}" style="background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block;">Ver no Kanban</a>
+        </div>
+
+        <div style="text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #1e293b; padding-top: 12px;">
+          Atrioz CRM • Notificação em tempo real de novos leads
+        </div>
+      </div>
+    `;
+
+    const text = `
+NOVO LEAD: QUERO RECEBER CONTATO!
+----------------------------------
+Nome: ${nome}
+WhatsApp: ${params.phone || rawPhone}
+E-mail: ${emailContato}
+Estado: ${estado}
+Protocolo: ${protocolo}
+
+DADOS DA OBRA:
+Destinação: ${destinacao}
+Área Total: ${areaTotal} m²
+Redução Estimada: ${economia}
+Honorários (30%): ${honorarios}
+Economia Líquida (70%): ${economiaLiquida}
+
+${waLink ? `WhatsApp direto: ${waLink}\n` : ""}Abrir no CRM: ${leadUrl}
+    `.trim();
+
+    await sendEmail({
+      to: toEmail,
+      subject: `🚨 Novo Lead [Receber Contato]: ${nome} (${areaTotal} m² - ${economia})`,
+      html,
+      text,
+      tags: [{ name: "lead_alert", value: "receber_contato" }],
+    });
+
+    logger.info("[webhooks.inbound] Email de alerta de lead enviado com sucesso via Resend", {
+      to: toEmail,
+      leadId: params.leadId,
+    });
+  } catch (emailErr) {
+    logger.warn("[webhooks.inbound] Falha ao enviar email de alerta via Resend", {
+      error: emailErr instanceof Error ? emailErr.message : String(emailErr),
+      leadId: params.leadId,
+    });
+  }
 }
 
 export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
@@ -416,6 +549,31 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
   let lead: Record<string, unknown> | null = null;
   if (source.create_opportunity) {
+    // Verifica se há transição de estágio solicitada no payload (ex.: stage_name, etapa ou evento 'solicitou_contato')
+    let targetStageId: string | null = null;
+    const requestedStageName =
+      (payload.stage_name as string) ||
+      (payload.stage as string) ||
+      (payload.etapa as string) ||
+      (payload.target_stage as string) ||
+      (payload.evento === "solicitou_contato" ? "Receber Contato" : null);
+
+    if (requestedStageName && typeof requestedStageName === "string") {
+      const { data: matchedStage } = await admin
+        .from("crm_stages")
+        .select("id")
+        .eq("pipeline_id", source.default_pipeline_id)
+        .ilike("name", requestedStageName.trim())
+        .maybeSingle();
+      if (matchedStage?.id) {
+        targetStageId = matchedStage.id as string;
+      }
+    }
+
+    const isReceberContato =
+      Boolean(requestedStageName && requestedStageName.toLowerCase().includes("receber contato")) ||
+      payload.evento === "solicitou_contato";
+
     if (contactId) {
       const { data: existingOpportunity } = await admin
         .from("crm_leads")
@@ -429,27 +587,6 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       if (existingOpportunity) {
         const existingLead = existingOpportunity as Record<string, unknown>;
 
-        // Verifica se há transição de estágio solicitada no payload (ex.: stage_name, etapa ou evento 'solicitou_contato')
-        let targetStageId: string | null = null;
-        const requestedStageName =
-          (payload.stage_name as string) ||
-          (payload.stage as string) ||
-          (payload.etapa as string) ||
-          (payload.target_stage as string) ||
-          (payload.evento === "solicitou_contato" ? "Receber Contato" : null);
-
-        if (requestedStageName && typeof requestedStageName === "string") {
-          const { data: matchedStage } = await admin
-            .from("crm_stages")
-            .select("id")
-            .eq("pipeline_id", source.default_pipeline_id)
-            .ilike("name", requestedStageName.trim())
-            .maybeSingle();
-          if (matchedStage?.id) {
-            targetStageId = matchedStage.id as string;
-          }
-        }
-
         const updateData: Record<string, unknown> = {
           source_metadata: mergeInboundSourceMetadata(
             (existingLead.source_metadata as Record<string, unknown> | null) ?? {},
@@ -460,6 +597,23 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
         if (targetStageId && targetStageId !== existingLead.stage_id) {
           updateData.stage_id = targetStageId;
+        }
+
+        const alreadyNotified = Boolean(
+          (existingLead.source_metadata as Record<string, unknown> | null)?.notificacao_email_enviada,
+        );
+
+        if (isReceberContato && !alreadyNotified) {
+          (updateData.source_metadata as Record<string, unknown>).notificacao_email_enviada = true;
+          void notifyReceberContatoByEmail({
+            leadTitle: (existingLead.title as string) || mapped.name || "Lead ObraFisco",
+            contactName: mapped.name,
+            phone: mapped.phone,
+            email: mapped.email,
+            payload,
+            leadId: existingLead.id as string,
+            pipelineId: source.default_pipeline_id,
+          });
         }
 
         const { error: metadataError } = await admin
@@ -488,7 +642,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         };
       }
     }
-    if (!lead)
+    if (!lead) {
+      if (targetStageId) {
+        leadInput.stage_id = targetStageId;
+      }
       try {
         lead = await createLeadHandler(
           admin,
@@ -499,6 +656,18 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           },
           leadInput,
         );
+
+        if (lead && isReceberContato) {
+          void notifyReceberContatoByEmail({
+            leadTitle: leadInput.title,
+            contactName: mapped.name,
+            phone: mapped.phone,
+            email: mapped.email,
+            payload,
+            leadId: (lead as Record<string, unknown>).id as string,
+            pipelineId: source.default_pipeline_id,
+          });
+        }
       } catch (err) {
         if (err instanceof ApiError) {
           // Corrida do retry: dois POSTs simultâneos com o mesmo external_id
@@ -512,6 +681,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         }
         throw err;
       }
+    }
   }
 
   if (contactId && source.automation_enabled && source.pilot_approved_at) {
