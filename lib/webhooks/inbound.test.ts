@@ -5,6 +5,8 @@ import {
   normalizePhoneBR,
   verifyInboundSignature,
   isExternalAutomationActive,
+  mergeMetaCapiConsent,
+  readMetaCapiConsent,
 } from "@/lib/webhooks/inbound";
 import { createHmac } from "node:crypto";
 
@@ -77,11 +79,13 @@ describe("mapInboundPayload", () => {
       fbclid: "CLICK-123",
       fbc: "fb.1.123.CLICK-123",
       fbp: "fb.1.456.BROWSER-789",
+      pagina_origem: "https://obrafisco.com.br/?utm_source=instagram",
     });
     expect(mapped.source_metadata).toEqual({
       fbclid: "CLICK-123",
       fbc: "fb.1.123.CLICK-123",
       fbp: "fb.1.456.BROWSER-789",
+      pagina_origem: "https://obrafisco.com.br/?utm_source=instagram",
     });
     expect(mapped.custom_fields).toEqual({});
   });
@@ -111,6 +115,36 @@ describe("verifyInboundSignature", () => {
   it("header ausente", () => expect(verifyInboundSignature(body, null, secret)).toBe(false));
   it("header com tamanho diferente não lança (timingSafeEqual exige mesmo length)", () =>
     expect(verifyInboundSignature(body, "abc", secret)).toBe(false));
+});
+
+describe("readMetaCapiConsent", () => {
+  it("aceita somente consentimento explícito e preserva versão/data", () => {
+    expect(
+      readMetaCapiConsent({
+        meta_capi_consent: "true",
+        meta_capi_consent_at: "2026-09-16T12:00:00.000Z",
+        meta_capi_consent_version: "obrafisco-form-v1",
+      }),
+    ).toEqual({
+      meta_capi: true,
+      meta_capi_consent_at: "2026-09-16T12:00:00.000Z",
+      meta_capi_consent_version: "obrafisco-form-v1",
+    });
+  });
+
+  it("não infere consentimento quando o campo está ausente ou negado", () => {
+    expect(readMetaCapiConsent({})).toBeNull();
+    expect(readMetaCapiConsent({ meta_capi_consent: "false" })).toBeNull();
+  });
+
+  it("preserva dados de consentimento já existentes sem entrada nova", () => {
+    expect(
+      mergeMetaCapiConsent(
+        { email: true, meta_capi: true, meta_capi_consent_version: "anterior" },
+        null,
+      ),
+    ).toEqual({ email: true, meta_capi: true, meta_capi_consent_version: "anterior" });
+  });
 });
 
 describe("isExternalAutomationActive", () => {

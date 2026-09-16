@@ -20,7 +20,9 @@ import type { CreateLeadInput } from "@/lib/schemas";
 import {
   isExternalAutomationActive,
   mapInboundPayload,
+  mergeMetaCapiConsent,
   mergeInboundSourceMetadata,
+  readMetaCapiConsent,
   verifyInboundSignature,
   type FieldMap,
 } from "@/lib/webhooks/inbound";
@@ -361,10 +363,25 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   }
 
   const fieldMap = (source.field_map ?? {}) as FieldMap;
-  // external_id não é dado do lead — sai do payload antes do mapeamento pra
-  // não virar custom_field (o log de recebimento acima preserva o original).
-  const { external_id: _reservedExternalId, ...payloadForMapping } = payload;
-  const mapped = mapInboundPayload(externalId ? payloadForMapping : payload, fieldMap);
+  // Campos reservados não viram custom fields. O protocolo do site é salvo
+  // como metadado de origem para preservar o mesmo identificador do Pixel.
+  const {
+    external_id: _reservedExternalId,
+    meta_event_id: rawMetaEventId,
+    event_id: rawEventId,
+    protocolo: rawProtocol,
+    meta_capi_consent: _metaCapiConsent,
+    meta_capi_consent_at: _metaCapiConsentAt,
+    meta_capi_consent_version: _metaCapiConsentVersion,
+    ...payloadForMapping
+  } = payload;
+  const mapped = mapInboundPayload(payloadForMapping, fieldMap);
+  const metaEventId = [rawMetaEventId, rawEventId, rawProtocol, externalId].find(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  if (metaEventId) mapped.source_metadata.meta_event_id = metaEventId.trim().slice(0, 255);
+  if (externalId) mapped.source_metadata.external_id = externalId;
+  const metaCapiConsent = readMetaCapiConsent(payload);
   if (!mapped.phone) {
     const rawPhone = findRawPhoneIfUnnormalized(payload, fieldMap);
     if (rawPhone) mapped.source_metadata.raw_phone = rawPhone;
@@ -383,7 +400,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     const selectActiveByPhone = () =>
       admin
         .from("contacts")
-        .select("id,name,email,source_metadata")
+        .select("id,name,email,consent,source_metadata")
         .eq("organization_id", source.organization_id)
         .eq("phone_number", mapped.phone)
         .is("is_merged_into", null)
@@ -402,7 +419,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       identity.kind === "found"
         ? await admin
             .from("contacts")
-            .select("id,name,email,source_metadata")
+            .select("id,name,email,consent,source_metadata")
             .eq("organization_id", source.organization_id)
             .eq("id", identity.contactId)
             .single()
@@ -416,6 +433,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
             ? { name: mapped.name, display_name: mapped.name }
             : {}),
           ...(mapped.email && !existing.email ? { email: mapped.email } : {}),
+          ...(metaCapiConsent
+            ? {
+                consent: mergeMetaCapiConsent(
+                  (existing.consent as Record<string, unknown> | null) ?? null,
+                  metaCapiConsent,
+                ),
+              }
+            : {}),
           source: sourceCode,
           source_metadata: {
             ...((existing.source_metadata as Record<string, unknown> | null) ?? {}),
@@ -438,6 +463,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           display_name: mapped.name ?? mapped.phone,
           phone_number: mapped.phone,
           email: mapped.email,
+          ...(metaCapiConsent ? { consent: metaCapiConsent } : {}),
           source: sourceCode,
           source_metadata: {
             webhook_source_id: source.id,
@@ -474,7 +500,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   if (!contactId && mapped.email) {
     const { data: existingByEmail } = await admin
       .from("contacts")
-      .select("id,name,source_metadata")
+      .select("id,name,consent,source_metadata")
       .eq("organization_id", source.organization_id)
       .eq("email", mapped.email)
       .is("is_merged_into", null)
@@ -486,6 +512,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .update({
           ...(mapped.name && !existingByEmail.name
             ? { name: mapped.name, display_name: mapped.name }
+            : {}),
+          ...(metaCapiConsent
+            ? {
+                consent: mergeMetaCapiConsent(
+                  (existingByEmail.consent as Record<string, unknown> | null) ?? null,
+                  metaCapiConsent,
+                ),
+              }
             : {}),
           source: sourceCode,
           source_metadata: {
@@ -508,6 +542,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           name: mapped.name ?? mapped.email,
           display_name: mapped.name ?? mapped.email,
           email: mapped.email,
+          ...(metaCapiConsent ? { consent: metaCapiConsent } : {}),
           source: sourceCode,
           source_metadata: {
             webhook_source_id: source.id,

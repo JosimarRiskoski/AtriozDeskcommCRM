@@ -31,6 +31,8 @@ const SOURCE_TRACKING_FIELDS = new Set([
   "fbclid",
   "fbc",
   "fbp",
+  "pagina_origem",
+  "landing_page",
 ]);
 
 export interface MappedLead {
@@ -39,6 +41,45 @@ export interface MappedLead {
   email: string | null;
   custom_fields: Record<string, string>;
   source_metadata: Record<string, string>;
+}
+
+export type MetaCapiConsent = {
+  meta_capi: true;
+  meta_capi_consent_at: string;
+  meta_capi_consent_version: string | null;
+};
+
+/**
+ * Consentimento de CAPI só é registrado quando o integrador o declara
+ * explicitamente como verdadeiro. Ausência ou valor inválido nunca viram
+ * consentimento por inferência.
+ */
+export function readMetaCapiConsent(payload: Record<string, unknown>): MetaCapiConsent | null {
+  const value = payload.meta_capi_consent;
+  if (value !== true && value !== "true" && value !== "1" && value !== 1) return null;
+
+  const declaredAt =
+    typeof payload.meta_capi_consent_at === "string"
+      ? new Date(payload.meta_capi_consent_at)
+      : null;
+  const meta_capi_consent_at =
+    declaredAt && !Number.isNaN(declaredAt.getTime())
+      ? declaredAt.toISOString()
+      : new Date().toISOString();
+  const version =
+    typeof payload.meta_capi_consent_version === "string"
+      ? payload.meta_capi_consent_version.trim().slice(0, 100) || null
+      : null;
+
+  return { meta_capi: true, meta_capi_consent_at, meta_capi_consent_version: version };
+}
+
+export function mergeMetaCapiConsent(
+  existing: Record<string, unknown> | null | undefined,
+  inbound: MetaCapiConsent | null,
+): Record<string, unknown> {
+  if (!inbound) return { ...(existing ?? {}) };
+  return { ...(existing ?? {}), ...inbound };
 }
 
 /**
