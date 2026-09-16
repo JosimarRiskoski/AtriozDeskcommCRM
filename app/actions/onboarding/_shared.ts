@@ -4,7 +4,7 @@
  * UPDATEs scoped explicitly by `organization_id` resolved from the validated
  * session — no body-derived ids ever).
  */
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { OnboardingState } from "@/lib/schemas/onboarding";
 
@@ -33,10 +33,19 @@ export interface OnboardingCtx {
 }
 
 export async function requireOnboardingCtx(): Promise<OnboardingCtx> {
-  const user = await loadAuthUser();
-  if (!user) throw new OnboardingError("auth_required", "Auth required.");
-  const activeOrg = await resolveActiveOrg(user);
-  if (!activeOrg) throw new OnboardingError("no_active_org", "Sem organização ativa.");
+  // These actions write with service role: membership alone is insufficient.
+  // Reuse the canonical gate, including its fresh role/revocation check.
+  const authorization = await requireRole("admin", { resource: "onboarding" });
+  if (!authorization.ok) {
+    if (authorization.response.status === 401) {
+      throw new OnboardingError("auth_required", "Autenticação necessária.");
+    }
+    if (authorization.response.status >= 500) {
+      throw new OnboardingError("db_error", "Não foi possível validar sua permissão. Tente novamente.");
+    }
+    throw new OnboardingError("forbidden", "Somente administradores podem configurar a empresa.");
+  }
+  const { user, org: activeOrg } = authorization;
   return {
     userId: user.id,
     orgId: activeOrg.orgId,

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signInWithPassword } from "@/app/actions/auth/signInWithPassword";
+import { safeNextPath } from "@/lib/auth/next-path";
 
 export function LoginForm({ next }: { next?: string }) {
   const router = useRouter();
@@ -33,18 +34,20 @@ export function LoginForm({ next }: { next?: string }) {
       const res = await signInWithPassword(values, next);
       if (!res) {
         // Should be unreachable (redirect throws), but guard anyway.
-        router.replace(next || "/app/inbox");
+        router.replace(safeNextPath(next));
         return;
       }
       if (res.error === "mfa_required") {
         const params = new URLSearchParams();
-        if (next) params.set("next", next);
+        if (next) params.set("next", safeNextPath(next));
         if (res.challengeId) params.set("factor", res.challengeId);
         router.replace(`/login/mfa${params.toString() ? `?${params}` : ""}`);
         return;
       }
       if (res.error === "invalid_credentials") {
         setServerError("Email ou senha incorretos.");
+      } else if (res.error === "service_unavailable") {
+        setServerError("O serviço de autenticação está temporariamente indisponível. Tente novamente em instantes.");
       } else if (res.error === "rate_limited") {
         setServerError("Muitas tentativas. Aguarde alguns minutos.");
       } else if (res.error === "validation_error") {

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
 import { cookieSecure } from "@/lib/supabase/cookie-secure";
+import { safeNextPath } from "@/lib/auth/next-path";
 
 export type VerifyMfaResult =
   | { ok: false; error: "mfa_invalid" }
@@ -106,5 +107,5 @@ export async function verifyMfa(code: string, next?: string): Promise<VerifyMfaR
     userAgent,
   });
 
-  redirect(next || "/app/inbox");
+  redirect(safeNextPath(next));
 }

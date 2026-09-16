@@ -141,9 +141,10 @@ export async function sendMessageHandler(
   const { data: conv, error: convErr } = await supabase
     .from("conversations")
     .select(
-      "id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, contacts:contact_id(phone_number, wa_identity, source_metadata, is_blocked), channel_sessions:channel_session_id(provider, external_session_name, status)",
+      "id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, contacts:contact_id(organization_id, phone_number, wa_identity, source_metadata, is_blocked), channel_sessions:channel_session_id(organization_id, provider, external_session_name, status)",
     )
     .eq("id", input.conversation_id)
+    .eq("organization_id", ctx.organization_id)
     .maybeSingle();
 
   if (convErr) {
@@ -161,18 +162,30 @@ export async function sendMessageHandler(
     is_group: boolean;
     group_chat_id: string | null;
     contacts: {
+      organization_id: string;
       phone_number: string | null;
       wa_identity: string | null;
       source_metadata: Record<string, unknown> | null;
       is_blocked: boolean;
     } | null;
     channel_sessions: {
+      organization_id: string;
       provider: "evolution";
       external_session_name: string | null;
       status: string;
     } | null;
   };
   const c = conv as unknown as Joined;
+
+  // RLS may permit several memberships; the action is authorized for only
+  // ctx.organization_id. Also reject inconsistent references under admin clients.
+  if (
+    c.organization_id !== ctx.organization_id ||
+    c.contacts?.organization_id !== ctx.organization_id ||
+    c.channel_sessions?.organization_id !== ctx.organization_id
+  ) {
+    throw new ApiError(404, "not_found", undefined, ctx.requestId, "Conversa não encontrada.");
+  }
 
   if (c.contacts?.is_blocked) {
     throw new ApiError(

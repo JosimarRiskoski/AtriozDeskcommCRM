@@ -1,7 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
-
 import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
@@ -18,13 +16,16 @@ export async function signUpFromInvite(input: {
   if (input.password !== input.passwordConfirm)
     return { ok: false as const, error: "As senhas não coincidem." };
 
-  const origin = (await headers()).get("origin") ?? env.NEXT_PUBLIC_APP_URL;
   const supabase = await createClient();
   const { error } = await supabase.auth.signUp({
     email: invite.email,
     password: input.password,
     options: {
-      emailRedirectTo: `${origin}/auth/confirm?invite=${encodeURIComponent(input.token)}`,
+      // Convites também precisam voltar sempre ao host público configurado.
+      emailRedirectTo: new URL(
+        `/auth/confirm?invite=${encodeURIComponent(input.token)}`,
+        env.NEXT_PUBLIC_APP_URL,
+      ).toString(),
       data: { invited: true },
     },
   });

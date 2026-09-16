@@ -71,21 +71,24 @@ export async function dispatchEvent(row: EventRow): Promise<HandlerResult[]> {
   );
   if (!matches.length) return [];
 
-  const results: HandlerResult[] = [];
-  for (const handler of matches) {
-    try {
-      const r = await handler.handle(row);
-      results.push(r);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      logger.error("[event-log.dispatcher] handler threw", {
-        handler: handler.key,
-        event: row.event_type,
-        event_id: row.id,
-        error: detail,
-      });
-      results.push({ consumer_key: handler.key, status: "error", detail });
-    }
-  }
-  return results;
+  // Consumidores de um mesmo evento não têm dependência de ordem. Rodá-los em
+  // paralelo impede que mídia, IA ou uma integração lenta atrase os demais.
+  // A ordem do array continua estável (a ordem de registro), pois Promise.all
+  // preserva a posição de cada promessa no resultado.
+  return Promise.all(
+    matches.map(async (handler) => {
+      try {
+        return await handler.handle(row);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        logger.error("[event-log.dispatcher] handler threw", {
+          handler: handler.key,
+          event: row.event_type,
+          event_id: row.id,
+          error: detail,
+        });
+        return { consumer_key: handler.key, status: "error" as const, detail };
+      }
+    }),
+  );
 }

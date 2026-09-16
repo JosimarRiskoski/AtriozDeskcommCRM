@@ -17,6 +17,7 @@ import type { AuthUser, Role } from "@/lib/auth/types";
 vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: vi.fn(),
   resolveActiveOrg: vi.fn(),
+  requiresMfa: (role: Role | undefined, platformAdmin: boolean) => role === "admin" || platformAdmin,
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
@@ -53,6 +54,7 @@ function session(role: Role | null, opts: { dbRole?: string | null; platformAdmi
         ? { data: dbRole, error: null }
         : { data: null, error: null },
     ),
+    auth: { mfa: { getAuthenticatorAssuranceLevel: vi.fn(async () => ({ data: { currentLevel: "aal2" }, error: null })) } },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 }
@@ -122,6 +124,20 @@ describe("requireRole — helper único (spec 13 §4)", () => {
     expect(audit).toHaveBeenCalledTimes(1);
   });
 
+  it("exige AAL2 para admin, inclusive em chamada direta de API", async () => {
+    session("admin");
+    vi.mocked(createClient).mockResolvedValue({
+      rpc: vi.fn(async () => ({ data: "admin", error: null })),
+      auth: { mfa: { getAuthenticatorAssuranceLevel: vi.fn(async () => ({ data: { currentLevel: "aal1" }, error: null })) } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const res = await requireRole("admin");
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error("unreachable");
+    expect(res.response.status).toBe(403);
+    expect((await res.response.json()).error.code).toBe("mfa_required");
+  });
+
   // Override de org (ex.: LGPD anonymize — role resolvido na org do CONTATO,
   // não na org ativa do cookie).
   describe("opts.organizationId (org do recurso)", () => {
@@ -149,6 +165,7 @@ describe("requireRole — helper único (spec 13 §4)", () => {
             ? { data: args.p_org === ORG_ID ? roleInActive : roleInOther, error: null }
             : { data: null, error: null },
         ),
+        auth: { mfa: { getAuthenticatorAssuranceLevel: vi.fn(async () => ({ data: { currentLevel: "aal2" }, error: null })) } },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
     }

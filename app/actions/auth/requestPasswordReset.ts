@@ -33,14 +33,14 @@ export async function requestPasswordReset(
   }
 
   const hdrs = await headers();
-  const origin = hdrs.get("origin") ?? env.NEXT_PUBLIC_APP_URL;
   const requestId = hdrs.get("x-request-id");
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const userAgent = hdrs.get("user-agent") ?? null;
 
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${origin}/auth/confirm`,
+    // A recuperação de senha não pode confiar no host enviado pelo cliente.
+    redirectTo: new URL("/auth/confirm", env.NEXT_PUBLIC_APP_URL).toString(),
   });
 
   if (error) {

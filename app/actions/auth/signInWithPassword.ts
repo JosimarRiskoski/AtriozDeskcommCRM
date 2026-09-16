@@ -6,25 +6,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { loginSchema, type LoginInput } from "@/lib/auth/schemas";
 import { audit, hashEmail } from "@/lib/audit";
+import { safeNextPath } from "@/lib/auth/next-path";
+import { classifyLoginError } from "@/lib/auth/login-error";
+import { ensureTenantForUser } from "@/lib/auth/provision";
 
 export type SignInResult = {
   ok: false;
-  error: "invalid_credentials" | "rate_limited" | "validation_error" | "mfa_required";
+  error: "invalid_credentials" | "rate_limited" | "validation_error" | "mfa_required" | "service_unavailable";
   details?: Record<string, unknown>;
   challengeId?: string;
 };
-
-function safeNextPath(next?: string): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/app/inbox";
-  try {
-    const parsed = new URL(next, "https://atrioz.invalid");
-    return parsed.origin === "https://atrioz.invalid"
-      ? `${parsed.pathname}${parsed.search}`
-      : "/app/inbox";
-  } catch {
-    return "/app/inbox";
-  }
-}
 
 /**
  * Sign in with password.
@@ -68,15 +59,53 @@ export async function signInWithPassword(input: LoginInput, next?: string): Prom
       ip,
       userAgent,
     });
-    return { ok: false, error: "invalid_credentials" };
+    return { ok: false, error: classifyLoginError(error) };
   }
 
   // MFA gating — if the user has any verified TOTP factor enrolled, they must
   // complete the challenge in /login/mfa before reaching the app.
-  const { data: factorsData } = await supabase.auth.mfa.listFactors();
+  const { data: factorsData, error: factorsError } = await supabase.auth.mfa.listFactors();
+  if (factorsError || !factorsData) {
+    return { ok: false, error: "service_unavailable" };
+  }
   const verifiedTotp = factorsData?.totp?.find((f) => f.status === "verified");
   if (verifiedTotp) {
     return { ok: false, error: "mfa_required", challengeId: verifiedTotp.id };
+  }
+
+  // A confirmação pode ter criado a sessão e falhado antes de gravar a
+  // membership. Retomamos somente o cadastro comum identificado por org_name;
+  // contas de convite nunca criam empresa por este caminho.
+  if (data.user.user_metadata?.invited !== true && typeof data.user.user_metadata?.org_name === "string") {
+    let resumedProvisioning = false;
+    let provisionedOrganizationId: string | undefined;
+    try {
+      const provision = await ensureTenantForUser(data.user);
+      resumedProvisioning = provision.provisioned;
+      provisionedOrganizationId = provision.organizationId;
+    } catch (provisionError) {
+      await audit({
+        action: "auth.signup_provision_failed",
+        actorUserId: data.user.id,
+        metadata: { reason: provisionError instanceof Error ? provisionError.message : String(provisionError) },
+        requestId,
+        ip,
+        userAgent,
+      });
+      return { ok: false, error: "service_unavailable" };
+    }
+    if (resumedProvisioning) {
+      void audit({
+        action: "auth.signup_provision_resumed",
+        actorUserId: data.user.id,
+        organizationId: provisionedOrganizationId ?? null,
+        metadata: {},
+        requestId,
+        ip,
+        userAgent,
+      });
+      redirect("/onboarding/welcome");
+    }
   }
 
   // Auditoria e importante, mas nao pode atrasar a entrega do cookie de sessao

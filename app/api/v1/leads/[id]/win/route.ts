@@ -31,6 +31,7 @@ export async function POST(
     .from("crm_leads")
     .select("*")
     .eq("id", leadId)
+    .eq("organization_id", authz.org.orgId)
     .maybeSingle();
 
   if (selErr) return fail("internal_error", selErr.message, 500, { requestId });
@@ -45,6 +46,7 @@ export async function POST(
     .from("crm_stages")
     .select("id")
     .eq("pipeline_id", lead.pipeline_id)
+    .eq("organization_id", authz.org.orgId)
     .eq("is_won", true)
     .limit(1)
     .maybeSingle();
@@ -66,7 +68,8 @@ export async function POST(
       stage_id: wonStage.id,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", leadId);
+    .eq("id", leadId)
+    .eq("organization_id", authz.org.orgId);
 
   if (updErr) return fail("internal_error", updErr.message, 500, { requestId });
 
@@ -74,6 +77,7 @@ export async function POST(
     .from("crm_leads")
     .select("*")
     .eq("id", leadId)
+    .eq("organization_id", authz.org.orgId)
     .maybeSingle();
 
   const finalLead = fresh ?? lead;

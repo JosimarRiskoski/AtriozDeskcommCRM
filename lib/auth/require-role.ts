@@ -20,7 +20,7 @@ import type { NextResponse } from "next/server";
 
 import { fail, type ApiError } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { loadAuthUser, requiresMfa, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK, type ActiveOrg, type AuthUser, type Role } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -108,6 +108,21 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
         requestId,
       }),
     };
+  }
+
+  // O gate visual impede navegação comum, mas não protege uma chamada direta
+  // de API. Para papéis que exigem MFA, a rota só segue com sessão AAL2.
+  if (requiresMfa(effectiveRole as Role, user.is_platform_admin)) {
+    const { data: assurance, error: assuranceError } =
+      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assuranceError || assurance?.currentLevel !== "aal2") {
+      return {
+        ok: false,
+        response: fail("mfa_required", "Autenticação em duas etapas necessária.", 403, {
+          requestId,
+        }),
+      };
+    }
   }
 
   return { ok: true, user, org: { ...org, role: effectiveRole as Role } };

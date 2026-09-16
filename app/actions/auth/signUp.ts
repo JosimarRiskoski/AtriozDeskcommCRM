@@ -35,7 +35,6 @@ export async function signUp(input: SignupInput): Promise<SignUpResult> {
   }
 
   const hdrs = await headers();
-  const origin = hdrs.get("origin") ?? env.NEXT_PUBLIC_APP_URL;
   const requestId = hdrs.get("x-request-id");
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const userAgent = hdrs.get("user-agent") ?? null;
@@ -45,7 +44,9 @@ export async function signUp(input: SignupInput): Promise<SignUpResult> {
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
-      emailRedirectTo: `${origin}/auth/confirm`,
+      // O retorno de confirmação é um limite de segurança do produto. Não use
+      // o header Origin da requisição, pois ele pode apontar para outro host.
+      emailRedirectTo: new URL("/auth/confirm", env.NEXT_PUBLIC_APP_URL).toString(),
       data: { org_name: parsed.data.org_name },
     },
   });

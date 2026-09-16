@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
-import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { isMfaEnrolled, requireAuth, requiresMfa, resolveActiveOrg } from "@/lib/auth/server";
 import { loadOnboardingState } from "@/app/actions/onboarding/_shared";
 import { Stepper } from "./_components/Stepper";
 import { SkipToEnd } from "./_components/SkipToEnd";
 import { branding } from "@/lib/branding";
+import { MfaEnrollGate } from "@/components/auth/MfaEnrollGate";
 
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const user = await requireAuth();
@@ -20,8 +21,10 @@ export default async function OnboardingLayout({ children }: { children: React.R
   const stepKey = currentStepFromPath(pathname);
 
   const isDev = process.env.NODE_ENV !== "production";
+  const enrolled = await isMfaEnrolled();
+  const needsMfaGate = requiresMfa(activeOrg.role, user.is_platform_admin);
 
-  return (
+  const onboarding = (
     <div className="flex min-h-screen flex-col bg-muted/40">
       <header className="border-b bg-background">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-4">
@@ -38,6 +41,8 @@ export default async function OnboardingLayout({ children }: { children: React.R
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">{children}</main>
     </div>
   );
+
+  return needsMfaGate ? <MfaEnrollGate enrolled={enrolled}>{onboarding}</MfaEnrollGate> : onboarding;
 }
 
 function currentStepFromPath(pathname: string): string {

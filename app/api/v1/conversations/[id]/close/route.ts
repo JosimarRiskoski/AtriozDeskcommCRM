@@ -41,6 +41,7 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     .from("conversations")
     .update({ status: "closed", status_changed_at: now })
     .eq("id", id)
+    .eq("organization_id", authz.org.orgId)
     .select(SELECT_COLS)
     .maybeSingle();
 
