@@ -50,6 +50,9 @@ type Detail = {
     reply_message_template: string | null;
     reply_stage_id: string | null;
     reply_delay_seconds: number;
+    reply_response_mode: "text" | "audio" | "text_audio";
+    reply_audio_storage_path: string | null;
+    reply_text_audio_gap_seconds: number;
   };
   sessions: Array<{
     id: string;
@@ -307,7 +310,11 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
         <Card className="p-5 text-sm">
           <h2 className="font-semibold">Resposta automática da campanha</h2>
           <p className="mt-2 whitespace-pre-wrap text-muted-foreground">
-            {campaign.reply_message_template}
+            {campaign.reply_response_mode === "audio"
+              ? "Áudio automático"
+              : campaign.reply_response_mode === "text_audio"
+                ? `${campaign.reply_message_template} · depois, áudio automático`
+                : campaign.reply_message_template}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             Executa uma vez por destinatário e nunca movimenta a oportunidade para trás.

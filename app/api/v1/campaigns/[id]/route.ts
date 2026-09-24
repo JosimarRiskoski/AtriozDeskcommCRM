@@ -28,7 +28,7 @@ export async function GET(
   const { data: campaign, error: campaignError } = await admin
     .from("outreach_campaigns")
     .select(
-      "id,name,status,text_template,audio_storage_path,delay_before_audio_seconds,interval_seconds,timezone,business_hour_start,business_hour_end,ai_mode,reply_automation_enabled,reply_message_template,reply_stage_id,reply_delay_seconds,scheduled_for,next_dispatch_at,started_at,paused_at,completed_at,created_at,updated_at,channel_session_id,selected_channel_session_ids,distribution_mode,estimated_started_at,estimated_completed_at,estimated_duration_seconds",
+      "id,name,status,text_template,audio_storage_path,delay_before_audio_seconds,interval_seconds,timezone,business_hour_start,business_hour_end,ai_mode,reply_automation_enabled,reply_message_template,reply_stage_id,reply_delay_seconds,reply_response_mode,reply_audio_storage_path,reply_text_audio_gap_seconds,scheduled_for,next_dispatch_at,started_at,paused_at,completed_at,created_at,updated_at,channel_session_id,selected_channel_session_ids,distribution_mode,estimated_started_at,estimated_completed_at,estimated_duration_seconds",
     )
     .eq("id", id)
     .eq("organization_id", authz.org.orgId)

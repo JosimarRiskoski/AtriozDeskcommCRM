@@ -34,6 +34,8 @@ const configSchema = z
     reply_message_template: z.string().trim().max(4096).nullable().default(null),
     reply_stage_id: z.string().uuid().nullable().default(null),
     reply_delay_seconds: z.coerce.number().int().min(0).max(300).default(5),
+    reply_response_mode: z.enum(["text", "audio", "text_audio"]).default("text"),
+    reply_text_audio_gap_seconds: z.coerce.number().int().min(0).max(30).default(2),
     business_hour_start: z
       .string()
       .regex(/^\d{2}:\d{2}$/)
@@ -76,7 +78,7 @@ const configSchema = z
       value.reply_automation_enabled &&
       (!value.create_lead_before_send ||
         !value.reply_stage_id ||
-        !value.reply_message_template?.trim())
+        (value.reply_response_mode !== "audio" && !value.reply_message_template?.trim()))
     ) {
       context.addIssue({
         code: "custom",
@@ -275,6 +277,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         : null,
       reply_stage_id: config.reply_automation_enabled ? config.reply_stage_id : null,
       reply_delay_seconds: config.reply_delay_seconds,
+      reply_response_mode: config.reply_response_mode,
+      reply_text_audio_gap_seconds: config.reply_text_audio_gap_seconds,
       status: "draft",
       created_by_user_id: authz.user.id,
       source_kind: source,

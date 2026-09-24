@@ -122,6 +122,7 @@ Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgr
 | `20260831160000` | `0138_conversation_command` | Unifica a classificação Fila/Automático no banco e trata corretamente pausas duráveis, contatos bloqueados e atendimento humano. |
 | `20260924153000` | `0145_optimize_inbox_counts` | Calcula os contadores do Inbox em uma passagem e elimina duas consultas por conversa, preservando RLS e a classificação canônica. |
 | `20260924180000` | `0144_campaign_reply_automation` | Responde uma única vez, sem IA, à primeira resposta da campanha e avança a oportunidade somente para uma etapa posterior do mesmo funil. |
+| `20260924193000` | `0145_campaign_reply_audio` | Permite escolher texto, áudio ou texto mais áudio na resposta automática após o primeiro retorno do contato. |
 
 ## Reproducibility
 
