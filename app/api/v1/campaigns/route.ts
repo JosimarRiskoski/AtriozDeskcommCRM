@@ -30,6 +30,10 @@ const configSchema = z
     delay_before_audio_seconds: z.coerce.number().int().min(0).max(60).default(2),
     create_lead_before_send: z.boolean().default(true),
     ai_mode: z.enum(["paused", "inherit", "active"]).default("paused"),
+    reply_automation_enabled: z.boolean().default(false),
+    reply_message_template: z.string().trim().max(4096).nullable().default(null),
+    reply_stage_id: z.string().uuid().nullable().default(null),
+    reply_delay_seconds: z.coerce.number().int().min(0).max(300).default(5),
     business_hour_start: z
       .string()
       .regex(/^\d{2}:\d{2}$/)
@@ -66,6 +70,19 @@ const configSchema = z
         code: "custom",
         message: "O fim da janela precisa ser posterior ao início.",
         path: ["business_hour_end"],
+      });
+    }
+    if (
+      value.reply_automation_enabled &&
+      (!value.create_lead_before_send ||
+        !value.reply_stage_id ||
+        !value.reply_message_template?.trim())
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Para automatizar a resposta, crie a oportunidade e informe a mensagem e a etapa de destino.",
+        path: ["reply_automation_enabled"],
       });
     }
   });
@@ -156,6 +173,25 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const admin = createAdminClient() as unknown as SupabaseClient;
   const orgId = authz.org.orgId;
+  if (config.reply_automation_enabled) {
+    const { data: campaignStages } = await admin
+      .from("crm_stages")
+      .select("id,position")
+      .in("id", [config.stage_id!, config.reply_stage_id!])
+      .eq("pipeline_id", config.pipeline_id!)
+      .eq("organization_id", orgId)
+      .eq("is_archived", false);
+    const initialStage = campaignStages?.find((stage) => stage.id === config.stage_id);
+    const replyStage = campaignStages?.find((stage) => stage.id === config.reply_stage_id);
+    if (!initialStage || !replyStage || replyStage.position <= initialStage.position) {
+      return fail(
+        "validation_failed",
+        "A etapa da resposta automática precisa ser posterior à etapa inicial no mesmo funil.",
+        422,
+        { requestId },
+      );
+    }
+  }
   const uniqueSessionIds = [...new Set(config.channel_session_ids)];
   const { data: selectedSessions } = await admin
     .from("channel_sessions")
@@ -233,6 +269,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       delay_before_audio_seconds: config.delay_before_audio_seconds,
       create_lead_before_send: config.create_lead_before_send,
       ai_mode: config.ai_mode,
+      reply_automation_enabled: config.reply_automation_enabled,
+      reply_message_template: config.reply_automation_enabled
+        ? config.reply_message_template
+        : null,
+      reply_stage_id: config.reply_automation_enabled ? config.reply_stage_id : null,
+      reply_delay_seconds: config.reply_delay_seconds,
       status: "draft",
       created_by_user_id: authz.user.id,
       source_kind: source,
@@ -339,11 +381,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
       if (conversationError || typeof conversationId !== "string")
         throw new Error(`conversation_upsert_failed:${conversationError?.message ?? "no_id"}`);
-      if (config.ai_mode !== "inherit") {
+      const effectiveAiMode = config.reply_automation_enabled ? "paused" : config.ai_mode;
+      if (effectiveAiMode !== "inherit") {
         await admin
           .from("conversations")
           .update({
-            ai_control_mode: config.ai_mode === "active" ? "force_active" : "force_paused",
+            ai_control_mode: effectiveAiMode === "active" ? "force_active" : "force_paused",
           })
           .eq("id", conversationId)
           .eq("organization_id", orgId);
