@@ -1,5 +1,12 @@
 "use client";
-import { forwardRef, useImperativeHandle, useRef, useState, type KeyboardEvent } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { ChatText, PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
@@ -41,6 +48,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [interactivePoll, setInteractivePoll] =
     useState<MessageTemplate["interactive_config"]>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const submitLockRef = useRef(false);
   const send = useSendMessage();
   const upload = useUploadMedia();
   const createNote = useCreateNote();
@@ -55,6 +63,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const isDisabled =
     disabled || !!blockedReason || upload.isPending || (mode === "note" && createNote.isPending);
 
+  useEffect(() => {
+    if (disabled || blockedReason) return;
+    const frame = requestAnimationFrame(() => taRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [conversationId, disabled, blockedReason]);
+
   function autoresize() {
     const ta = taRef.current;
     if (!ta) return;
@@ -63,8 +77,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   }
 
   function handleSubmit() {
+    if (submitLockRef.current) return;
     const body = text.trim();
     if (!body || isDisabled) return;
+    submitLockRef.current = true;
+    window.setTimeout(() => {
+      submitLockRef.current = false;
+    }, 300);
     if (mode === "note") {
       createNote.mutate(
         { conversation_id: conversationId, body },

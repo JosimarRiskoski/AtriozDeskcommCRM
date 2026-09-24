@@ -66,6 +66,28 @@ describe("Composer + modo nota interna", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
+  it("leva o foco ao campo quando a conversa selecionada muda", async () => {
+    const qc = new QueryClient();
+    const view = render(
+      <QueryClientProvider client={qc}>
+        <Composer conversationId="conv-1" />
+      </QueryClientProvider>,
+    );
+    const message = screen.getByLabelText(/mensagem/i);
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    outside.focus();
+
+    view.rerender(
+      <QueryClientProvider client={qc}>
+        <Composer conversationId="conv-2" />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(document.activeElement).toBe(message));
+    outside.remove();
+  });
+
   it("restaura a mensagem se o envio falhar antes de uma nova digitação", async () => {
     sendMock.mockImplementationOnce((_payload, options) => options.onError());
     renderComposer();

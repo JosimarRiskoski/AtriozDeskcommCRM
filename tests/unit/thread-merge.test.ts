@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { mergeThreadItems } from "@/components/inbox/ChatThread";
+import { describe, expect, it, vi } from "vitest";
+import {
+  isNearThreadBottom,
+  mergeThreadItems,
+  scrollThreadToLatest,
+} from "@/components/inbox/ChatThread";
 
 describe("mergeThreadItems", () => {
   it("intercala mensagens e notas por tempo", () => {
@@ -27,5 +31,22 @@ describe("mergeThreadItems", () => {
 
   it("array vazio de ambos retorna vazio", () => {
     expect(mergeThreadItems([], [])).toEqual([]);
+  });
+});
+
+describe("acompanhamento da mensagem mais recente", () => {
+  it("considera que o atendente acompanha a conversa quando está perto do fim", () => {
+    expect(
+      isNearThreadBottom({ scrollHeight: 1_000, scrollTop: 390, clientHeight: 500 }),
+    ).toBe(true);
+    expect(
+      isNearThreadBottom({ scrollHeight: 1_000, scrollTop: 100, clientHeight: 500 }),
+    ).toBe(false);
+  });
+
+  it("desce instantaneamente até a mensagem mais recente", () => {
+    const scrollTo = vi.fn();
+    scrollThreadToLatest({ scrollHeight: 1_250, scrollTo });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1_250, behavior: "auto" });
   });
 });

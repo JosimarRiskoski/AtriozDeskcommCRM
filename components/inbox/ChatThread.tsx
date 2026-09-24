@@ -35,6 +35,20 @@ export function mergeThreadItems(messages: Message[], notes: Note[]): ThreadItem
   return items;
 }
 
+export function isNearThreadBottom(
+  scroller: Pick<HTMLDivElement, "scrollHeight" | "scrollTop" | "clientHeight">,
+): boolean {
+  return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 120;
+}
+
+export function scrollThreadToLatest(
+  scroller: Pick<HTMLDivElement, "scrollHeight" | "scrollTo">,
+): void {
+  // Instantâneo para não gerar eventos intermediários de scroll que fariam o
+  // acompanhamento automático parecer uma rolagem manual para cima.
+  scroller.scrollTo({ top: scroller.scrollHeight, behavior: "auto" });
+}
+
 function dayLabel(d: Date): string {
   if (isToday(d)) return "Hoje";
   if (isYesterday(d)) return "Ontem";
@@ -44,7 +58,6 @@ function dayLabel(d: Date): string {
 export function ChatThread({ conversationId }: Props) {
   const q = useMessagesRealtime(conversationId);
   const notes = useConversationNotes(conversationId);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const followLatestRef = useRef(true);
   const pagesSeen = useRef(0);
@@ -65,6 +78,8 @@ export function ChatThread({ conversationId }: Props) {
   );
 
   const pages = q.data?.pages.length ?? 0;
+  const latestItem = items[items.length - 1];
+  const latestItemKey = latestItem ? `${latestItem.kind}:${latestItem.data.id}` : null;
 
   useEffect(() => {
     pagesSeen.current = 0;
@@ -81,8 +96,14 @@ export function ChatThread({ conversationId }: Props) {
 
     if (!firstLoad && !followLatestRef.current) return;
 
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [items.length, conversationId, pages]);
+    const frame = requestAnimationFrame(() => {
+      const scroller = scrollerRef.current;
+      if (!scroller) return;
+      scrollThreadToLatest(scroller);
+      followLatestRef.current = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [latestItemKey, conversationId, pages]);
 
   if (!conversationId) {
     return (
@@ -138,8 +159,7 @@ export function ChatThread({ conversationId }: Props) {
         className="flex-1 overflow-y-auto py-2"
         onScroll={(event) => {
           const scroller = event.currentTarget;
-          followLatestRef.current =
-            scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 120;
+          followLatestRef.current = isNearThreadBottom(scroller);
         }}
       >
         {q.hasNextPage && (
@@ -185,8 +205,6 @@ export function ChatThread({ conversationId }: Props) {
             )}
           </div>
         ))}
-
-        <div ref={bottomRef} />
       </div>
     </div>
   );
