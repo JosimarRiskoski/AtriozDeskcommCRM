@@ -22,9 +22,6 @@ type Recipient = {
   attempts: number;
   last_error_code: string | null;
   last_error_message: string | null;
-  reply_automation_status: string;
-  reply_automation_completed_at: string | null;
-  reply_automation_last_error: string | null;
   channel_session_id: string;
   channel_sessions: {
     id: string;
@@ -46,10 +43,6 @@ type Detail = {
     started_at: string | null;
     completed_at: string | null;
     audio_storage_path: string | null;
-    reply_automation_enabled: boolean;
-    reply_message_template: string | null;
-    reply_stage_id: string | null;
-    reply_delay_seconds: number;
   };
   sessions: Array<{
     id: string;
@@ -255,7 +248,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
         ))}
       </section>
 
-      <Card className="grid gap-4 p-5 text-sm md:grid-cols-2 xl:grid-cols-5">
+      <Card className="grid gap-4 p-5 text-sm md:grid-cols-2 xl:grid-cols-4">
         <div>
           <p className="text-xs text-muted-foreground">Conexão</p>
           <div className="space-y-1 font-medium">
@@ -293,27 +286,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                 : "Configuração geral"}
           </p>
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Automação após resposta</p>
-          <p className="font-medium">
-            {campaign.reply_automation_enabled
-              ? `Ativa · ${campaign.reply_delay_seconds}s · sem IA`
-              : "Desativada"}
-          </p>
-        </div>
       </Card>
-
-      {campaign.reply_automation_enabled && (
-        <Card className="p-5 text-sm">
-          <h2 className="font-semibold">Resposta automática da campanha</h2>
-          <p className="mt-2 whitespace-pre-wrap text-muted-foreground">
-            {campaign.reply_message_template}
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Executa uma vez por destinatário e nunca movimenta a oportunidade para trás.
-          </p>
-        </Card>
-      )}
 
       <Card className="overflow-hidden">
         <div className="border-b p-4">
@@ -360,15 +333,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   <td className="p-3">{dateTime(recipient.audio_sent_at)}</td>
                   <td className="p-3">{recipient.attempts}</td>
                   <td className="max-w-sm p-3 text-xs text-muted-foreground">
-                    {recipient.last_error_message || recipient.reply_automation_last_error || "—"}
-                    {campaign.reply_automation_enabled && recipient.status === "replied" && (
-                      <div className="mt-1">
-                        Automação: {recipient.reply_automation_status}
-                        {recipient.reply_automation_completed_at
-                          ? ` · ${dateTime(recipient.reply_automation_completed_at)}`
-                          : ""}
-                      </div>
-                    )}
+                    {recipient.last_error_message || "—"}
                     {recipient.status === "pending" &&
                       recipient.channel_sessions?.status !== "WORKING" && (
                         <div className="mt-2 flex gap-2">
