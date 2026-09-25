@@ -58,7 +58,7 @@ export function CampaignsClient({
   const [source, setSource] = useState<"csv" | "google_sheets">("csv");
   const [spreadsheet, setSpreadsheet] = useState("");
   const [sheetRange, setSheetRange] = useState("A:Z");
-  const [replyAudio, setReplyAudio] = useState<File | null>(null);
+  const [audio, setAudio] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview[]>([]);
   const [previewSummary, setPreviewSummary] = useState<PreviewSummary | null>(null);
   const [busy, setBusy] = useState(false);
@@ -73,14 +73,10 @@ export function CampaignsClient({
   const [divideConnections, setDivideConnections] = useState(false);
   const [createOpportunity, setCreateOpportunity] = useState(true);
   const [replyAutomation, setReplyAutomation] = useState(false);
-  const [replyResponseMode, setReplyResponseMode] = useState<"text" | "audio" | "text_audio">(
-    "text",
-  );
   const [replyMessage, setReplyMessage] = useState(
     "Perfeito! Recebemos seu interesse. Um de nossos especialistas continuará seu atendimento por aqui.",
   );
   const [replyDelaySeconds, setReplyDelaySeconds] = useState(5);
-  const [replyTextAudioGapSeconds, setReplyTextAudioGapSeconds] = useState(2);
   const [intervalSeconds, setIntervalSeconds] = useState(300);
   const [businessStart, setBusinessStart] = useState("08:00");
   const [businessEnd, setBusinessEnd] = useState("18:00");
@@ -153,11 +149,7 @@ export function CampaignsClient({
       sessionIds.length === 0 ||
       (divideConnections && sessionIds.length < 2) ||
       (createOpportunity && (!pipelineId || !stageId)) ||
-      (replyAutomation &&
-        (!createOpportunity ||
-          !replyStageId ||
-          (replyResponseMode !== "audio" && !replyMessage.trim()) ||
-          (replyResponseMode !== "text" && !replyAudio)))
+      (replyAutomation && (!createOpportunity || !replyStageId || !replyMessage.trim()))
     ) {
       toast.error(
         divideConnections && sessionIds.length < 2
@@ -197,22 +189,17 @@ export function CampaignsClient({
           reply_message_template: replyAutomation ? replyMessage : null,
           reply_stage_id: replyAutomation ? replyStageId : null,
           reply_delay_seconds: replyDelaySeconds,
-          reply_response_mode: replyResponseMode,
-          reply_text_audio_gap_seconds: replyTextAudioGapSeconds,
         }),
       );
       const res = await fetch("/api/v1/campaigns", { method: "POST", body });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error?.message ?? "Falha ao criar campanha.");
       const id = json.data.id as string;
-      if (replyAutomation && replyResponseMode !== "text" && replyAudio) {
+      if (audio) {
         const media = new FormData();
-        media.set("file", replyAudio);
-        const up = await fetch(`/api/v1/campaigns/${id}/reply-audio`, {
-          method: "POST",
-          body: media,
-        });
-        if (!up.ok) throw new Error("Campanha criada, mas o áudio de resposta não foi anexado.");
+        media.set("file", audio);
+        const up = await fetch(`/api/v1/campaigns/${id}/audio`, { method: "POST", body: media });
+        if (!up.ok) throw new Error("Campanha criada, mas o áudio não foi anexado.");
       }
       toast.success("Rascunho criado. Revise e clique em Iniciar.");
       setPreview([]);
@@ -249,7 +236,8 @@ export function CampaignsClient({
       <header>
         <h1 className="text-2xl font-semibold">Campanhas</h1>
         <p className="text-sm text-muted-foreground">
-          Crie os contatos e negócios antes do envio; cada contato segue uma fila segura.
+          Crie os contatos e negócios antes do envio; texto, áudio e próximo contato seguem uma fila
+          segura.
         </p>
       </header>
       <form action={create} className="grid gap-4 rounded-lg border bg-card p-5 lg:grid-cols-2">
@@ -472,6 +460,15 @@ export function CampaignsClient({
           </div>
         )}
         <label className="grid gap-1 text-sm">
+          Áudio opcional
+          <input
+            type="file"
+            accept="audio/*"
+            onChange={(e) => setAudio(e.target.files?.[0] ?? null)}
+            className={field}
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
           IA após resposta
           <select
             name="ai_mode"
@@ -504,48 +501,19 @@ export function CampaignsClient({
           </label>
           {replyAutomation && (
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="grid gap-1">
-                Tipo de resposta
-                <select
-                  value={replyResponseMode}
-                  onChange={(event) =>
-                    setReplyResponseMode(
-                      event.target.value as "text" | "audio" | "text_audio",
-                    )
-                  }
+              <label className="grid gap-1 md:col-span-2">
+                Mensagem automática
+                <textarea
+                  value={replyMessage}
+                  onChange={(event) => setReplyMessage(event.target.value)}
+                  maxLength={4096}
+                  rows={3}
                   className={field}
-                >
-                  <option value="text">Somente texto</option>
-                  <option value="audio">Somente áudio</option>
-                  <option value="text_audio">Texto + áudio</option>
-                </select>
+                />
+                <span className="text-xs text-muted-foreground">
+                  Enviada uma única vez, sem IA. Pedidos para parar nunca recebem esta resposta.
+                </span>
               </label>
-              {replyResponseMode !== "text" && (
-                <label className="grid gap-1">
-                  Áudio automático
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    onChange={(event) => setReplyAudio(event.target.files?.[0] ?? null)}
-                    className={field}
-                  />
-                </label>
-              )}
-              {replyResponseMode !== "audio" && (
-                <label className="grid gap-1 md:col-span-2">
-                  Mensagem automática
-                  <textarea
-                    value={replyMessage}
-                    onChange={(event) => setReplyMessage(event.target.value)}
-                    maxLength={4096}
-                    rows={3}
-                    className={field}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    Enviada uma única vez, sem IA. Pedidos para parar nunca recebem esta resposta.
-                  </span>
-                </label>
-              )}
               <label className="grid gap-1">
                 Mover para a etapa
                 <select
@@ -573,22 +541,6 @@ export function CampaignsClient({
                   <option value={15}>15 segundos</option>
                 </select>
               </label>
-              {replyResponseMode === "text_audio" && (
-                <label className="grid gap-1">
-                  Intervalo entre texto e áudio
-                  <select
-                    value={replyTextAudioGapSeconds}
-                    onChange={(event) =>
-                      setReplyTextAudioGapSeconds(Number(event.target.value))
-                    }
-                    className={field}
-                  >
-                    <option value={0}>Sem intervalo</option>
-                    <option value={2}>2 segundos</option>
-                    <option value={5}>5 segundos</option>
-                  </select>
-                </label>
-              )}
               <p className="text-xs text-muted-foreground md:col-span-2">
                 Se a oportunidade já estiver nessa etapa ou em uma etapa posterior, ela não volta
                 para trás.

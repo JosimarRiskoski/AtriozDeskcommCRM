@@ -26,17 +26,13 @@ type Candidate = {
     reply_message_template: string | null;
     reply_stage_id: string | null;
     reply_delay_seconds: number;
-    reply_response_mode: "text" | "audio" | "text_audio";
-    reply_audio_storage_path: string | null;
-    reply_text_audio_gap_seconds: number;
   } | null;
 };
 
-async function alreadyCreatedReplyPart(
+async function alreadyCreatedReply(
   admin: SupabaseClient,
   organizationId: string,
   candidate: Candidate,
-  part: "automatic_reply_text" | "automatic_reply_audio",
 ): Promise<boolean> {
   const { count } = await admin
     .from("messages")
@@ -46,7 +42,7 @@ async function alreadyCreatedReplyPart(
     .in("status", ["queued", "sent", "delivered", "read"])
     .contains("metadata", {
       campaign_recipient_id: candidate.id,
-      campaign_part: part,
+      campaign_part: "automatic_reply",
     });
   return (count ?? 0) > 0;
 }
@@ -138,7 +134,7 @@ export async function runCampaignReplyAutomation(
   const { data, error: candidateError } = await admin
     .from("outreach_campaign_recipients")
     .select(
-      "id,campaign_id,lead_id,conversation_id,name,phone_normalized,replied_at,reply_automation_attempts,outreach_campaigns!inner(pipeline_id,reply_message_template,reply_stage_id,reply_delay_seconds,reply_response_mode,reply_audio_storage_path,reply_text_audio_gap_seconds)",
+      "id,campaign_id,lead_id,conversation_id,name,phone_normalized,replied_at,reply_automation_attempts,outreach_campaigns!inner(pipeline_id,reply_message_template,reply_stage_id,reply_delay_seconds)",
     )
     .eq("organization_id", row.organization_id)
     .eq("contact_id", contactId)
@@ -204,20 +200,9 @@ export async function runCampaignReplyAutomation(
   try {
     const template = candidate.outreach_campaigns.reply_message_template;
     const targetStageId = candidate.outreach_campaigns.reply_stage_id;
-    const mode = candidate.outreach_campaigns.reply_response_mode;
-    const audioSource = candidate.outreach_campaigns.reply_audio_storage_path;
-    if (!targetStageId || (mode !== "audio" && !template) || (mode !== "text" && !audioSource))
-      throw new Error("campaign_reply_config_missing");
+    if (!template || !targetStageId) throw new Error("campaign_reply_config_missing");
 
-    if (
-      mode !== "audio" &&
-      !(await alreadyCreatedReplyPart(
-        admin,
-        row.organization_id,
-        candidate,
-        "automatic_reply_text",
-      ))
-    ) {
+    if (!(await alreadyCreatedReply(admin, row.organization_id, candidate))) {
       const message = await sendMessageHandler(
         admin,
         {
@@ -228,14 +213,14 @@ export async function runCampaignReplyAutomation(
         {
           conversation_id: candidate.conversation_id,
           type: "text",
-          body: renderCampaignText(template!, {
+          body: renderCampaignText(template, {
             recipient_name: candidate.name,
             phone_normalized: candidate.phone_normalized,
           }),
           metadata: {
             campaign_id: candidate.campaign_id,
             campaign_recipient_id: candidate.id,
-            campaign_part: "automatic_reply_text",
+            campaign_part: "automatic_reply",
             automation: "campaign_reply",
           },
         },
@@ -248,51 +233,6 @@ export async function runCampaignReplyAutomation(
         .update({ reply_automation_message_sent_at: new Date().toISOString() })
         .eq("id", candidate.id)
         .eq("organization_id", row.organization_id);
-    }
-
-    if (
-      mode !== "text" &&
-      !(await alreadyCreatedReplyPart(
-        admin,
-        row.organization_id,
-        candidate,
-        "automatic_reply_audio",
-      ))
-    ) {
-      if (mode === "text_audio" && candidate.outreach_campaigns.reply_text_audio_gap_seconds > 0) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, candidate.outreach_campaigns!.reply_text_audio_gap_seconds * 1000),
-        );
-      }
-      const filename = audioSource!.split("/").pop() || "reply-audio.ogg";
-      const destination = `${row.organization_id}/campaigns/${candidate.campaign_id}/recipients/${candidate.id}/reply-${filename}`;
-      const { error: copyError } = await admin.storage
-        .from("whatsapp-media")
-        .copy(audioSource!, destination);
-      if (copyError && !copyError.message.toLowerCase().includes("already"))
-        throw new Error(`reply_audio_copy_failed:${copyError.message}`);
-      const audio = await sendMessageHandler(
-        admin,
-        {
-          organization_id: row.organization_id,
-          actor: { type: "webhook_source", id: `campaign:${candidate.campaign_id}` },
-          requestId: `campaign-reply-audio:${candidate.id}`,
-        },
-        {
-          conversation_id: candidate.conversation_id,
-          type: "audio",
-          media_storage_path: destination,
-          media_mime: "audio/ogg",
-          metadata: {
-            campaign_id: candidate.campaign_id,
-            campaign_recipient_id: candidate.id,
-            campaign_part: "automatic_reply_audio",
-            automation: "campaign_reply",
-          },
-        },
-      );
-      if (audio.status !== "sent")
-        throw new Error(audio.error_code || `automatic_reply_audio_${audio.status}`);
     }
 
     const moveResult = await advanceLead(admin, row.organization_id, candidate, targetStageId);
