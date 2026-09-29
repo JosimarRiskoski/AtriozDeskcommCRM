@@ -3,6 +3,7 @@ const SOURCE_LABELS: Record<string, string> = {
   whatsapp: "WhatsApp",
   campaign: "Campanha",
   campaign_csv: "Campanha por planilha",
+  csv_import: "Importação por CSV",
   cold_call_manual: "Cold call manual",
   cold_call_ai: "Cold call com IA",
   paid_traffic: "Tráfego pago",
