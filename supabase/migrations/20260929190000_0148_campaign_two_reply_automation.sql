@@ -97,6 +97,11 @@ create index if not exists idx_outreach_recipients_waiting_second_reply
   on public.outreach_campaign_recipients (organization_id, contact_id, conversation_id)
   where status = 'replied' and reply_automation_status = 'awaiting_second_reply';
 
+create index if not exists idx_outreach_recipients_latest_sent_by_conversation
+  on public.outreach_campaign_recipients
+  (organization_id, contact_id, conversation_id, sent_at desc, created_at desc, id desc)
+  where sent_at is not null;
+
 
 
 -- 0147_campaign_reply_exclusivity
@@ -111,7 +116,7 @@ create or replace function public.fn_mark_campaign_recipient_replied(
 ) returns integer
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   v_target uuid;
@@ -184,7 +189,7 @@ create or replace function public.fn_claim_campaign_reply_step(
 ) returns text
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   v_step text;
@@ -270,8 +275,8 @@ grant execute on function public.fn_claim_campaign_reply_step(uuid,uuid,uuid)
 
 
 
--- A antiga segunda mensagem por ausencia de resposta fica desativada.
-update public.outreach_campaigns set followup_text_template = null where followup_text_template is not null;
+-- A antiga segunda mensagem por ausencia de resposta fica desativada na funcao
+-- de claim abaixo, sem apagar configuracoes historicas.
 
 create or replace function public.fn_claim_due_outreach_recipient(p_lease_seconds integer default 180)
 returns table (
@@ -282,7 +287,7 @@ returns table (
   campaign_timezone text, business_hour_start time, business_hour_end time,
   text_sent_at timestamptz, audio_sent_at timestamptz, followup_sent_at timestamptz
 )
-language plpgsql security definer set search_path=public as $$
+language plpgsql security definer set search_path=public,pg_temp as $$
 declare v_recipient public.outreach_campaign_recipients%rowtype;
 begin
   select r.* into v_recipient
