@@ -15,6 +15,7 @@ import { followupReactivityHandler } from "@/lib/followup/reactivity.handler";
 import { mediaPersistHandler } from "@/workers/media-persist-worker.handler";
 import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
 import { registerHandler } from "@/lib/event-log/dispatcher";
+import { campaignReplyAutomationHandler } from "@/lib/campaigns/reply-automation.handler";
 
 let _registered = false;
 
@@ -29,5 +30,6 @@ export function ensureHandlersRegistered(): void {
   registerHandler(followupReactivityHandler);
   registerHandler(mediaPersistHandler);
   registerHandler(mediaDeriveHandler);
+  registerHandler(campaignReplyAutomationHandler);
   _registered = true;
 }

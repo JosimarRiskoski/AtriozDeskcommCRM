@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { getEvolutionClient } from "@/lib/evolution/client";
-import { campaignMessagePart, isWithinBusinessHours, renderCampaignText } from "./worker-helpers";
+import { isWithinBusinessHours, renderCampaignText } from "./worker-helpers";
 
 type Admin = SupabaseClient;
 type Claim = {
@@ -39,12 +39,11 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function advanceCampaign(admin: Admin, claim: Claim, now: Date): Promise<boolean> {
   const { data: recipients } = await admin
     .from("outreach_campaign_recipients")
-    .select("status,followup_sent_at,outreach_campaigns!inner(followup_text_template)")
+    .select("status")
     .eq("campaign_id", claim.campaign_id);
   const active = (recipients ?? []).some((recipient) => {
     if (recipient.status === "pending" || recipient.status === "processing") return true;
-    const campaign = recipient.outreach_campaigns as unknown as { followup_text_template: string | null } | null;
-    return recipient.status === "sent" && !recipient.followup_sent_at && Boolean(campaign?.followup_text_template);
+    return false;
   });
   const completed = !active;
   const timestamp = now.toISOString();
@@ -131,7 +130,7 @@ async function verifyCampaignDestination(
 async function wasAlreadyDelivered(
   admin: Admin,
   claim: Claim,
-  part: "text" | "audio" | "followup",
+  part: "text" | "audio",
 ): Promise<boolean> {
   const { count } = await admin
     .from("messages")
@@ -141,16 +140,6 @@ async function wasAlreadyDelivered(
     .in("status", ["sent", "delivered", "read"])
     .contains("metadata", { campaign_recipient_id: claim.recipient_id, campaign_part: part });
   return (count ?? 0) > 0;
-}
-
-async function recipientReplied(admin: Admin, claim: Claim): Promise<boolean> {
-  const { data } = await admin
-    .from("outreach_campaign_recipients")
-    .select("status,replied_at")
-    .eq("id", claim.recipient_id)
-    .eq("organization_id", claim.organization_id)
-    .maybeSingle();
-  return data?.status === "replied" || Boolean(data?.replied_at);
 }
 
 export async function runCampaignTick(
@@ -217,47 +206,6 @@ export async function runCampaignTick(
       summary.completed = (await advanceCampaign(admin, claim, now)) ? 1 : 0;
       return summary;
     }
-    const messagePart = campaignMessagePart(claim);
-    if (messagePart === "followup") {
-      if (await recipientReplied(admin, claim)) {
-        summary.completed = (await advanceCampaign(admin, claim, now)) ? 1 : 0;
-        return summary;
-      }
-      if (await wasAlreadyDelivered(admin, claim, "followup")) {
-        claim.followup_sent_at = new Date().toISOString();
-      } else {
-        const followup = await sendMessageHandler(admin, ctx, {
-          conversation_id: claim.conversation_id,
-          type: "text",
-          body: renderCampaignText(claim.followup_text_template!, claim),
-          metadata: {
-            campaign_id: claim.campaign_id,
-            campaign_recipient_id: claim.recipient_id,
-            campaign_part: "followup",
-          },
-        });
-        if (followup.status !== "sent") throw new Error(followup.error_code || `followup_${followup.status}`);
-        claim.followup_sent_at = new Date().toISOString();
-      }
-      const sentAt = new Date().toISOString();
-      await admin
-        .from("outreach_campaign_recipients")
-        .update({
-          status: "sent",
-          sent_at: sentAt,
-          followup_sent_at: claim.followup_sent_at,
-          processing_lease_until: null,
-          last_error_code: null,
-          last_error_message: null,
-          updated_at: sentAt,
-        })
-        .eq("id", claim.recipient_id);
-      const completed = await advanceCampaign(admin, claim, new Date(sentAt));
-      summary.sent = 1;
-      summary.completed = completed ? 1 : 0;
-      return summary;
-    }
-
     if (!claim.text_sent_at && (await wasAlreadyDelivered(admin, claim, "text")))
       claim.text_sent_at = new Date().toISOString();
     if (!claim.text_sent_at) {
@@ -314,9 +262,7 @@ export async function runCampaignTick(
         status: "sent",
         sent_at: sentAt,
         audio_sent_at: claim.audio_sent_at,
-        followup_due_at: claim.followup_text_template
-          ? new Date(new Date(sentAt).getTime() + claim.followup_delay_seconds * 1000).toISOString()
-          : null,
+        followup_due_at: null,
         processing_lease_until: null,
         last_error_code: null,
         last_error_message: null,

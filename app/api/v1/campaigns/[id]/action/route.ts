@@ -16,10 +16,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success || !z.string().uuid().safeParse(id).success) return fail("validation_failed", "Ação ou campanha inválida.", 422, { requestId });
   const admin = createAdminClient() as unknown as SupabaseClient;
-  const { data: current } = await admin.from("outreach_campaigns").select("id,status").eq("id", id).eq("organization_id", authz.org.orgId).maybeSingle();
+  const { data: current } = await admin.from("outreach_campaigns").select("id,status,reply_automation_enabled,reply_response_mode,reply_audio_storage_path").eq("id", id).eq("organization_id", authz.org.orgId).maybeSingle();
   if (!current) return fail("not_found", "Campanha não encontrada.", 404, { requestId });
   const allowed: Record<string, string[]> = { start: ["draft"], pause: ["scheduled", "running"], resume: ["paused"], cancel: ["draft", "scheduled", "running", "paused"] };
   if (!(allowed[parsed.data.action] ?? []).includes(current.status)) return fail("conflict", `A campanha ${current.status} não aceita esta ação.`, 409, { requestId });
+  if (parsed.data.action === "start" && current.reply_automation_enabled &&
+      current.reply_response_mode !== "text" && !current.reply_audio_storage_path)
+    return fail("validation_failed", "Anexe o áudio da continuação antes de iniciar.", 422, { requestId });
   const now = new Date().toISOString();
   const update = parsed.data.action === "start" ? { status: "scheduled", scheduled_for: now, next_dispatch_at: now, paused_at: null, updated_at: now }
     : parsed.data.action === "pause" ? { status: "paused", paused_at: now, updated_at: now }

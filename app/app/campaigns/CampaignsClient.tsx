@@ -73,8 +73,12 @@ export function CampaignsClient({
   const [divideConnections, setDivideConnections] = useState(false);
   const [createOpportunity, setCreateOpportunity] = useState(true);
   const [createOpportunityOnReply, setCreateOpportunityOnReply] = useState(false);
-  const [sendFollowup, setSendFollowup] = useState(false);
-  const [followupDelayHours, setFollowupDelayHours] = useState(24);
+  const [replyAutomation, setReplyAutomation] = useState(false);
+  const [replyResponseMode, setReplyResponseMode] = useState<"text" | "audio" | "text_audio">("text");
+  const [replyAudio, setReplyAudio] = useState<File | null>(null);
+  const [replyMessage, setReplyMessage] = useState("");
+  const [replyDelaySeconds, setReplyDelaySeconds] = useState(5);
+  const [replyTextAudioGapSeconds, setReplyTextAudioGapSeconds] = useState(2);
   const [intervalSeconds, setIntervalSeconds] = useState(300);
   const [businessStart, setBusinessStart] = useState("08:00");
   const [businessEnd, setBusinessEnd] = useState("18:00");
@@ -86,9 +90,16 @@ export function CampaignsClient({
     [pipelines, pipelineId],
   );
   const [stageId, setStageId] = useState(stages[0]?.id ?? "");
+  const replyStages = useMemo(() => stages.filter((stage) => stage.position >
+    (stages.find((item) => item.id === stageId)?.position ?? -Infinity)), [stages, stageId]);
+  const [replyStageId, setReplyStageId] = useState("");
   useEffect(() => {
     if (!stages.some((s) => s.id === stageId)) setStageId(stages[0]?.id ?? "");
   }, [stages, stageId]);
+  useEffect(() => {
+    if (!replyStages.some((stage) => stage.id === replyStageId))
+      setReplyStageId(replyStages[0]?.id ?? "");
+  }, [replyStages, replyStageId]);
   const load = async () => {
     const res = await fetch("/api/v1/campaigns", { cache: "no-store" });
     const json = await res.json();
@@ -127,7 +138,10 @@ export function CampaignsClient({
       (source === "google_sheets" && !spreadsheet.trim()) ||
       sessionIds.length === 0 ||
       (divideConnections && sessionIds.length < 2) ||
-      ((createOpportunity || createOpportunityOnReply) && (!pipelineId || !stageId))
+      ((createOpportunity || createOpportunityOnReply) && (!pipelineId || !stageId)) ||
+      (replyAutomation && (!replyStageId || (!createOpportunity && !createOpportunityOnReply) ||
+        (replyResponseMode !== "audio" && !replyMessage.trim()) ||
+        (replyResponseMode !== "text" && !replyAudio)))
     ) {
       toast.error(
         divideConnections && sessionIds.length < 2
@@ -155,15 +169,21 @@ export function CampaignsClient({
           pipeline_id: createOpportunity || createOpportunityOnReply ? pipelineId : null,
           stage_id: createOpportunity || createOpportunityOnReply ? stageId : null,
           text_template: form.get("text"),
-          followup_text_template: sendFollowup ? form.get("followup_text") : null,
-          followup_delay_seconds: followupDelayHours * 60 * 60,
+          followup_text_template: null,
+          followup_delay_seconds: 86400,
           interval_seconds: intervalSeconds,
           business_hour_start: businessStart,
           business_hour_end: businessEnd,
           delay_before_audio_seconds: 2,
           create_lead_before_send: createOpportunity,
           create_lead_on_reply: createOpportunityOnReply,
-          ai_mode: form.get("ai_mode"),
+          ai_mode: replyAutomation ? "paused" : form.get("ai_mode"),
+          reply_automation_enabled: replyAutomation,
+          reply_message_template: replyAutomation ? replyMessage : null,
+          reply_stage_id: replyAutomation ? replyStageId : null,
+          reply_delay_seconds: replyDelaySeconds,
+          reply_response_mode: replyResponseMode,
+          reply_text_audio_gap_seconds: replyTextAudioGapSeconds,
         }),
       );
       const res = await fetch("/api/v1/campaigns", { method: "POST", body });
@@ -175,6 +195,12 @@ export function CampaignsClient({
         media.set("file", audio);
         const up = await fetch(`/api/v1/campaigns/${id}/audio`, { method: "POST", body: media });
         if (!up.ok) throw new Error("Campanha criada, mas o áudio não foi anexado.");
+      }
+      if (replyAutomation && replyResponseMode !== "text" && replyAudio) {
+        const media = new FormData();
+        media.set("file", replyAudio);
+        const uploaded = await fetch(`/api/v1/campaigns/${id}/reply-audio`, { method: "POST", body: media });
+        if (!uploaded.ok) throw new Error("Campanha criada, mas o áudio da continuação não foi anexado. Não inicie o rascunho.");
       }
       toast.success("Rascunho criado. Revise e clique em Iniciar.");
       setPreview([]);
@@ -305,7 +331,9 @@ export function CampaignsClient({
                       setCreateOpportunityOnReply(true);
                     }}
                   />
-                  Na primeira resposta: cria o card ou move o card aberto deste funil
+                  {replyAutomation
+                    ? "Após a segunda resposta: cria ou move o card deste funil"
+                    : "Na primeira resposta: cria o card ou move o card aberto deste funil"}
                 </label>
               </div>
               <label className="grid gap-1 text-sm">
@@ -394,42 +422,69 @@ export function CampaignsClient({
           </span>
         </label>
         <fieldset className="grid gap-3 rounded-md border p-3 text-sm lg:col-span-2">
+          <legend className="px-1 font-medium">Qualificação em duas respostas</legend>
           <label className="flex items-center gap-2 font-medium">
-            <input
-              type="checkbox"
-              checked={sendFollowup}
-              onChange={(event) => setSendFollowup(event.target.checked)}
-            />
-            Enviar segunda mensagem se não houver resposta
+            <input type="checkbox" checked={replyAutomation} onChange={(event) => {
+              setReplyAutomation(event.target.checked);
+              if (event.target.checked && !createOpportunity && !createOpportunityOnReply)
+                setCreateOpportunity(true);
+            }} />
+            Enviar uma continuação após a primeira resposta; criar ou mover o card após a segunda
           </label>
-          {sendFollowup && (
-            <>
+          {replyAutomation && (
+            <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-1">
-                Aguardar antes da segunda mensagem (horas)
-                <input
-                  type="number"
-                  min={1}
-                  max={720}
-                  value={followupDelayHours}
-                  onChange={(event) => setFollowupDelayHours(Number(event.target.value))}
-                  className={field}
-                />
+                Continuação após a primeira resposta
+                <select value={replyResponseMode} onChange={(event) =>
+                  setReplyResponseMode(event.target.value as "text" | "audio" | "text_audio")}
+                  className={field}>
+                  <option value="text">Somente texto</option>
+                  <option value="audio">Somente áudio</option>
+                  <option value="text_audio">Texto + áudio</option>
+                </select>
+              </label>
+              {replyResponseMode !== "text" && <label className="grid gap-1">
+                Áudio automático
+                <input type="file" accept="audio/*" onChange={(event) =>
+                  setReplyAudio(event.target.files?.[0] ?? null)} className={field} />
+              </label>}
+              {replyResponseMode !== "audio" && <label className="grid gap-1 md:col-span-2">
+                Mensagem de continuação
+                <textarea value={replyMessage} onChange={(event) => setReplyMessage(event.target.value)}
+                  maxLength={4096} rows={3} className={field} />
+                <span className="text-xs text-muted-foreground">Enviada sem IA após a primeira resposta.</span>
+              </label>}
+              <label className="grid gap-1">
+                Após a segunda resposta, criar ou mover para
+                <select value={replyStageId} onChange={(event) => setReplyStageId(event.target.value)} className={field}>
+                  {replyStages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
+                </select>
               </label>
               <label className="grid gap-1">
-                Segunda mensagem
-                <textarea
-                  name="followup_text"
-                  required={sendFollowup}
-                  maxLength={4096}
-                  rows={3}
-                  placeholder="Olá {{primeiro_nome}}, conseguiu ver minha mensagem?"
-                  className={field}
-                />
-                <span className="text-xs text-muted-foreground">
-                  Ela só é enviada para quem não responder à primeira mensagem.
-                </span>
+                Aguardar antes de enviar a continuação
+                <select value={replyDelaySeconds} onChange={(event) =>
+                  setReplyDelaySeconds(Number(event.target.value))} className={field}>
+                  <option value={0}>Imediatamente</option>
+                  <option value={5}>5 segundos</option>
+                  <option value={10}>10 segundos</option>
+                  <option value={15}>15 segundos</option>
+                </select>
               </label>
-            </>
+              {replyResponseMode === "text_audio" && <label className="grid gap-1">
+                Intervalo entre texto e áudio
+                <select value={replyTextAudioGapSeconds} onChange={(event) =>
+                  setReplyTextAudioGapSeconds(Number(event.target.value))} className={field}>
+                  <option value={0}>Sem intervalo</option>
+                  <option value={2}>2 segundos</option>
+                  <option value={5}>5 segundos</option>
+                </select>
+              </label>}
+              <p className="text-xs text-muted-foreground md:col-span-2">
+                Sem resposta, nenhuma continuação é enviada. Na primeira resposta, o CRM envia a continuação
+                após a espera escolhida. Somente na segunda resposta o card é criado ou movido e o atendimento
+                passa a ser manual. Não há terceira mensagem automática.
+              </p>
+            </div>
           )}
         </fieldset>
         <label className="grid gap-1 text-sm">

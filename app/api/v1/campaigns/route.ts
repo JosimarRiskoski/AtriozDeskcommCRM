@@ -32,6 +32,12 @@ const configSchema = z
     delay_before_audio_seconds: z.coerce.number().int().min(0).max(60).default(2),
     create_lead_before_send: z.boolean().default(true),
     create_lead_on_reply: z.boolean().default(false),
+    reply_automation_enabled: z.boolean().default(false),
+    reply_message_template: z.string().trim().max(4096).nullable().default(null),
+    reply_stage_id: z.string().uuid().nullable().default(null),
+    reply_delay_seconds: z.coerce.number().int().min(0).max(300).default(5),
+    reply_response_mode: z.enum(["text", "audio", "text_audio"]).default("text"),
+    reply_text_audio_gap_seconds: z.coerce.number().int().min(0).max(30).default(2),
     ai_mode: z.enum(["paused", "inherit", "active"]).default("paused"),
     business_hour_start: z
       .string()
@@ -59,6 +65,12 @@ const configSchema = z
         message: "Escolha criar antes do envio ou somente depois da resposta.",
         path: ["create_lead_on_reply"],
       });
+    }
+    if (value.reply_automation_enabled &&
+        ((!value.create_lead_before_send && !value.create_lead_on_reply) ||
+         !value.pipeline_id || !value.stage_id || !value.reply_stage_id ||
+         (value.reply_response_mode !== "audio" && !value.reply_message_template?.trim()))) {
+      context.addIssue({ code: "custom", message: "Configure a continuação, o funil e quando criar a oportunidade.", path: ["reply_automation_enabled"] });
     }
     if (value.distribution_mode === "single" && value.channel_session_ids.length !== 1) {
       context.addIssue({
@@ -169,6 +181,17 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const admin = createAdminClient() as unknown as SupabaseClient;
   const orgId = authz.org.orgId;
+  if (config.reply_automation_enabled) {
+    const { data: campaignStages, error: stagesError } = await admin
+      .from("crm_stages").select("id,position")
+      .in("id", [config.stage_id!, config.reply_stage_id!])
+      .eq("pipeline_id", config.pipeline_id!).eq("organization_id", orgId)
+      .eq("is_archived", false);
+    const initialStage = campaignStages?.find((stage) => stage.id === config.stage_id);
+    const replyStage = campaignStages?.find((stage) => stage.id === config.reply_stage_id);
+    if (stagesError || !initialStage || !replyStage || replyStage.position <= initialStage.position)
+      return fail("validation_failed", "A etapa após a segunda resposta precisa ser posterior à inicial no mesmo funil.", 422, { requestId });
+  }
   const uniqueSessionIds = [...new Set(config.channel_session_ids)];
   const { data: selectedSessions } = await admin
     .from("channel_sessions")
@@ -240,7 +263,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       stage_id: config.stage_id,
       name: config.name,
       text_template: config.text_template,
-      followup_text_template: config.followup_text_template,
+      followup_text_template: null,
       followup_delay_seconds: config.followup_delay_seconds,
       interval_seconds: config.interval_seconds,
       business_hour_start: config.business_hour_start,
@@ -248,7 +271,13 @@ export async function POST(req: NextRequest): Promise<Response> {
       delay_before_audio_seconds: config.delay_before_audio_seconds,
       create_lead_before_send: config.create_lead_before_send,
       create_lead_on_reply: config.create_lead_on_reply,
-      ai_mode: config.ai_mode,
+      ai_mode: config.reply_automation_enabled ? "paused" : config.ai_mode,
+      reply_automation_enabled: config.reply_automation_enabled,
+      reply_message_template: config.reply_automation_enabled ? config.reply_message_template : null,
+      reply_stage_id: config.reply_automation_enabled ? config.reply_stage_id : null,
+      reply_delay_seconds: config.reply_delay_seconds,
+      reply_response_mode: config.reply_response_mode,
+      reply_text_audio_gap_seconds: config.reply_text_audio_gap_seconds,
       status: "draft",
       created_by_user_id: authz.user.id,
       source_kind: source,
@@ -355,11 +384,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
       if (conversationError || typeof conversationId !== "string")
         throw new Error(`conversation_upsert_failed:${conversationError?.message ?? "no_id"}`);
-      if (config.ai_mode !== "inherit") {
+      const effectiveAiMode = config.reply_automation_enabled ? "paused" : config.ai_mode;
+      if (effectiveAiMode !== "inherit") {
         await admin
           .from("conversations")
           .update({
-            ai_control_mode: config.ai_mode === "active" ? "force_active" : "force_paused",
+            ai_control_mode: effectiveAiMode === "active" ? "force_active" : "force_paused",
           })
           .eq("id", conversationId)
           .eq("organization_id", orgId);
