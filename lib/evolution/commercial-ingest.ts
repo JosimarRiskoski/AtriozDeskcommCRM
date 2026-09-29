@@ -11,6 +11,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { audit } from "@/lib/audit";
 import { findActiveContactByPhone } from "@/lib/contacts/find-by-phone";
+import { createOrMoveCampaignOpportunityOnReply } from "@/lib/campaigns/reply-opportunity";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { parseChatId, type ChatIdentity } from "@/lib/whatsapp/chat-identity";
 export { parseChatId } from "@/lib/whatsapp/chat-identity";
@@ -856,6 +857,25 @@ async function handleInbound(
       requestId,
       metadata: { reason: "stop_keyword", contact_id: contactId },
     });
+  }
+
+  // Pedido expresso para parar nao representa interesse comercial e nao deve
+  // criar nem mover uma oportunidade, embora encerre a participacao na campanha.
+  if (!p.body || !isExplicitStopRequest(p.body)) {
+    try {
+      await createOrMoveCampaignOpportunityOnReply({
+        admin,
+        organizationId: session.organization_id,
+        contactId,
+        conversationId,
+        requestId,
+      });
+    } catch (campaignReplyError) {
+      // A mensagem ja esta persistida e a campanha ja foi marcada como respondida.
+      // Nao devolvemos 500 para a Evolution e nao arriscamos reentregar a mesma
+      // mensagem; o proximo evento inbound tenta novamente se o card nao foi vinculado.
+      console.error("[evolution.ingest] campaign reply opportunity failed", campaignReplyError);
+    }
   }
 
   await audit({

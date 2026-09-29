@@ -72,6 +72,7 @@ export function CampaignsClient({
   );
   const [divideConnections, setDivideConnections] = useState(false);
   const [createOpportunity, setCreateOpportunity] = useState(true);
+  const [createOpportunityOnReply, setCreateOpportunityOnReply] = useState(false);
   const [intervalSeconds, setIntervalSeconds] = useState(300);
   const [businessStart, setBusinessStart] = useState("08:00");
   const [businessEnd, setBusinessEnd] = useState("18:00");
@@ -124,7 +125,7 @@ export function CampaignsClient({
       (source === "google_sheets" && !spreadsheet.trim()) ||
       sessionIds.length === 0 ||
       (divideConnections && sessionIds.length < 2) ||
-      (createOpportunity && (!pipelineId || !stageId))
+      ((createOpportunity || createOpportunityOnReply) && (!pipelineId || !stageId))
     ) {
       toast.error(
         divideConnections && sessionIds.length < 2
@@ -149,14 +150,15 @@ export function CampaignsClient({
           channel_session_id: sessionIds[0],
           channel_session_ids: sessionIds,
           distribution_mode: divideConnections ? "balanced" : "single",
-          pipeline_id: createOpportunity ? pipelineId : null,
-          stage_id: createOpportunity ? stageId : null,
+          pipeline_id: createOpportunity || createOpportunityOnReply ? pipelineId : null,
+          stage_id: createOpportunity || createOpportunityOnReply ? stageId : null,
           text_template: form.get("text"),
           interval_seconds: intervalSeconds,
           business_hour_start: businessStart,
           business_hour_end: businessEnd,
           delay_before_audio_seconds: 2,
           create_lead_before_send: createOpportunity,
+          create_lead_on_reply: createOpportunityOnReply,
           ai_mode: form.get("ai_mode"),
         }),
       );
@@ -265,13 +267,43 @@ export function CampaignsClient({
           <label className="flex items-center gap-2 font-medium">
             <input
               type="checkbox"
-              checked={createOpportunity}
-              onChange={(event) => setCreateOpportunity(event.target.checked)}
+              checked={createOpportunity || createOpportunityOnReply}
+              onChange={(event) => {
+                setCreateOpportunity(event.target.checked);
+                if (!event.target.checked) setCreateOpportunityOnReply(false);
+              }}
             />
             Criar oportunidade no Kanban
           </label>
-          {createOpportunity && (
+          {(createOpportunity || createOpportunityOnReply) && (
             <>
+              <div className="grid gap-1 text-sm">
+                <span className="font-medium">Quando criar ou mover</span>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="opportunity-timing"
+                    checked={createOpportunity}
+                    onChange={() => {
+                      setCreateOpportunity(true);
+                      setCreateOpportunityOnReply(false);
+                    }}
+                  />
+                  Antes de enviar a primeira mensagem
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="opportunity-timing"
+                    checked={createOpportunityOnReply}
+                    onChange={() => {
+                      setCreateOpportunity(false);
+                      setCreateOpportunityOnReply(true);
+                    }}
+                  />
+                  Na primeira resposta: cria o card ou move o card aberto deste funil
+                </label>
+              </div>
               <label className="grid gap-1 text-sm">
                 Pipeline
                 <select

@@ -29,6 +29,7 @@ const configSchema = z
     interval_seconds: z.coerce.number().int().min(60).max(86400).default(300),
     delay_before_audio_seconds: z.coerce.number().int().min(0).max(60).default(2),
     create_lead_before_send: z.boolean().default(true),
+    create_lead_on_reply: z.boolean().default(false),
     ai_mode: z.enum(["paused", "inherit", "active"]).default("paused"),
     business_hour_start: z
       .string()
@@ -40,11 +41,21 @@ const configSchema = z
       .default("18:00"),
   })
   .superRefine((value, context) => {
-    if (value.create_lead_before_send && (!value.pipeline_id || !value.stage_id)) {
+    if (
+      (value.create_lead_before_send || value.create_lead_on_reply) &&
+      (!value.pipeline_id || !value.stage_id)
+    ) {
       context.addIssue({
         code: "custom",
         message: "Escolha o pipeline e a etapa para criar oportunidades.",
         path: ["pipeline_id"],
+      });
+    }
+    if (value.create_lead_before_send && value.create_lead_on_reply) {
+      context.addIssue({
+        code: "custom",
+        message: "Escolha criar antes do envio ou somente depois da resposta.",
+        path: ["create_lead_on_reply"],
       });
     }
     if (value.distribution_mode === "single" && value.channel_session_ids.length !== 1) {
@@ -232,6 +243,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       business_hour_end: config.business_hour_end,
       delay_before_audio_seconds: config.delay_before_audio_seconds,
       create_lead_before_send: config.create_lead_before_send,
+      create_lead_on_reply: config.create_lead_on_reply,
       ai_mode: config.ai_mode,
       status: "draft",
       created_by_user_id: authz.user.id,
