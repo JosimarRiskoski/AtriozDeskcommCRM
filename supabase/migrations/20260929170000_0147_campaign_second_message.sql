@@ -22,6 +22,9 @@ create index if not exists idx_outreach_recipients_followup_due
   on public.outreach_campaign_recipients (followup_due_at)
   where status = 'sent' and followup_sent_at is null;
 
+-- A assinatura retorna novos campos para o worker; PostgreSQL exige recriar a função.
+drop function if exists public.fn_claim_due_outreach_recipient(integer);
+
 create or replace function public.fn_claim_due_outreach_recipient(p_lease_seconds integer default 180)
 returns table (
   recipient_id uuid, campaign_id uuid, organization_id uuid, conversation_id uuid,
