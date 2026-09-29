@@ -73,6 +73,8 @@ export function CampaignsClient({
   const [divideConnections, setDivideConnections] = useState(false);
   const [createOpportunity, setCreateOpportunity] = useState(true);
   const [createOpportunityOnReply, setCreateOpportunityOnReply] = useState(false);
+  const [sendFollowup, setSendFollowup] = useState(false);
+  const [followupDelayHours, setFollowupDelayHours] = useState(24);
   const [intervalSeconds, setIntervalSeconds] = useState(300);
   const [businessStart, setBusinessStart] = useState("08:00");
   const [businessEnd, setBusinessEnd] = useState("18:00");
@@ -153,6 +155,8 @@ export function CampaignsClient({
           pipeline_id: createOpportunity || createOpportunityOnReply ? pipelineId : null,
           stage_id: createOpportunity || createOpportunityOnReply ? stageId : null,
           text_template: form.get("text"),
+          followup_text_template: sendFollowup ? form.get("followup_text") : null,
+          followup_delay_seconds: followupDelayHours * 60 * 60,
           interval_seconds: intervalSeconds,
           business_hour_start: businessStart,
           business_hour_end: businessEnd,
@@ -389,6 +393,45 @@ export function CampaignsClient({
             Variáveis: {"{{primeiro_nome}}"}, {"{{nome}}"} e {"{{telefone}}"}
           </span>
         </label>
+        <fieldset className="grid gap-3 rounded-md border p-3 text-sm lg:col-span-2">
+          <label className="flex items-center gap-2 font-medium">
+            <input
+              type="checkbox"
+              checked={sendFollowup}
+              onChange={(event) => setSendFollowup(event.target.checked)}
+            />
+            Enviar segunda mensagem se não houver resposta
+          </label>
+          {sendFollowup && (
+            <>
+              <label className="grid gap-1">
+                Aguardar antes da segunda mensagem (horas)
+                <input
+                  type="number"
+                  min={1}
+                  max={720}
+                  value={followupDelayHours}
+                  onChange={(event) => setFollowupDelayHours(Number(event.target.value))}
+                  className={field}
+                />
+              </label>
+              <label className="grid gap-1">
+                Segunda mensagem
+                <textarea
+                  name="followup_text"
+                  required={sendFollowup}
+                  maxLength={4096}
+                  rows={3}
+                  placeholder="Olá {{primeiro_nome}}, conseguiu ver minha mensagem?"
+                  className={field}
+                />
+                <span className="text-xs text-muted-foreground">
+                  Ela só é enviada para quem não responder à primeira mensagem.
+                </span>
+              </label>
+            </>
+          )}
+        </fieldset>
         <label className="grid gap-1 text-sm">
           Origem da lista
           <select

@@ -17,6 +17,8 @@ type Recipient = {
   status: string;
   text_sent_at: string | null;
   audio_sent_at: string | null;
+  followup_due_at: string | null;
+  followup_sent_at: string | null;
   sent_at: string | null;
   replied_at: string | null;
   attempts: number;
@@ -38,6 +40,8 @@ type Detail = {
     status: string;
     interval_seconds: number;
     delay_before_audio_seconds: number;
+    followup_text_template: string | null;
+    followup_delay_seconds: number;
     ai_mode: string;
     next_dispatch_at: string | null;
     started_at: string | null;
@@ -196,6 +200,11 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
             <p className="mt-1 text-sm text-muted-foreground">
               Atualização automática a cada 5 segundos.
             </p>
+            {campaign.followup_text_template && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Segunda mensagem em {Math.round(campaign.followup_delay_seconds / 3600)}h, somente sem resposta.
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             {["scheduled", "running"].includes(campaign.status) && (
