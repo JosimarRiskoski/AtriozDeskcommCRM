@@ -136,7 +136,8 @@ export class EvolutionClient {
   ) {}
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const timeoutMs = path.includes("/chat/getBase64FromMediaMessage")
+    const timeoutMs = path.includes("/chat/getBase64FromMediaMessage") ||
+      path.includes("/message/sendWhatsAppAudio")
       ? EVOLUTION_MEDIA_REQUEST_TIMEOUT_MS
       : EVOLUTION_REQUEST_TIMEOUT_MS;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -345,6 +346,13 @@ export class EvolutionClient {
         caption: input.caption ?? undefined,
         fileName: input.fileName,
       }),
+    });
+  }
+
+  async sendWhatsAppAudio(instanceName: string, number: string, audio: string): Promise<unknown> {
+    return this.request(`/message/sendWhatsAppAudio/${encodeURIComponent(instanceName)}`, {
+      method: "POST",
+      body: JSON.stringify({ number, audio }),
     });
   }
 

@@ -11,6 +11,22 @@ describe("EvolutionClient webhook configuration", () => {
   beforeEach(() => vi.restoreAllMocks());
   afterEach(() => vi.restoreAllMocks());
 
+  it("envia audio de campanha como mensagem de voz WhatsApp", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ key: { id: "voice-1" } }), { status: 201 }),
+    );
+    const client = new EvolutionClient("http://evolution:8080", "secret");
+    await client.sendWhatsAppAudio("crm-1", "5547999999999", "https://media.example.com/audio.ogg");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://evolution:8080/message/sendWhatsAppAudio/crm-1",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ number: "5547999999999", audio: "https://media.example.com/audio.ogg" }),
+      }),
+    );
+  });
+
   it("creates an instance with a lightweight secure unified webhook", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

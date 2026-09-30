@@ -1,13 +1,14 @@
 import { createLeadHandler, moveLeadHandler } from "@/app/api/v1/leads/_handler";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import {
+  campaignReplyLeadTitle,
   decideReplyOpportunityAction,
   type ReplyOpportunityDecision,
 } from "./reply-opportunity-decision";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-export { decideReplyOpportunityAction, type ReplyOpportunityDecision };
+export { campaignReplyLeadTitle, decideReplyOpportunityAction, type ReplyOpportunityDecision };
 
 type CampaignReplyCandidate = {
   id: string;
@@ -81,6 +82,15 @@ export async function createOrMoveCampaignOpportunityOnReply(input: {
 
     if (decision === "create") {
       try {
+        const { data: contact, error: contactError } = await admin
+          .from("contacts")
+          .select("name,display_name,phone_number")
+          .eq("organization_id", organizationId)
+          .eq("id", contactId)
+          .single();
+        if (contactError || !contact) {
+          throw new Error(`campaign_reply_contact_lookup_failed:${contactError?.message ?? "not_found"}`);
+        }
         const lead = await createLeadHandler(
           admin,
           {
@@ -91,7 +101,7 @@ export async function createOrMoveCampaignOpportunityOnReply(input: {
           {
             pipeline_id: campaign.pipeline_id,
             stage_id: targetStageId,
-            title: campaign.name,
+            title: campaignReplyLeadTitle(contact),
             contact_id: contactId,
             conversation_id: conversationId,
             currency: "BRL",

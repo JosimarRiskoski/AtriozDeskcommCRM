@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideReplyOpportunityAction } from "./reply-opportunity-decision";
+import { campaignReplyLeadTitle, decideReplyOpportunityAction } from "./reply-opportunity-decision";
 
 describe("decideReplyOpportunityAction", () => {
   it("cria o primeiro card quando o contato ainda nao tem oportunidade aberta", () => {
@@ -24,5 +24,17 @@ describe("decideReplyOpportunityAction", () => {
         targetPipelineId: "pipeline-da-campanha",
       }),
     ).toBe("link_only");
+  });
+});
+
+describe("campaignReplyLeadTitle", () => {
+  it("identifica o contato pelo nome e telefone, nunca pelo nome da campanha", () => {
+    expect(campaignReplyLeadTitle({ name: "Debora", display_name: null, phone_number: "+5547988976484" }))
+      .toBe("Debora · +5547988976484");
+  });
+
+  it("usa telefone quando o contato ainda nao tem nome", () => {
+    expect(campaignReplyLeadTitle({ name: null, display_name: null, phone_number: "+5547999999999" }))
+      .toBe("+5547999999999");
   });
 });

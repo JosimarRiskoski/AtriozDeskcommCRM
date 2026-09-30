@@ -316,21 +316,29 @@ export async function sendMessageHandler(
             throw new Error(`storage_sign_failed: ${signErr?.message ?? "no_url"}`);
           }
           const filename = input.media_storage_path.split("/").pop() ?? undefined;
-          providerRes = await evolution.sendMedia(instanceName, {
-            number: target,
-            mediaType:
-              input.type === "audio"
-                ? "audio"
-                : input.type === "video"
-                  ? "video"
-                  : input.type === "document"
-                    ? "document"
-                    : "image",
-            media: signed.signedUrl,
-            mimeType: input.media_mime ?? "application/octet-stream",
-            fileName: filename,
-            caption: input.body ?? null,
-          });
+          if (
+            input.type === "audio" &&
+            input.metadata?.campaign_part === "automatic_reply_audio" &&
+            input.metadata?.automation === "campaign_reply"
+          ) {
+            providerRes = await evolution.sendWhatsAppAudio(instanceName, target, signed.signedUrl);
+          } else {
+            providerRes = await evolution.sendMedia(instanceName, {
+              number: target,
+              mediaType:
+                input.type === "audio"
+                  ? "audio"
+                  : input.type === "video"
+                    ? "video"
+                    : input.type === "document"
+                      ? "document"
+                      : "image",
+              media: signed.signedUrl,
+              mimeType: input.media_mime ?? "application/octet-stream",
+              fileName: filename,
+              caption: input.body ?? null,
+            });
+          }
         } else if (input.interactive_poll) {
           providerRes = await evolution.sendPoll(
             instanceName,
