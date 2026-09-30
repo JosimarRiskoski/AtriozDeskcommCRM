@@ -7,6 +7,7 @@ import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { renderCampaignText } from "@/lib/campaigns/worker-helpers";
 import { createOrMoveCampaignOpportunityOnReply } from "@/lib/campaigns/reply-opportunity";
 import {
+  campaignReplyAudioDestination,
   campaignReplyDueAt,
   shouldAdvanceCampaignLead,
 } from "@/lib/campaigns/reply-automation-helpers";
@@ -300,8 +301,13 @@ export async function runCampaignReplyAutomation(
           setTimeout(resolve, candidate.outreach_campaigns!.reply_text_audio_gap_seconds * 1000),
         );
       }
-      const filename = audioSource!.split("/").pop() || "reply-audio.ogg";
-      const destination = `${row.organization_id}/campaigns/${candidate.campaign_id}/recipients/${candidate.id}/reply-${filename}`;
+      const destination = campaignReplyAudioDestination({
+        organizationId: row.organization_id,
+        conversationId: candidate.conversation_id,
+        campaignId: candidate.campaign_id,
+        recipientId: candidate.id,
+        sourcePath: audioSource!,
+      });
       const { error: copyError } = await admin.storage
         .from("whatsapp-media")
         .copy(audioSource!, destination);
