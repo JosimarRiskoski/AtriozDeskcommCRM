@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 export interface CampaignConnectionCapacity {
   id: string;
   label: string;
@@ -17,27 +15,23 @@ export interface CampaignAssignment<T extends CampaignRecipientInput> {
 }
 
 /**
- * Embaralhamento estável e leve: muda apenas a ordem, nunca escolhe conexão
- * aleatoriamente. Depois distribui pelo menor número atribuído, respeitando a
- * capacidade restante de cada conexão.
+ * Preserva a ordem de entrada (inclusive a ordem do CSV). Distribui pelo menor
+ * número atribuído, respeitando a capacidade restante de cada conexão.
  */
 export function distributeCampaignRecipients<T extends CampaignRecipientInput>(
   recipients: T[],
   connections: CampaignConnectionCapacity[],
-  seed: string,
+  _seed: string,
 ): {
   assignments: CampaignAssignment<T>[];
   excludedByCapacity: T[];
   counts: Record<string, number>;
 } {
   const healthy = connections.filter((connection) => connection.remainingCapacity > 0);
-  const ordered = recipients
-    .slice()
-    .sort((a, b) => stableScore(seed, a.key).localeCompare(stableScore(seed, b.key)));
   const counts = Object.fromEntries(healthy.map((connection) => [connection.id, 0]));
   const assignments: CampaignAssignment<T>[] = [];
   const excludedByCapacity: T[] = [];
-  for (const recipient of ordered) {
+  for (const recipient of recipients) {
     const candidate = healthy
       .filter((connection) => (counts[connection.id] ?? 0) < connection.remainingCapacity)
       .sort((a, b) => (counts[a.id] ?? 0) - (counts[b.id] ?? 0) || a.id.localeCompare(b.id))[0];
@@ -50,10 +44,6 @@ export function distributeCampaignRecipients<T extends CampaignRecipientInput>(
     counts[candidate.id] = position + 1;
   }
   return { assignments, excludedByCapacity, counts };
-}
-
-function stableScore(seed: string, value: string) {
-  return createHash("sha256").update(`${seed}:${value}`).digest("hex");
 }
 
 export function estimateCampaignSchedule(input: {

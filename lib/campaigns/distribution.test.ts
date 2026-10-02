@@ -28,6 +28,20 @@ describe("campaign distribution", () => {
     );
   });
 
+  it("preserves CSV order when assigning recipients", () => {
+    const recipients = [
+      { key: "contact-first", row: 2 },
+      { key: "contact-second", row: 3 },
+    ];
+    const result = distributeCampaignRecipients(
+      recipients,
+      [{ id: "whatsapp", label: "WhatsApp", remainingCapacity: 10 }],
+      "campaign",
+    );
+    expect(result.assignments.map(({ recipient }) => recipient.row)).toEqual([2, 3]);
+    expect(result.assignments.map(({ connectionPosition }) => connectionPosition)).toEqual([0, 1]);
+  });
+
   it("includes overnight pauses in the forecast", () => {
     const estimate = estimateCampaignSchedule({
       now: new Date("2026-08-03T12:00:00Z"),

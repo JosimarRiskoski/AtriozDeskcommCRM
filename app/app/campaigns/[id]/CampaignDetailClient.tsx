@@ -297,7 +297,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
         </div>
       </Card>
 
-      <Card className="overflow-hidden">
+      <Card className="shrink-0 overflow-hidden">
         <div className="border-b p-4">
           <h2 className="font-semibold">Destinatários</h2>
           <p className="text-xs text-muted-foreground">
@@ -328,15 +328,15 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                       {recipient.phone_normalized}
                     </div>
                   </td>
-                  <td className="p-3 text-xs">
-                    {recipient.channel_sessions?.display_name ||
-                      recipient.channel_sessions?.phone_number ||
-                      "—"}
-                  </td>
                   <td className="p-3">
                     <Badge variant={recipientBadge(recipient.status)}>
                       {RECIPIENT_STATUS_LABELS[recipient.status] ?? recipient.status}
                     </Badge>
+                  </td>
+                  <td className="p-3 text-xs">
+                    {recipient.channel_sessions?.display_name ||
+                      recipient.channel_sessions?.phone_number ||
+                      "—"}
                   </td>
                   <td className="p-3">{dateTime(recipient.text_sent_at)}</td>
                   <td className="p-3">{dateTime(recipient.audio_sent_at)}</td>
