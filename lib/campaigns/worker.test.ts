@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isWithinBusinessHours, renderCampaignText } from "./worker-helpers";
-import { runCampaignTick } from "./worker";
+import { advanceCampaign, isTerminalCampaignRecipientStatus, runCampaignTick } from "./worker";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 describe("campaign worker helpers", () => {
@@ -31,5 +31,39 @@ describe("campaign recipient lease", () => {
     await runCampaignTick(admin);
 
     expect(leaseSeconds).toBe(900);
+  });
+});
+
+describe("campaign completion", () => {
+  it("preserva destinatario ja concluido quando a finalizacao da campanha falha", () => {
+    expect(isTerminalCampaignRecipientStatus("sent")).toBe(true);
+    expect(isTerminalCampaignRecipientStatus("replied")).toBe(true);
+    expect(isTerminalCampaignRecipientStatus("skipped")).toBe(true);
+    expect(isTerminalCampaignRecipientStatus("processing")).toBe(false);
+    expect(isTerminalCampaignRecipientStatus("pending")).toBe(false);
+  });
+
+  it("nao conclui campanha quando a consulta aos destinatarios falha", async () => {
+    let campaignUpdated = false;
+    const admin = {
+      from: (table: string) => {
+        if (table === "outreach_campaign_recipients") {
+          return {
+            select: () => ({ eq: async () => ({ data: null, error: { message: "statement timeout" } }) }),
+          };
+        }
+        if (table === "outreach_campaigns") {
+          return { update: () => { campaignUpdated = true; return { eq: async () => ({ error: null }) }; } };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      },
+    } as unknown as SupabaseClient;
+
+    await expect(advanceCampaign(admin, {
+      campaign_id: "campaign-1",
+      interval_seconds: 300,
+    } as Parameters<typeof advanceCampaign>[1], new Date("2026-10-05T20:00:00Z")))
+      .rejects.toThrow("campaign_recipient_status_lookup_failed:statement timeout");
+    expect(campaignUpdated).toBe(false);
   });
 });

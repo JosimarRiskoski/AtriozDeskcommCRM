@@ -36,18 +36,26 @@ export type CampaignTickSummary = {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function advanceCampaign(admin: Admin, claim: Claim, now: Date): Promise<boolean> {
-  const { data: recipients } = await admin
+export function isTerminalCampaignRecipientStatus(status: string | null | undefined): boolean {
+  return status === "sent" || status === "replied" || status === "skipped" ||
+    status === "failed" || status === "cancelled";
+}
+
+export async function advanceCampaign(admin: Admin, claim: Claim, now: Date): Promise<boolean> {
+  const { data: recipients, error: recipientsError } = await admin
     .from("outreach_campaign_recipients")
     .select("status")
     .eq("campaign_id", claim.campaign_id);
+  if (recipientsError) {
+    throw new Error(`campaign_recipient_status_lookup_failed:${recipientsError.message}`);
+  }
   const active = (recipients ?? []).some((recipient) => {
     if (recipient.status === "pending" || recipient.status === "processing") return true;
     return false;
   });
   const completed = !active;
   const timestamp = now.toISOString();
-  await admin
+  const { error: campaignUpdateError } = await admin
     .from("outreach_campaigns")
     .update(
       completed
@@ -63,6 +71,9 @@ async function advanceCampaign(admin: Admin, claim: Claim, now: Date): Promise<b
           },
     )
     .eq("id", claim.campaign_id);
+  if (campaignUpdateError) {
+    throw new Error(`campaign_advance_failed:${campaignUpdateError.message}`);
+  }
   return completed;
 }
 
@@ -314,11 +325,21 @@ export async function runCampaignTick(
       summary.deferred = 1;
       return summary;
     }
-    const { data: current } = await admin
+    const { data: current, error: currentError } = await admin
       .from("outreach_campaign_recipients")
-      .select("attempts")
+      .select("attempts,status")
       .eq("id", claim.recipient_id)
       .maybeSingle();
+    if (currentError) throw new Error(`campaign_recipient_recovery_lookup_failed:${currentError.message}`);
+    if (isTerminalCampaignRecipientStatus(current?.status)) {
+      console.error("[campaign.worker] Campaign finalization failed after recipient reached terminal state", {
+        campaign_id: claim.campaign_id,
+        recipient_id: claim.recipient_id,
+        error: message.slice(0, 500),
+      });
+      summary.sent = current?.status === "sent" || current?.status === "replied" ? 1 : 0;
+      return summary;
+    }
     const failed = Number(current?.attempts ?? 1) >= 3;
     await admin
       .from("outreach_campaign_recipients")
