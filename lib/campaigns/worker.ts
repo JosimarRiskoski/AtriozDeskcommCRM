@@ -41,6 +41,10 @@ export function isTerminalCampaignRecipientStatus(status: string | null | undefi
     status === "failed" || status === "cancelled";
 }
 
+export function isAmbiguousCampaignDelivery(message: string): boolean {
+  return message.startsWith("provider_confirmation_uncertain:");
+}
+
 export async function advanceCampaign(admin: Admin, claim: Claim, now: Date): Promise<boolean> {
   const { data: recipients, error: recipientsError } = await admin
     .from("outreach_campaign_recipients")
@@ -340,17 +344,23 @@ export async function runCampaignTick(
       summary.sent = current?.status === "sent" || current?.status === "replied" ? 1 : 0;
       return summary;
     }
-    const failed = Number(current?.attempts ?? 1) >= 3;
-    await admin
+    // A Evolution aceitou a mensagem, mas o banco não confirmou. Repetir o
+    // envio automaticamente pode duplicá-la no aparelho do destinatário.
+    const ambiguous = isAmbiguousCampaignDelivery(message);
+    const failed = ambiguous || Number(current?.attempts ?? 1) >= 3;
+    const { error: recoveryError } = await admin
       .from("outreach_campaign_recipients")
       .update({
         status: failed ? "failed" : "pending",
         processing_lease_until: null,
         last_error_code: message.split(":", 1)[0],
-        last_error_message: message.slice(0, 500),
+        last_error_message: ambiguous
+          ? "Entrega incerta: o WhatsApp aceitou a mensagem, mas o CRM não confirmou o registro. Confira no aparelho antes de reenviar."
+          : message.slice(0, 500),
         updated_at: new Date().toISOString(),
       })
       .eq("id", claim.recipient_id);
+    if (recoveryError) throw new Error(`campaign_recipient_recovery_failed:${recoveryError.message}`);
     if (failed) {
       summary.completed = (await advanceCampaign(admin, claim, now)) ? 1 : 0;
     } else {

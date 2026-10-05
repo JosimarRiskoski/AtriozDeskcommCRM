@@ -301,6 +301,7 @@ export async function sendMessageHandler(
       .maybeSingle();
     if (updated) message = updated as unknown as Message;
   } else {
+    let confirmationError: string | null = null;
     try {
       let providerRes: unknown;
       const instanceName = c.channel_sessions.external_session_name;
@@ -352,13 +353,24 @@ export async function sendMessageHandler(
         }
       }
       const externalId = parseEvolutionMessageId(providerRes);
-      const { data: updated } = await supabase
+      const { data: updated, error: updateError } = await supabase
         .from("messages")
         .update({ status: "sent", external_id: externalId, ack: 0 })
         .eq("id", message.id)
         .select(MSG_COLS)
         .maybeSingle();
-      if (updated) message = updated as unknown as Message;
+      if (updateError || !updated) {
+        confirmationError = updateError?.message ?? "message_confirmation_missing";
+        console.error("[messages.send] Provider accepted but database confirmation failed", {
+          request_id: ctx.requestId,
+          message_id: message.id,
+          conversation_id: c.id,
+          provider_message_id: externalId,
+          database_error: confirmationError.slice(0, 500),
+        });
+      } else {
+        message = updated as unknown as Message;
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "evolution_unknown";
       const code = msg.startsWith("storage_sign_failed")
@@ -401,6 +413,9 @@ export async function sendMessageHandler(
           .eq("organization_id", c.organization_id)
           .eq("id", c.channel_session_id);
       }
+    }
+    if (confirmationError) {
+      throw new Error(`provider_confirmation_uncertain:${confirmationError}`);
     }
   }
 

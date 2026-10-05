@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isWithinBusinessHours, renderCampaignText } from "./worker-helpers";
-import { advanceCampaign, isTerminalCampaignRecipientStatus, runCampaignTick } from "./worker";
+import { advanceCampaign, isAmbiguousCampaignDelivery, isTerminalCampaignRecipientStatus, runCampaignTick } from "./worker";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 describe("campaign worker helpers", () => {
@@ -35,6 +35,10 @@ describe("campaign recipient lease", () => {
 });
 
 describe("campaign completion", () => {
+  it("nao reenvia automaticamente quando o provedor aceitou mas a confirmacao falhou", () => {
+    expect(isAmbiguousCampaignDelivery("provider_confirmation_uncertain:timeout")).toBe(true);
+    expect(isAmbiguousCampaignDelivery("campaign_text_checkpoint_failed:timeout")).toBe(false);
+  });
   it("preserva destinatario ja concluido quando a finalizacao da campanha falha", () => {
     expect(isTerminalCampaignRecipientStatus("sent")).toBe(true);
     expect(isTerminalCampaignRecipientStatus("replied")).toBe(true);
