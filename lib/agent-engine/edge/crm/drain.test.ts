@@ -31,3 +31,11 @@ it('org em ai_dispatch_mode=external: evento vira done SEM enfileirar job', asyn
   expect(calls.some((s) => s.includes('job_queue'))).toBe(false);
   expect(calls.some((s) => s.includes("status = 'done'"))).toBe(true);
 });
+
+it('reaper usa operador de array indexavel sem alterar o filtro do consumidor', async () => {
+  const query = vi.fn().mockResolvedValue({ rows: [] });
+  await drainTick({ query } as unknown as pg.Pool, knobs, log);
+  const reapSql = String(query.mock.calls[0]?.[0] ?? '');
+  expect(reapSql).toContain("consumed_by @> ARRAY[$1]::text[]");
+  expect(query.mock.calls[0]?.[1]).toEqual(['agent-engine', knobs.reapTimeoutMs]);
+});

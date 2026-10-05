@@ -59,7 +59,7 @@ export async function drainTick(
     `update event_log set status = 'pending', updated_at = now()
      where event_type = 'ai_agent.dispatch_requested'
        and status = 'processing'
-       and $1 = any(consumed_by)
+       and consumed_by @> ARRAY[$1]::text[]
        and updated_at < now() - make_interval(secs => $2 / 1000.0)`,
     [DRAIN_CONSUMER, knobs.reapTimeoutMs],
   );

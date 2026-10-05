@@ -132,13 +132,14 @@ async function wasAlreadyDelivered(
   claim: Claim,
   part: "text" | "audio",
 ): Promise<boolean> {
-  const { count } = await admin
+  const { count, error } = await admin
     .from("messages")
     .select("id", { count: "exact", head: true })
     .eq("organization_id", claim.organization_id)
     .eq("conversation_id", claim.conversation_id)
     .in("status", ["sent", "delivered", "read"])
     .contains("metadata", { campaign_recipient_id: claim.recipient_id, campaign_part: part });
+  if (error) throw new Error(`campaign_delivery_lookup_failed:${error.message}`);
   return (count ?? 0) > 0;
 }
 
@@ -154,7 +155,9 @@ export async function runCampaignTick(
     completed: 0,
   };
   const { data, error } = await admin.rpc("fn_claim_due_outreach_recipient", {
-    p_lease_seconds: 180,
+    // A confirmação no banco pode demorar mais de 3 min sob degradação.
+    // Evita que outro tick reclame o mesmo contato enquanto o envio termina.
+    p_lease_seconds: 900,
   });
   if (error) throw new Error(`campaign_claim_failed:${error.message}`);
   const claim = (Array.isArray(data) ? data[0] : null) as Claim | undefined;
@@ -221,10 +224,11 @@ export async function runCampaignTick(
       });
       if (text.status !== "sent") throw new Error(text.error_code || `text_${text.status}`);
       const textSentAt = new Date().toISOString();
-      await admin
+      const { error: textUpdateError } = await admin
         .from("outreach_campaign_recipients")
         .update({ text_sent_at: textSentAt, updated_at: textSentAt })
         .eq("id", claim.recipient_id);
+      if (textUpdateError) throw new Error(`campaign_text_checkpoint_failed:${textUpdateError.message}`);
       claim.text_sent_at = textSentAt;
     }
 
@@ -256,7 +260,7 @@ export async function runCampaignTick(
     }
 
     const sentAt = new Date().toISOString();
-    await admin
+    const { error: recipientUpdateError } = await admin
       .from("outreach_campaign_recipients")
       .update({
         status: "sent",
@@ -269,6 +273,7 @@ export async function runCampaignTick(
         updated_at: sentAt,
       })
       .eq("id", claim.recipient_id);
+    if (recipientUpdateError) throw new Error(`campaign_recipient_finalize_failed:${recipientUpdateError.message}`);
     const completed = await advanceCampaign(admin, claim, new Date(sentAt));
     summary.sent = 1;
     summary.completed = completed ? 1 : 0;
