@@ -242,7 +242,7 @@ export function CampaignsClient({
         </p>
       </header>
       <form action={create} className="grid gap-4 rounded-lg border bg-card p-5 lg:grid-cols-2">
-        <label className="grid gap-1 text-sm">
+        <label className="grid self-start gap-1 text-sm">
           Nome da campanha
           <input name="name" required maxLength={120} className={field} />
         </label>
