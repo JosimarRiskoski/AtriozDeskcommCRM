@@ -373,45 +373,58 @@ export async function sendMessageHandler(
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "evolution_unknown";
-      const code = msg.startsWith("storage_sign_failed")
-        ? "storage_sign_failed"
-        : isEvolutionClosedSessionError(msg)
-          ? "evolution_connection_closed"
-          : "evolution_error";
-      console.error("[messages.send] Evolution dispatch failed", {
-        request_id: ctx.requestId,
-        message_id: message.id,
-        conversation_id: c.id,
-        channel_session_id: c.channel_session_id,
-        error_code: code,
-        provider_error: msg.slice(0, 500),
-      });
-      const { data: updated } = await supabase
-        .from("messages")
-        .update({
-          status: "failed",
+      if (msg.startsWith("evolution_timeout:")) {
+        // O timeout pode acontecer depois de a Evolution aceitar o envio.
+        // Não registrar como falha definitiva nem permitir retry automático.
+        confirmationError = msg;
+        console.error("[messages.send] Evolution response timed out; delivery is uncertain", {
+          request_id: ctx.requestId,
+          message_id: message.id,
+          conversation_id: c.id,
+          channel_session_id: c.channel_session_id,
+          provider_error: msg.slice(0, 500),
+        });
+      } else {
+        const code = msg.startsWith("storage_sign_failed")
+          ? "storage_sign_failed"
+          : isEvolutionClosedSessionError(msg)
+            ? "evolution_connection_closed"
+            : "evolution_error";
+        console.error("[messages.send] Evolution dispatch failed", {
+          request_id: ctx.requestId,
+          message_id: message.id,
+          conversation_id: c.id,
+          channel_session_id: c.channel_session_id,
           error_code: code,
-          error_message: msg,
-        })
-        .eq("id", message.id)
-        .select(MSG_COLS)
-        .maybeSingle();
-      if (updated) message = updated as unknown as Message;
-
-      if (code === "evolution_connection_closed") {
-        const failedAt = new Date().toISOString();
-        await supabase
-          .from("channel_sessions")
+          provider_error: msg.slice(0, 500),
+        });
+        const { data: updated } = await supabase
+          .from("messages")
           .update({
-            status: "FAILED",
-            status_reason:
-              "Sessão do WhatsApp encerrada na Evolution. Reconecte por QR Code.",
-            last_status_change_at: failedAt,
-            last_health_check_at: failedAt,
-            consecutive_health_fails: 1,
+            status: "failed",
+            error_code: code,
+            error_message: msg,
           })
-          .eq("organization_id", c.organization_id)
-          .eq("id", c.channel_session_id);
+          .eq("id", message.id)
+          .select(MSG_COLS)
+          .maybeSingle();
+        if (updated) message = updated as unknown as Message;
+
+        if (code === "evolution_connection_closed") {
+          const failedAt = new Date().toISOString();
+          await supabase
+            .from("channel_sessions")
+            .update({
+              status: "FAILED",
+              status_reason:
+                "Sessão do WhatsApp encerrada na Evolution. Reconecte por QR Code.",
+              last_status_change_at: failedAt,
+              last_health_check_at: failedAt,
+              consecutive_health_fails: 1,
+            })
+            .eq("organization_id", c.organization_id)
+            .eq("id", c.channel_session_id);
+        }
       }
     }
     if (confirmationError) {

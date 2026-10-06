@@ -37,6 +37,7 @@ describe("campaign recipient lease", () => {
 describe("campaign completion", () => {
   it("nao reenvia automaticamente quando o provedor aceitou mas a confirmacao falhou", () => {
     expect(isAmbiguousCampaignDelivery("provider_confirmation_uncertain:timeout")).toBe(true);
+    expect(isAmbiguousCampaignDelivery("provider_confirmation_uncertain:evolution_timeout: 15000ms")).toBe(true);
     expect(isAmbiguousCampaignDelivery("campaign_text_checkpoint_failed:timeout")).toBe(false);
   });
   it("preserva destinatario ja concluido quando a finalizacao da campanha falha", () => {
