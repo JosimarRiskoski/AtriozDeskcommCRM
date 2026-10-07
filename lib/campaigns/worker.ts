@@ -45,7 +45,7 @@ export function isAmbiguousCampaignDelivery(message: string): boolean {
   return message.startsWith("provider_confirmation_uncertain:");
 }
 
-export async function advanceCampaign(admin: Admin, claim: Claim, now: Date): Promise<boolean> {
+export async function advanceCampaign(admin: Admin, claim: Claim, now: Date, immediately = false): Promise<boolean> {
   const { data: recipients, error: recipientsError } = await admin
     .from("outreach_campaign_recipients")
     .select("status")
@@ -70,7 +70,7 @@ export async function advanceCampaign(admin: Admin, claim: Claim, now: Date): Pr
             updated_at: timestamp,
           }
         : {
-            next_dispatch_at: new Date(now.getTime() + claim.interval_seconds * 1000).toISOString(),
+            next_dispatch_at: new Date(now.getTime() + (immediately ? 0 : claim.interval_seconds * 1000)).toISOString(),
             updated_at: timestamp,
           },
     )
@@ -221,7 +221,7 @@ export async function runCampaignTick(
           updated_at: skippedAt,
         })
         .eq("id", claim.recipient_id);
-      summary.completed = (await advanceCampaign(admin, claim, now)) ? 1 : 0;
+      summary.completed = (await advanceCampaign(admin, claim, now, true)) ? 1 : 0;
       return summary;
     }
     if (!claim.text_sent_at && (await wasAlreadyDelivered(admin, claim, "text")))

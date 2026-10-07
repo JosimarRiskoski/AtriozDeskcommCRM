@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChannelBadge } from "@/components/channels/ChannelBadge";
@@ -62,6 +62,7 @@ export function CampaignsClient({
   const [preview, setPreview] = useState<Preview[]>([]);
   const [previewSummary, setPreviewSummary] = useState<PreviewSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const creatingRef = useRef(false);
   const [pipelineId, setPipelineId] = useState(pipelines[0]?.id ?? "");
   const firstWorkingSession =
     sessions.find((item) => item.status === "WORKING" && item.is_default)?.id ??
@@ -133,6 +134,7 @@ export function CampaignsClient({
   }
 
   async function create(form: FormData) {
+    if (creatingRef.current) return;
     if (
       (source === "csv" && !file) ||
       (source === "google_sheets" && !spreadsheet.trim()) ||
@@ -150,6 +152,7 @@ export function CampaignsClient({
       );
       return;
     }
+    creatingRef.current = true;
     setBusy(true);
     try {
       const body = new FormData();
@@ -209,6 +212,7 @@ export function CampaignsClient({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao criar campanha.");
     } finally {
+      creatingRef.current = false;
       setBusy(false);
     }
   }
@@ -241,7 +245,16 @@ export function CampaignsClient({
           segura.
         </p>
       </header>
-      <form action={create} className="grid gap-4 rounded-lg border bg-card p-5 lg:grid-cols-2">
+      <form action={create} aria-busy={busy} className="relative grid gap-4 rounded-lg border bg-card p-5 lg:grid-cols-2">
+        {busy && (
+          <div role="status" aria-live="polite" className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/85 p-6 text-center backdrop-blur-sm">
+            <div className="rounded-lg border bg-card p-5 shadow-sm">
+              <span className="mx-auto mb-3 block size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-hidden="true" />
+              <p className="font-medium">Preparando o rascunho da campanha...</p>
+              <p className="mt-1 text-sm text-muted-foreground">Aguarde a confirmação. Não é necessário clicar novamente.</p>
+            </div>
+          </div>
+        )}
         <label className="grid self-start gap-1 text-sm">
           Nome da campanha
           <input name="name" required maxLength={120} className={field} />
@@ -579,6 +592,7 @@ export function CampaignsClient({
           <button
             type="button"
             onClick={previewList}
+            disabled={busy}
             className="rounded-md border px-4 py-2 text-sm"
           >
             Validar e visualizar
@@ -587,7 +601,7 @@ export function CampaignsClient({
             disabled={busy || eligible === 0}
             className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
           >
-            Criar rascunho
+            {busy ? "Preparando rascunho..." : "Criar rascunho"}
           </button>
         </div>
         {preview.length > 0 && (

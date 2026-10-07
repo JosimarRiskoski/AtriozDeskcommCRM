@@ -35,6 +35,26 @@ describe("campaign recipient lease", () => {
 });
 
 describe("campaign completion", () => {
+  it("libera o proximo contato sem esperar a cadencia quando o numero nao tem WhatsApp", async () => {
+    let nextDispatchAt: string | null = null;
+    const admin = {
+      from: (table: string) => {
+        if (table === "outreach_campaign_recipients") {
+          return { select: () => ({ eq: async () => ({ data: [{ status: "skipped" }, { status: "pending" }], error: null }) }) };
+        }
+        if (table === "outreach_campaigns") {
+          return { update: (row: { next_dispatch_at: string | null }) => {
+            nextDispatchAt = row.next_dispatch_at;
+            return { eq: async () => ({ error: null }) };
+          } };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      },
+    } as unknown as SupabaseClient;
+    const now = new Date("2026-10-07T20:00:00Z");
+    await advanceCampaign(admin, { campaign_id: "campaign-1", interval_seconds: 300 } as Parameters<typeof advanceCampaign>[1], now, true);
+    expect(nextDispatchAt).toBe(now.toISOString());
+  });
   it("nao reenvia automaticamente quando o provedor aceitou mas a confirmacao falhou", () => {
     expect(isAmbiguousCampaignDelivery("provider_confirmation_uncertain:timeout")).toBe(true);
     expect(isAmbiguousCampaignDelivery("provider_confirmation_uncertain:evolution_timeout: 15000ms")).toBe(true);
