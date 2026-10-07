@@ -187,9 +187,10 @@ export async function runDrainLoop(
   signal: AbortSignal,
 ): Promise<void> {
   let nextReapAt = 0;
-  // No máximo um minuto extra para recuperar um lease expirado; timeouts
-  // menores continuam sendo inspecionados pelo menos nessa mesma cadência.
-  const reapIntervalMs = Math.max(1, Math.min(60_000, knobs.reapTimeoutMs));
+  // A varredura de órfãos é cara mesmo quando não há eventos a recuperar.
+  // Uma inspeção por timeout de lease (limitada a cinco minutos) mantém a
+  // recuperação ativa sem repetir a mesma busca a cada minuto ocioso.
+  const reapIntervalMs = Math.max(60_000, Math.min(300_000, knobs.reapTimeoutMs));
   while (!signal.aborted) {
     let drained = 0;
     try {

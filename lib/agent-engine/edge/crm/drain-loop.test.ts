@@ -13,15 +13,15 @@ const log = { error: vi.fn(), warn: vi.fn(), info: vi.fn() } as unknown as Logge
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 
 describe('drain idle lifecycle', () => {
-  it('keeps claiming every idle tick but reaps only once per minute', async () => {
+  it('keeps claiming every idle tick but reaps no more often than the lease timeout', async () => {
     vi.useFakeTimers();
     const controller = new AbortController();
     const query = vi.fn().mockResolvedValue({ rows: [] });
     const running = runDrainLoop({ query } as unknown as pg.Pool, knobs, log, controller.signal);
-    await vi.advanceTimersByTimeAsync(59_999);
+    await vi.advanceTimersByTimeAsync(119_999);
     const reapCount = () => query.mock.calls.filter(([sql]) => sql.includes("set status = 'pending'")).length;
     expect(reapCount()).toBe(1);
-    expect(query.mock.calls.filter(([sql]) => sql.includes('skip locked'))).toHaveLength(4);
+    expect(query.mock.calls.filter(([sql]) => sql.includes('skip locked'))).toHaveLength(8);
     await vi.advanceTimersByTimeAsync(1);
     expect(reapCount()).toBe(2);
     controller.abort();
