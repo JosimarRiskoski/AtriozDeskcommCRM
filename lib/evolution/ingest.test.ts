@@ -4,7 +4,51 @@ process.env.NEXT_PUBLIC_SUPABASE_URL ??= "https://example.supabase.co";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "test-anon-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const { evolutionReceiptId, isProcessableEvolutionEvent, normalizeEvolutionMessage } = await import("./ingest");
+const {
+  evolutionReceiptId,
+  isProcessableEvolutionEvent,
+  isRedundantEvolutionConnectionUpdate,
+  normalizeEvolutionMessage,
+} = await import("./ingest");
+
+describe("isRedundantEvolutionConnectionUpdate", () => {
+  const session = {
+    id: "session-1",
+    organization_id: "org-1",
+    external_session_name: "whatsapp-1",
+    status: "WORKING",
+    status_reason: null,
+    is_warmup_complete: true,
+    warmup_started_at: null,
+  };
+
+  it("ignora notificações repetidas de conexão estável", () => {
+    expect(
+      isRedundantEvolutionConnectionUpdate(session, {
+        event: "CONNECTION_UPDATE",
+        data: { state: "open" },
+      }),
+    ).toBe(true);
+  });
+
+  it("preserva transições reais, limpeza de motivo e fim do aquecimento", () => {
+    const open = { event: "CONNECTION_UPDATE", data: { state: "open" } };
+    expect(isRedundantEvolutionConnectionUpdate({ ...session, status: "STARTING" }, open)).toBe(false);
+    expect(isRedundantEvolutionConnectionUpdate({ ...session, status_reason: "offline" }, open)).toBe(false);
+    expect(
+      isRedundantEvolutionConnectionUpdate(
+        { ...session, is_warmup_complete: false, warmup_started_at: "2026-10-12T12:00:00Z" },
+        open,
+      ),
+    ).toBe(false);
+  });
+
+  it("não interfere nos recibos e mensagens", () => {
+    expect(
+      isRedundantEvolutionConnectionUpdate(session, { event: "MESSAGES_UPSERT", data: {} }),
+    ).toBe(false);
+  });
+});
 
 describe("isProcessableEvolutionEvent", () => {
   it.each(["MESSAGES_UPSERT", "messages.update", "send-message-update", "CONNECTION_UPDATE"])(

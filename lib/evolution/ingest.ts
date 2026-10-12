@@ -28,6 +28,8 @@ export type EvolutionSession = {
   id: string;
   organization_id: string;
   external_session_name: string;
+  status?: string;
+  status_reason?: string | null;
   is_warmup_complete: boolean | null;
   warmup_started_at: string | null;
   provider?: "evolution";
@@ -201,6 +203,29 @@ function statusFromEvolution(data: Json): string {
   if (raw.includes("connect") || raw.includes("start")) return "STARTING";
   if (raw.includes("fail") || raw.includes("error")) return "FAILED";
   return "STOPPED";
+}
+
+/**
+ * CONNECTION_UPDATE pode chegar repetidamente com o mesmo estado. Nesses
+ * casos não há transição a auditar, e gravar log + update a cada aviso cria
+ * churn desnecessário no Postgres. A limpeza do motivo e o fim do aquecimento
+ * continuam passando pelo fluxo normal.
+ */
+export function isRedundantEvolutionConnectionUpdate(
+  session: EvolutionSession,
+  envelope: EvolutionWebhookEnvelope,
+): boolean {
+  if (normalizeEvolutionEventName(envelope.event) !== "CONNECTION_UPDATE" || !session.status)
+    return false;
+  const values = Array.isArray(envelope.data) ? envelope.data : [object(envelope.data)];
+  if (!values.length) return false;
+  return values.every((data) => {
+    const status = statusFromEvolution(object(data));
+    const needsReasonCleanup = status === "WORKING" && session.status_reason != null;
+    const needsWarmupCompletion =
+      status === "WORKING" && Boolean(session.warmup_started_at) && !session.is_warmup_complete;
+    return status === session.status && !needsReasonCleanup && !needsWarmupCompletion;
+  });
 }
 
 /** Processa cada evento da Evolution com a mesma idempotência do Inbox atual. */

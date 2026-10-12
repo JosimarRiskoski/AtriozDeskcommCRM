@@ -6,6 +6,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   dispatchEvolutionEvent,
+  isRedundantEvolutionConnectionUpdate,
   isProcessableEvolutionEvent,
   type EvolutionSession,
   type EvolutionWebhookEnvelope,
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const { data: session, error: sessionError } = await admin
     .from("channel_sessions")
     .select(
-      "id,organization_id,provider,external_session_name,is_warmup_complete,warmup_started_at",
+      "id,organization_id,provider,external_session_name,status,status_reason,is_warmup_complete,warmup_started_at",
     )
     .eq("webhook_path_token", token)
     .eq("provider", "evolution")
@@ -59,6 +60,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const instanceName = String(envelope.instance ?? envelope.instanceName ?? "");
   if (instanceName && instanceName !== session.external_session_name) {
     return fail("unauthenticated", "unexpected_instance", 401, { requestId });
+  }
+
+  if (isRedundantEvolutionConnectionUpdate(session as EvolutionSession, envelope)) {
+    return ok({ accepted: true, ignored: true }, { requestId });
   }
 
   const headers: Record<string, string> = {};

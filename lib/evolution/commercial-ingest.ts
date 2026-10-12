@@ -1081,6 +1081,8 @@ async function handleAck(
 }
 
 interface SessionStatusRow extends Session {
+  status?: string;
+  status_reason?: string | null;
   is_warmup_complete: boolean | null;
   warmup_started_at: string | null;
 }
@@ -1094,6 +1096,10 @@ async function handleSessionStatus(
   if (!status) return;
   const allowed = new Set(["STARTING", "SCAN_QR_CODE", "WORKING", "STOPPED", "FAILED"]);
   if (!allowed.has(status)) return;
+  const needsReasonCleanup = status === "WORKING" && session.status_reason != null;
+  const needsWarmupCompletion =
+    status === "WORKING" && Boolean(session.warmup_started_at) && !session.is_warmup_complete;
+  if (status === session.status && !needsReasonCleanup && !needsWarmupCompletion) return;
   const now = new Date().toISOString();
 
   const update: Record<string, unknown> = {
