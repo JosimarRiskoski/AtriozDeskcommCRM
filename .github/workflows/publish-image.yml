@@ -1,24 +1,28 @@
 name: Publicar imagem Docker (GHCR)
 
-# Builda a imagem GENÉRICA do app e publica no GitHub Container Registry.
-# O leigo puxa essa imagem no VPS (não builda lá). Roda nos runners do GitHub,
-# então o build pesado (~6min) nunca cai no VPS do usuário.
+# Publica app e worker sem consumir CPU/RAM do VPS que atende o WhatsApp.
 
 on:
   push:
     tags: ["v*"]
-    branches: ["main"]
+    branches: ["main", "codex/roadmap-fundacoes"]
   release:
     types: [published]
   workflow_dispatch: {}
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: app
+            dockerfile: Dockerfile
+            image: ghcr.io/josimarriskoski/atriozdeskcommcrm
+          - component: worker
+            dockerfile: Dockerfile.worker
+            image: ghcr.io/josimarriskoski/atriozdeskcommcrm-worker
     permissions:
       contents: read
       packages: write
@@ -28,7 +32,7 @@ jobs:
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -36,20 +40,22 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ matrix.image }}
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build e push (imagem genérica — sem segredos)
+      - name: Build e push (${{ matrix.component }} — sem segredos)
         uses: docker/build-push-action@v7
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
           # linux/amd64: o VPS HostGator e a imagem do WAHA são amd64.
           platforms: linux/amd64
           push: true
