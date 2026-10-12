@@ -51,12 +51,12 @@ x-logging: &default-logging
 
 services:
   app:
-    # Build the application from this repository. Using the upstream `latest`
-    # image here silently discarded every customization made in the Atrioz
-    # fork whenever EasyPanel redeployed the stack.
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # HOTFIX OPERACIONAL 2026-10-12: reutilizar a ultima imagem Atrioz valida
+    # no proprio host. Buildar Next + worker neste VPS de 2 cores/8 GB derrubou
+    # a Evolution durante a compilacao. Voltar ao build somente apos mover a
+    # geracao das imagens para um runner externo e validar o pull por digest.
+    image: josimaratrioz_deskcomm-app:latest
+    pull_policy: never
     restart: unless-stopped
     environment: *runtime-environment
     depends_on:
@@ -80,9 +80,10 @@ services:
     networks: [internal]
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
+    # A imagem worker foi concluida no host no deploy interrompido; contem a
+    # reducao de varreduras a567d09d. Nao refazer build junto com o app.
+    image: josimaratrioz_deskcomm-worker:latest
+    pull_policy: never
     restart: unless-stopped
     environment: *runtime-environment
     depends_on:
