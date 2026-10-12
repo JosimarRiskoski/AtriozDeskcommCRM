@@ -40,9 +40,12 @@ export async function drainEventLog(
   if (!handledTypes.length) return summary;
 
   const nowIso = new Date().toISOString();
-  const { data: rows, error } = await admin
+  // Primeiro localiza apenas as chaves: o indice de pending cobre esses
+  // campos. Ler payload/metadata antes do LIMIT faz o Postgres buscar e
+  // ordenar milhares de linhas largas mesmo quando o lote tem so 10 itens.
+  const { data: candidates, error } = await admin
     .from("event_log")
-    .select("id, organization_id, event_type, entity_kind, entity_id, payload, metadata, consumed_by, attempts")
+    .select("id, created_at")
     .eq("status", "pending")
     .or(`next_attempt_at.is.null,next_attempt_at.lte.${nowIso}`)
     .in("event_type", handledTypes)
@@ -54,7 +57,22 @@ export async function drainEventLog(
     return summary;
   }
 
-  for (const raw of rows ?? []) {
+  const ids = (candidates ?? []).map((candidate) => candidate.id);
+  if (!ids.length) return summary;
+
+  const { data: selectedRows, error: rowsError } = await admin
+    .from("event_log")
+    .select("id, organization_id, event_type, entity_kind, entity_id, payload, metadata, consumed_by, attempts")
+    .in("id", ids);
+  if (rowsError) {
+    logger.error("[event-log.drain] fetch failed", { error: rowsError.message });
+    return summary;
+  }
+  const rowsById = new Map((selectedRows ?? []).map((row) => [row.id, row]));
+
+  for (const id of ids) {
+    const raw = rowsById.get(id);
+    if (!raw) continue;
     const row = raw as unknown as EventRow;
     summary.scanned += 1;
 
