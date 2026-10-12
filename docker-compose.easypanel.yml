@@ -51,12 +51,10 @@ x-logging: &default-logging
 
 services:
   app:
-    # HOTFIX OPERACIONAL 2026-10-12: reutilizar a ultima imagem Atrioz valida
-    # no proprio host. Buildar Next + worker neste VPS de 2 cores/8 GB derrubou
-    # a Evolution durante a compilacao. Voltar ao build somente apos mover a
-    # geracao das imagens para um runner externo e validar o pull por digest.
-    image: josimaratrioz_deskcomm-app:latest
-    pull_policy: never
+    # Imagem produzida no GitHub Actions, sem compilar no VPS de producao.
+    # Tag por commit para facilitar rollback e auditoria.
+    image: ghcr.io/josimarriskoski/atriozdeskcommcrm:sha-b3e13949edfe66aad5aae4d7f1912bcb6bfcfda5
+    pull_policy: always
     restart: unless-stopped
     environment: *runtime-environment
     depends_on:
@@ -80,10 +78,8 @@ services:
     networks: [internal]
 
   worker:
-    # A imagem worker foi concluida no host no deploy interrompido; contem a
-    # reducao de varreduras a567d09d. Nao refazer build junto com o app.
-    image: josimaratrioz_deskcomm-worker:latest
-    pull_policy: never
+    image: ghcr.io/josimarriskoski/atriozdeskcommcrm-worker:sha-b3e13949edfe66aad5aae4d7f1912bcb6bfcfda5
+    pull_policy: always
     restart: unless-stopped
     environment: *runtime-environment
     depends_on:
