@@ -78,6 +78,7 @@ describe("isProtocolOnlyEvolutionUpsert", () => {
     { senderKeyDistributionMessage: { groupId: "group" } },
     { messageContextInfo: { deviceListMetadata: {} } },
     { senderKeyDistributionMessage: {}, messageContextInfo: {} },
+    { senderKeyDistributionMessage: {}, deviceListMetadataVersion: 2 },
   ])("ignora apenas pacotes de protocolo %o", (message) => {
     expect(isProtocolOnlyEvolutionUpsertData(data(message))).toBe(true);
   });
@@ -85,6 +86,7 @@ describe("isProtocolOnlyEvolutionUpsert", () => {
   it.each([
     { conversation: "oi" },
     { messageContextInfo: {}, conversation: "oi" },
+    { senderKeyDistributionMessage: {}, imageMessage: { mimetype: "image/jpeg" } },
     { audioMessage: { mimetype: "audio/ogg" } },
     { ephemeralMessage: { message: { conversation: "oi" } } },
     { reactionMessage: { text: "👍" } },

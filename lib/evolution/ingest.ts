@@ -62,7 +62,12 @@ const PROTOCOL_ONLY_MESSAGE_KEYS = new Set([
 export function isProtocolOnlyEvolutionUpsertData(value: unknown): boolean {
   const message = messageData(value);
   const keys = Object.keys(message);
-  return keys.length > 0 && keys.every((key) => PROTOCOL_ONLY_MESSAGE_KEYS.has(key));
+  if (!keys.some((key) => PROTOCOL_ONLY_MESSAGE_KEYS.has(key))) return false;
+  // O primeiro campo do payload pode ser de protocolo mesmo quando outros
+  // campos trazem uma conversa ou mídia válida. Preservamos esses casos.
+  if (keys.some((key) => key === "ephemeralMessage" || key === "reactionMessage")) return false;
+  const parsed = mediaFromMessage(message);
+  return !parsed.body && !parsed.hasMedia && !parsed.mediaUrl;
 }
 
 export function isProtocolOnlyEvolutionUpsert(envelope: EvolutionWebhookEnvelope): boolean {
