@@ -7,6 +7,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const {
   evolutionReceiptId,
   isProcessableEvolutionEvent,
+  isProtocolOnlyEvolutionUpsert,
+  isProtocolOnlyEvolutionUpsertData,
   isRedundantEvolutionConnectionUpdate,
   normalizeEvolutionMessage,
 } = await import("./ingest");
@@ -64,6 +66,40 @@ describe("isProcessableEvolutionEvent", () => {
       expect(isProcessableEvolutionEvent(event)).toBe(false);
     },
   );
+});
+
+describe("isProtocolOnlyEvolutionUpsert", () => {
+  const data = (message: Record<string, unknown>) => ({
+    key: { id: "message-1", remoteJid: "5547999999999@s.whatsapp.net" },
+    message,
+  });
+
+  it.each([
+    { senderKeyDistributionMessage: { groupId: "group" } },
+    { messageContextInfo: { deviceListMetadata: {} } },
+    { senderKeyDistributionMessage: {}, messageContextInfo: {} },
+  ])("ignora apenas pacotes de protocolo %o", (message) => {
+    expect(isProtocolOnlyEvolutionUpsertData(data(message))).toBe(true);
+  });
+
+  it.each([
+    { conversation: "oi" },
+    { messageContextInfo: {}, conversation: "oi" },
+    { audioMessage: { mimetype: "audio/ogg" } },
+    { ephemeralMessage: { message: { conversation: "oi" } } },
+    { reactionMessage: { text: "👍" } },
+    {},
+  ])("preserva mensagem possivelmente útil %o", (message) => {
+    expect(isProtocolOnlyEvolutionUpsertData(data(message))).toBe(false);
+  });
+
+  it("ignora lote somente de protocolo, mas preserva lote misto e outros eventos", () => {
+    const protocol = data({ messageContextInfo: {} });
+    const text = data({ conversation: "oi" });
+    expect(isProtocolOnlyEvolutionUpsert({ event: "messages.upsert", data: [protocol] })).toBe(true);
+    expect(isProtocolOnlyEvolutionUpsert({ event: "MESSAGES_UPSERT", data: [protocol, text] })).toBe(false);
+    expect(isProtocolOnlyEvolutionUpsert({ event: "MESSAGES_UPDATE", data: [protocol] })).toBe(false);
+  });
 });
 
 describe("normalizeEvolutionMessage", () => {

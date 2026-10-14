@@ -8,6 +8,7 @@ import {
   dispatchEvolutionEvent,
   isRedundantEvolutionConnectionUpdate,
   isProcessableEvolutionEvent,
+  isProtocolOnlyEvolutionUpsert,
   type EvolutionSession,
   type EvolutionWebhookEnvelope,
 } from "@/lib/evolution/ingest";
@@ -42,6 +43,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   // instância. Eles não devem sequer consultar o banco: além de não alimentarem
   // o Inbox, eram responsáveis por milhões de leituras/escritas desnecessárias.
   if (!isProcessableEvolutionEvent(envelope.event)) {
+    return ok({ accepted: true, ignored: true }, { requestId });
+  }
+  if (isProtocolOnlyEvolutionUpsert(envelope)) {
     return ok({ accepted: true, ignored: true }, { requestId });
   }
 

@@ -53,6 +53,24 @@ export function isProcessableEvolutionEvent(value: unknown): boolean {
   return PROCESSABLE_EVOLUTION_EVENTS.has(normalizeEvolutionEventName(value));
 }
 
+const PROTOCOL_ONLY_MESSAGE_KEYS = new Set([
+  "senderKeyDistributionMessage",
+  "messageContextInfo",
+]);
+
+/** Pacotes de protocolo sem conversa/mídia não devem chegar ao banco nem ao Inbox. */
+export function isProtocolOnlyEvolutionUpsertData(value: unknown): boolean {
+  const message = messageData(value);
+  const keys = Object.keys(message);
+  return keys.length > 0 && keys.every((key) => PROTOCOL_ONLY_MESSAGE_KEYS.has(key));
+}
+
+export function isProtocolOnlyEvolutionUpsert(envelope: EvolutionWebhookEnvelope): boolean {
+  if (normalizeEvolutionEventName(envelope.event) !== "MESSAGES_UPSERT") return false;
+  const values = Array.isArray(envelope.data) ? envelope.data : [envelope.data];
+  return values.length > 0 && values.every(isProtocolOnlyEvolutionUpsertData);
+}
+
 function object(value: unknown): Json {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : {};
 }
@@ -242,6 +260,7 @@ export async function dispatchEvolutionEvent(
 
   for (const data of values) {
     if (event === "MESSAGES_UPSERT") {
+      if (isProtocolOnlyEvolutionUpsertData(data)) continue;
       const payload = normalizeEvolutionMessage(data);
       if (!payload) continue;
       inbound ||= !payload.fromMe;
