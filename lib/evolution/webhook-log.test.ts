@@ -66,4 +66,25 @@ describe("compactEvolutionWebhookLog", () => {
       status: "READ",
     });
   });
+
+  it("registra somente a forma do pacote sem expor chaves arbitrárias", () => {
+    const result = compactEvolutionWebhookLog(
+      {
+        event: "messages.upsert",
+        data: {
+          message: {
+            messageContextInfo: {},
+            ephemeralMessage: {},
+            "contato-secreto@example.com": "não registrar",
+          },
+        },
+      },
+      "{}",
+    );
+    expect(result.payloadParsed).toMatchObject({
+      message_keys: ["messageContextInfo", "ephemeralMessage", "other"],
+      message_key_count: 3,
+    });
+    expect(JSON.stringify(result.payloadParsed)).not.toContain("contato-secreto");
+  });
 });

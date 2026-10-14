@@ -2,6 +2,13 @@ import type { EvolutionWebhookEnvelope } from "@/lib/evolution/ingest";
 
 type JsonObject = Record<string, unknown>;
 
+const DIAGNOSTIC_MESSAGE_KEYS = new Set([
+  "senderKeyDistributionMessage", "messageContextInfo", "conversation",
+  "extendedTextMessage", "imageMessage", "videoMessage", "documentMessage",
+  "audioMessage", "stickerMessage", "pollUpdateMessage", "reactionMessage",
+  "ephemeralMessage", "base64", "mediaUrl",
+]);
+
 function asObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonObject)
@@ -51,6 +58,10 @@ export function compactEvolutionWebhookLog(
           ? first.fromMe
           : null,
     message_type: Object.keys(message)[0] ?? null,
+    // Apenas nomes de campos conhecidos; nunca conteúdo, chaves arbitrárias ou mídia.
+    message_keys: Object.keys(message).slice(0, 16).map((key) =>
+      DIAGNOSTIC_MESSAGE_KEYS.has(key) ? key : "other"),
+    message_key_count: Object.keys(message).length,
     status: update.status ?? first.status ?? null,
     timestamp: first.messageTimestamp ?? first.timestamp ?? null,
   };
