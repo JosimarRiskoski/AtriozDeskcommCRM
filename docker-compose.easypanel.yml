@@ -53,7 +53,7 @@ services:
   app:
     # Imagem produzida no GitHub Actions, sem compilar no VPS de producao.
     # Tag por commit para facilitar rollback e auditoria.
-    image: ghcr.io/josimarriskoski/atriozdeskcommcrm:sha-b3e13949edfe66aad5aae4d7f1912bcb6bfcfda5
+    image: ghcr.io/josimarriskoski/atriozdeskcommcrm:sha-ce626d39c8c5012ed805ea51e61a41929448ee7e
     pull_policy: always
     restart: unless-stopped
     environment: *runtime-environment
@@ -78,7 +78,7 @@ services:
     networks: [internal]
 
   worker:
-    image: ghcr.io/josimarriskoski/atriozdeskcommcrm-worker:sha-b3e13949edfe66aad5aae4d7f1912bcb6bfcfda5
+    image: ghcr.io/josimarriskoski/atriozdeskcommcrm-worker:sha-ce626d39c8c5012ed805ea51e61a41929448ee7e
     pull_policy: always
     restart: unless-stopped
     environment: *runtime-environment
